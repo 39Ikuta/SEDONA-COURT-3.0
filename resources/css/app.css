@@ -1,0 +1,21 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Sedona brand + status palette */
+    --color-brand: #421A2B;
+    --color-brand-hover: #341421;
+    --color-brand-ring: #6B2D4A;
+    --color-vip: #8B5CF6;
+    --color-vip-bg: #F3E8FF;
+    --color-vip-text: #5B21B6;
+    --color-premium: #3B82F6;
+    --color-classic: #F59E0B;
+    --color-occupied: #EF4444;
+    --color-available: #10B981;
+}

@@ -1,0 +1,334 @@
+@extends('layouts.app')
+
+@section('title', 'Point of Sale & Dining')
+@section('subtitle', 'Point of Sale (POS) | Kitchen Dining, Refreshments & Amenity Sales')
+
+@section('top_action')
+    <a href="{{ route('kitchen.view') }}" class="bg-[#333333] hover:bg-[#222222] text-white text-[11px] font-bold px-3 py-1 rounded shadow-sm border border-[#666666]">
+        Open Kitchen KDS Display &rarr;
+    </a>
+@endsection
+
+@section('content')
+<div class="px-3 pt-2 space-y-3 max-w-7xl mx-auto">
+
+    <!-- Categories Filter Bar -->
+    <div class="bg-white p-2.5 border-l-4 border-[#421A2B] shadow-sm flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="font-bold text-slate-800 uppercase tracking-wide">
+            Menu & Inventory Catalog:
+        </div>
+        <div class="flex items-center flex-wrap gap-1">
+            <a href="{{ route('pos.index', ['category' => 'all']) }}" class="px-2.5 py-1 rounded text-xs font-bold {{ $selectedCategory === 'all' ? 'bg-[#421A2B] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300' }}">
+                All Items
+            </a>
+            @foreach($categories as $cat)
+                <a href="{{ route('pos.index', ['category' => $cat]) }}" class="px-2.5 py-1 rounded text-xs font-bold {{ $selectedCategory === $cat ? 'bg-[#421A2B] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300' }}">
+                    {{ $cat }}
+                </a>
+            @endforeach
+        </div>
+    </div>
+
+    <!-- Main Grid: Catalog + Order Cart Sidebar -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+
+        <!-- Left 8 Cols: Item Catalog Grid -->
+        <div class="lg:col-span-8">
+            <div class="hms-card">
+                <div class="hms-card-header border-b pb-2 mb-3 flex items-center justify-between">
+                    <span>SELECT ITEMS TO ORDER ({{ count($posItems) }})</span>
+                    <span class="text-xs text-slate-500 font-normal">Click "+ Add" to populate cart</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[650px] overflow-y-auto pr-1">
+                    @forelse($posItems as $item)
+                        @php
+                            $stock = $item->stock_quantity ?? 0;
+                            $isOut = $item->is_tracked && ($stock <= 0);
+                            $isLow = $item->is_tracked && ($stock <= ($item->reorder_level ?? 5)) && !$isOut;
+                        @endphp
+                        <div class="p-2.5 bg-slate-50 border border-slate-300 flex flex-col justify-between hover:border-slate-500 transition-all {{ $isOut ? 'opacity-60 bg-slate-100' : '' }}">
+                            <div>
+                                <div class="flex items-start justify-between gap-1">
+                                    <span class="px-1.5 py-0.5 bg-slate-200 text-slate-700 font-bold text-[9px] uppercase rounded">
+                                        {{ $item->category }}
+                                    </span>
+                                    <div class="flex items-center space-x-1">
+                                        @if($item->is_tracked)
+                                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold {{ $isOut ? 'bg-rose-100 text-rose-800 border border-rose-300' : ($isLow ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300') }}" title="{{ $item->isBreakfastItem() ? 'Dish stock + egg dependency' : 'Stock on hand' }}">
+                                                Stock: {{ $stock }}
+                                            </span>
+                                        @endif
+                                        @if($item->kitchen_hours_only)
+                                            <span class="text-[10px] text-amber-800 font-semibold" title="Prepared in Hot Kitchen">Kitchen</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <h3 class="font-bold text-slate-900 text-xs mt-1.5 leading-snug">{{ $item->name }}</h3>
+                            </div>
+
+                            <div class="mt-3 pt-2 border-t border-slate-200 flex items-center justify-between">
+                                <span class="font-mono text-sm font-black text-[#421A2B]">₱{{ number_format($item->price, 2) }}</span>
+                                @if($isOut)
+                                    <button disabled class="px-2.5 py-1 bg-slate-400 text-white font-bold text-xs rounded opacity-50 cursor-not-allowed">
+                                        Out of Stock
+                                    </button>
+                                @else
+                                    <button onclick="addToCart({{ $item->id }}, '{{ addslashes($item->name) }}', {{ $item->price }})" class="px-3 py-1 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold text-xs rounded shadow-sm">
+                                        + Add
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <div class="col-span-full py-8 text-center text-slate-400">
+                            No menu items found for this category.
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+
+        <!-- Right 4 Cols: Order Cart & Checkout -->
+        <div class="lg:col-span-4">
+            <div class="hms-card sticky top-2">
+                <div class="hms-card-header border-b pb-2 mb-3 flex items-center justify-between">
+                    <span>ORDER CART & DISPATCH</span>
+                    <button onclick="clearCart()" class="text-xs text-rose-700 hover:underline font-bold">Clear All</button>
+                </div>
+
+                <form method="POST" action="{{ route('pos.order.store') }}" id="posOrderForm" class="space-y-3">
+                    @csrf
+
+                    <!-- Order Destination Type -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Order Destination:</label>
+                        <select name="order_type" id="orderTypeSelect" onchange="toggleOrderDestination()" class="form-control-hms font-bold">
+                            <option value="room_charge">Charge to Guest Room Folio</option>
+                            <option value="walkin_pos">Direct Walk-In Sale (POS)</option>
+                        </select>
+                    </div>
+
+                    <!-- Room Folio Dropdown -->
+                    <div id="roomChargeSection">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Select Occupied Room:</label>
+                        <select name="room_id" class="form-control-hms font-bold">
+                            @forelse($occupiedRooms as $occ)
+                                <option value="{{ $occ->id }}">
+                                    Room {{ $occ->number }} &bull; {{ $occ->is_staff_quarters ? 'Permanent Employee Quarters (Staff Order)' : ($occ->activeFolio->guest->name ?? 'Guest') }}
+                                </option>
+                            @empty
+                                <option value="" disabled selected>No occupied rooms currently active</option>
+                            @endforelse
+                        </select>
+                    </div>
+
+                    <!-- Walk-in POS Payment Section -->
+                    <div id="walkinPosSection" class="hidden space-y-2">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Payment Method:</label>
+                            <select name="payment_method" class="form-control-hms font-bold">
+                                <option value="cash">Cash Payment</option>
+                                <option value="gcash">GCash E-Wallet</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Cart Line Items Container -->
+                    <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1 border border-slate-200 p-2 bg-slate-50" id="cartItemsContainer">
+                        <div class="text-center py-6 text-slate-400 text-xs" id="emptyCartNotice">
+                            Cart is empty.<br>Click items on the left to add.
+                        </div>
+                    </div>
+
+                    <!-- Special Instructions -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Kitchen / Room Notes:</label>
+                        <input type="text" name="special_instructions" placeholder="e.g. Extra sinangag rice, deliver to Room 7" class="form-control-hms">
+                    </div>
+
+                    <!-- Grand Total Display -->
+                    <div class="p-2.5 bg-slate-100 border border-slate-300 flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700 uppercase">Order Total:</span>
+                        <span class="text-lg font-black text-[#421A2B] font-mono" id="cartGrandTotal">₱0.00</span>
+                    </div>
+
+                    <button type="submit" id="submitOrderBtn" disabled class="w-full py-2 bg-[#421A2B] hover:bg-[#341421] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded shadow">
+                        Place Order & Dispatch Ticket
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Active Orders Live Dispatch Tracker -->
+    <div class="hms-card">
+        <div class="hms-card-header border-b pb-2 mb-2 flex items-center justify-between">
+            <span>RECENT POS ORDERS & KITCHEN DISPATCH STATUS</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="hms-table">
+                <thead>
+                    <tr>
+                        <th>ORDER ID</th>
+                        <th>TARGET</th>
+                        <th>ITEMS ORDERED</th>
+                        <th>TOTAL</th>
+                        <th>STATUS</th>
+                        <th>ACTION</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($recentOrders as $ord)
+                        <tr>
+                            <td class="font-mono font-bold">{{ $ord->transaction_id }}</td>
+                            <td class="font-bold">
+                                @if($ord->room)
+                                    Room {{ $ord->room->number }} ({{ $ord->folio->guest->name ?? 'Guest' }})
+                                @else
+                                    <span class="text-amber-800">Walk-in POS</span>
+                                @endif
+                            </td>
+                            <td class="text-left pl-3 text-slate-700">
+                                @foreach($ord->items as $it)
+                                    <span class="inline-block mr-2">{{ $it->quantity }}x {{ $it->item_name }}</span>
+                                @endforeach
+                            </td>
+                            <td class="font-mono font-bold">₱{{ number_format($ord->total, 2) }}</td>
+                            <td>
+                                @php
+                                    $stBadge = match($ord->status) {
+                                        'new'       => 'bg-amber-100 text-amber-900 border-amber-300',
+                                        'preparing' => 'bg-purple-100 text-purple-900 border-purple-300',
+                                        'ready'     => 'bg-blue-100 text-blue-900 border-blue-300',
+                                        'delivered' => 'bg-emerald-100 text-emerald-900 border-emerald-300',
+                                        default     => 'bg-slate-100 text-slate-800',
+                                    };
+                                @endphp
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border {{ $stBadge }}">
+                                    {{ $ord->status }}
+                                </span>
+                            </td>
+                            <td>
+                                @if($ord->status !== 'delivered')
+                                    <form method="POST" action="{{ route('pos.order.status', $ord->id) }}" class="inline-block">
+                                        @csrf
+                                        @if($ord->status === 'new')
+                                            <input type="hidden" name="status" value="preparing">
+                                            <button type="submit" class="px-2 py-1 bg-purple-700 hover:bg-purple-800 text-white font-bold text-[10px] rounded">Cooking</button>
+                                        @elseif($ord->status === 'preparing')
+                                            <input type="hidden" name="status" value="ready">
+                                            <button type="submit" class="px-2 py-1 bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] rounded">Ready</button>
+                                        @elseif($ord->status === 'ready')
+                                            <input type="hidden" name="status" value="delivered">
+                                            <button type="submit" class="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[10px] rounded">Delivered</button>
+                                        @endif
+                                    </form>
+                                @else
+                                    <span class="text-emerald-700 text-[11px] font-bold">✓ Completed</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="py-4 text-center text-slate-400">No recent orders recorded.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@push('scripts')
+<script>
+    let cart = {};
+
+    function addToCart(itemId, name, price) {
+        if (!cart[itemId]) {
+            cart[itemId] = { id: itemId, name: name, price: parseFloat(price), qty: 1 };
+        } else {
+            cart[itemId].qty++;
+        }
+        renderCart();
+    }
+
+    function updateQty(itemId, delta) {
+        if (!cart[itemId]) return;
+        cart[itemId].qty += delta;
+        if (cart[itemId].qty <= 0) {
+            delete cart[itemId];
+        }
+        renderCart();
+    }
+
+    function clearCart() {
+        cart = {};
+        renderCart();
+    }
+
+    function renderCart() {
+        const container = document.getElementById('cartItemsContainer');
+        const totalEl = document.getElementById('cartGrandTotal');
+        const submitBtn = document.getElementById('submitOrderBtn');
+        const keys = Object.keys(cart);
+
+        if (keys.length === 0) {
+            container.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs" id="emptyCartNotice">Cart is empty.<br>Click items on the left to add.</div>`;
+            totalEl.textContent = '₱0.00';
+            submitBtn.disabled = true;
+            return;
+        }
+
+        let html = '';
+        let grandTotal = 0;
+
+        keys.forEach((k, idx) => {
+            const item = cart[k];
+            const subtotal = item.price * item.qty;
+            grandTotal += subtotal;
+
+            html += `
+                <div class="flex items-center justify-between p-1.5 bg-white border border-slate-200 text-xs">
+                    <div class="flex-1 pr-1 truncate">
+                        <div class="font-bold text-slate-900 truncate text-[11px]">${item.name}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">₱${item.price.toFixed(2)} each</div>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <button type="button" onclick="updateQty(${item.id}, -1)" class="w-5 h-5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center rounded">-</button>
+                        <span class="font-mono font-bold w-4 text-center text-xs">${item.qty}</span>
+                        <button type="button" onclick="updateQty(${item.id}, 1)" class="w-5 h-5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center rounded">+</button>
+                    </div>
+                    <div class="w-16 text-right font-mono font-bold text-[#421A2B] text-xs pl-1">
+                        ₱${subtotal.toFixed(2)}
+                    </div>
+                    <input type="hidden" name="items[${idx}][id]" value="${item.id}">
+                    <input type="hidden" name="items[${idx}][qty]" value="${item.qty}">
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+        totalEl.textContent = '₱' + grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        submitBtn.disabled = false;
+    }
+
+    function toggleOrderDestination() {
+        const val = document.getElementById('orderTypeSelect').value;
+        const roomSec = document.getElementById('roomChargeSection');
+        const walkinSec = document.getElementById('walkinPosSection');
+
+        if (val === 'room_charge') {
+            roomSec.classList.remove('hidden');
+            walkinSec.classList.add('hidden');
+        } else {
+            roomSec.classList.add('hidden');
+            walkinSec.classList.remove('hidden');
+        }
+    }
+</script>
+@endpush
+@endsection
