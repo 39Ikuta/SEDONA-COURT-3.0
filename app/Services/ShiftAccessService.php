@@ -39,12 +39,57 @@ class ShiftAccessService
     {
         Gate::forUser($actor)->authorize('record_payments');
         $shift = Shift::whereNull('closed_at')->lockForUpdate()->first();
-        if (! $shift || $shift->is_frozen) {
-            throw ValidationException::withMessages(['shift' => 'Open an unfrozen shift before recording money movements.']);
+        if (! $shift) {
+            throw ValidationException::withMessages(['shift' => $this->noOpenShiftStatus()['message']]);
+        }
+        if ($shift->is_frozen) {
+            throw ValidationException::withMessages(['shift' => $this->frozenShiftStatus($shift)['message']]);
         }
         $this->authorizeOperation($actor, $shift, $overrideReason, $action);
 
         return $shift;
+    }
+
+    /** @return array{state: string, title: string, message: string, shift: ?Shift} */
+    public function paymentStatus(User $actor): array
+    {
+        $shift = Shift::with('openedBy:id,name')->whereNull('closed_at')->first();
+        if (! $shift) {
+            return $this->noOpenShiftStatus();
+        }
+        if ($shift->is_frozen) {
+            return $this->frozenShiftStatus($shift);
+        }
+        if (! $actor->can('record_payments')) {
+            return ['state' => 'restricted', 'title' => 'Cashier access required',
+                'message' => 'A cashier with payment access must settle this bill.', 'shift' => $shift];
+        }
+        if (! $actor->can('operate-shift', $shift)) {
+            return ['state' => 'other_operator', 'title' => 'Drawer assigned to another cashier',
+                'message' => 'The active drawer belongs to '.($shift->openedBy?->name ?? 'another cashier').'. Complete a drawer handover before recording payments.', 'shift' => $shift];
+        }
+
+        return ['state' => 'ready', 'title' => 'Cashier shift active',
+            'message' => 'Payments will be recorded under shift #'.$shift->id.', opened by '.($shift->openedBy?->name ?? 'the assigned cashier').'.', 'shift' => $shift];
+    }
+
+    /** @return array{state: string, title: string, message: string, shift: null} */
+    private function noOpenShiftStatus(): array
+    {
+        if (Shift::whereIn('handover_status', ['pending', 'disputed', 'variance_approved'])->exists()) {
+            return ['state' => 'handover', 'title' => 'Waiting for drawer handover',
+                'message' => 'The previous shift is closed and awaiting handover. A different cashier must count and accept the drawer in Shifts & Drawer before payments can be recorded.', 'shift' => null];
+        }
+
+        return ['state' => 'no_shift', 'title' => 'Cashier shift not started',
+            'message' => 'Start your cashier shift before recording payments.', 'shift' => null];
+    }
+
+    /** @return array{state: string, title: string, message: string, shift: Shift} */
+    private function frozenShiftStatus(Shift $shift): array
+    {
+        return ['state' => 'frozen', 'title' => 'Drawer frozen',
+            'message' => 'The current drawer is frozen. Ask an admin or owner to review its status in Shifts & Drawer before recording payments.', 'shift' => $shift];
     }
 
     public function authorizeOperation(User $actor, Shift $shift, ?string $overrideReason, string $action): void

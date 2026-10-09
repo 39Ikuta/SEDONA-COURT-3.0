@@ -11,6 +11,26 @@
 
 @section('content')
 <div class="hms-card mb-4 text-sm"><a href="{{ route('approvals.index') }}" class="underline font-semibold">Request rate, time or discretionary discount changes</a>. Execute the approved request, then reload checkout.</div>
+    <div class="rounded-xl border p-5 mx-2 mb-4 text-sm {{ $drawerStatus['state'] === 'ready' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50' }}" role="status" id="checkoutDrawerStatus">
+        <h2 class="font-bold text-brand">{{ $drawerStatus['title'] }}</h2>
+        <p class="mt-1 text-slate-700">{{ $drawerStatus['message'] }}</p>
+        @if($drawerStatus['state'] === 'no_shift' && auth()->user()->can('manage_shifts') && auth()->user()->can('record_payments'))
+            <form method="POST" action="{{ route('shifts.open') }}" id="checkoutStartShiftForm" class="mt-3 flex flex-wrap items-end gap-3">
+                @csrf
+                <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                <input type="hidden" name="checkout_folio_id" value="{{ $folio->id }}">
+                <label for="checkoutOpeningCash" class="text-xs font-semibold">Starting cash in drawer (₱)
+                    <input id="checkoutOpeningCash" name="opening_float" type="number" required min="0" max="100000" step="0.01" value="{{ old('opening_float') }}" placeholder="0.00" class="form-control-hms block mt-1">
+                </label>
+                <button class="inline-flex items-center rounded-lg bg-brand hover:bg-brand-hover px-4 py-2 font-semibold text-white">Start cashier shift</button>
+                <p class="basis-full text-xs text-slate-600">Enter the money physically in the drawer now. Use 0 if it is empty. Start once before taking payments.</p>
+            </form>
+        @elseif($drawerStatus['state'] !== 'ready' && auth()->user()->can('manage_shifts'))
+            <a href="{{ route('shifts.index') }}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-lg bg-brand hover:bg-brand-hover px-4 py-2 mt-3 font-semibold text-white">{{ $drawerStatus['state'] === 'handover' ? 'Review drawer handover' : 'Review drawer status' }} <span class="text-xs">(new tab)</span></a>
+            <p class="mt-2 text-xs text-slate-600">After resolving the drawer status, reload checkout. Entered payment details are saved as a draft when you leave a payment field.</p>
+        @endif
+    </div>
+
 <div class="checkout-page px-3 pt-2 max-w-6xl mx-auto">
 
     @can('record_payments')
@@ -23,7 +43,7 @@
             <label class="text-sm">Amount received<input name="amount" type="number" min="0.01" max="100000" step="0.01" required class="form-control-hms block"></label>
             <label class="text-sm">Method<select name="payment_method" class="form-control-hms block"><option value="cash">Cash</option><option value="gcash">GCash</option></select></label>
             <label class="text-sm">GCash reference (required for GCash)<input name="gcash_reference" maxlength="50" class="form-control-hms block"></label>
-            <button class="btn-hms-primary">Record deposit received</button>
+            <button class="btn-hms-primary disabled:cursor-not-allowed disabled:opacity-50" @disabled($drawerStatus['state'] !== 'ready')>Record deposit received</button>
         </div>
         @include('shifts.override-reason')
     </form>
@@ -399,11 +419,14 @@
                     <a href="{{ route('dashboard') }}" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded">
                         Cancel &amp; Return
                     </a>
-                    <button type="submit" onclick="return confirm('Confirm check out and finalize settlement?')" class="px-6 py-2 bg-[#421A2B] hover:bg-[#341421] text-white font-bold text-xs rounded shadow">
+                    <button type="submit" id="completeCheckoutButton" @disabled($drawerStatus['state'] !== 'ready') onclick="return confirm('Confirm check out and finalize settlement?')" class="px-6 py-2 bg-[#421A2B] hover:bg-[#341421] text-white font-bold text-xs rounded shadow disabled:cursor-not-allowed disabled:opacity-50">
                         Complete Official Check-Out
                     </button>
                 </div>
             </div>
+            @if($drawerStatus['state'] !== 'ready')
+                <p class="mt-3 text-sm text-amber-800">{{ $drawerStatus['message'] }} See the drawer status above.</p>
+            @endif
         </form>
     </div>
 

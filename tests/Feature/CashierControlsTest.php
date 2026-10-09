@@ -40,7 +40,7 @@ class CashierControlsTest extends TestCase
         $folio = $this->folio($cashier);
 
         $this->actingAs($cashier)->post(route('checkout.submit', $folio), ['operation_key' => (string) Str::uuid(), 'cash_tendered' => 395])
-            ->assertSessionHasErrors(['shift' => 'Open an unfrozen shift before recording money movements.']);
+            ->assertSessionHasErrors(['shift' => 'Start your cashier shift before recording payments.']);
 
         $this->assertSame('active', $folio->fresh()->status);
         $this->assertSame('occupied', $folio->room->fresh()->status);

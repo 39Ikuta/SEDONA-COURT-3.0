@@ -302,7 +302,7 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
             'total_amount_to_pay' => 10.00,  // Tampered balance!
         ];
 
-        $this->actingAs($this->cashier)->post(route('shifts.open'), ['operation_key' => (string) Str::uuid()])->assertSessionHasNoErrors();
+        $this->actingAs($this->cashier)->post(route('shifts.open'), ['operation_key' => (string) Str::uuid(), 'opening_float' => 5000])->assertSessionHasNoErrors();
         $checkoutResponse = $this->post(route('checkout.submit', $folio->id), ['operation_key' => (string) Str::uuid()] + $tamperedPayload);
         $checkoutResponse->assertRedirect(route('dashboard'));
 
@@ -495,7 +495,7 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
 
         // Cashier edits check-in time to ~4.8 hours ago (5 hour billing bucket) and adjusts base room rate to 450
         $newCheckIn = now()->subMinutes(290)->format('Y-m-d H:i:s');
-        $this->actingAs($this->cashier)->post(route('shifts.open'), ['operation_key' => (string) Str::uuid()])->assertSessionHasNoErrors();
+        $this->actingAs($this->cashier)->post(route('shifts.open'), ['operation_key' => (string) Str::uuid(), 'opening_float' => 5000])->assertSessionHasNoErrors();
         $this->post(route('approvals.store'), ['operation_key' => (string) Str::uuid(), 'kind' => 'folio_override', 'source_id' => $folio->id, 'payload' => ['room_charge' => 450, 'checked_in_at' => $newCheckIn], 'reason' => 'Correct recorded rate and arrival'])->assertRedirect()->assertSessionHasNoErrors();
         $this->executeLatestFinancialRequest();
         $submitResponse = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), ['operation_key' => (string) Str::uuid(),

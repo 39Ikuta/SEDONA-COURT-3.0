@@ -16,20 +16,21 @@
     <div class="workspace-toolbar flex flex-wrap items-center justify-between gap-3 text-xs">
         <div>
             <h1 class="font-bold text-slate-900 text-sm uppercase tracking-wide">Cashier Shift Management & Cash Drawer Turnover</h1>
-            <p class="text-slate-500">Day Shift (06:00 AM – 06:00 PM) & Night Shift (06:00 PM – 06:00 AM). Audit physical cash drawer count, manage shift petty cash expenses, and reconcile float.</p>
+            <p class="text-slate-500">Start your shift before taking payments. Keep it open while working; count and close the drawer when handing it to the next cashier.</p>
         </div>
 
-        @if(!$activeShift)
-            <form method="POST" action="{{ route('shifts.open') }}" class="flex items-center space-x-2">
+        @if(!$activeShift && $drawerStatus['state'] === 'no_shift')
+            <form method="POST" action="{{ route('shifts.open') }}" class="flex flex-wrap items-end gap-3">
                 @csrf
             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
                 <div class="flex items-center space-x-1">
-                    <label class="text-[11px] font-bold text-slate-600">Float (₱):</label>
-                    <input type="number" name="opening_float" value="5000.00" step="100" min="0" max="100000" class="form-control-hms w-28 text-right font-mono font-bold text-xs">
+                    <label for="shiftOpeningCash" class="text-[11px] font-bold text-slate-600">Starting cash in drawer (₱):</label>
+                    <input id="shiftOpeningCash" type="number" name="opening_float" required value="{{ old('opening_float') }}" placeholder="0.00" step="0.01" min="0" max="100000" class="form-control-hms w-28 text-right font-mono font-bold text-xs">
                 </div>
                 <button type="submit" class="px-4 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold text-xs rounded shadow">
-                    + Open New Shift Float
+                    Start cashier shift
                 </button>
+                <p class="basis-full text-xs text-slate-600">Enter the actual cash now in the drawer. Use 0 if it is empty.</p>
             </form>
         @elseif($canOperateActiveShift)
             <div class="flex items-center space-x-2">
@@ -45,8 +46,23 @@
         @endif
     </div>
 
+    @if(!$activeShift && $drawerStatus['state'] === 'handover')
+        <div class="rounded-xl border border-amber-300 bg-amber-50 p-5 mx-2 my-2" role="status">
+            <h2 class="font-semibold">Waiting for drawer handover</h2>
+            <p class="mt-1 text-sm">{{ $drawerStatus['message'] }}</p>
+            <p class="mt-2 text-sm">Accepting the handover starts the incoming cashier's shift automatically. There is no need to start a second shift.</p>
+        </div>
+    @endif
+
     @foreach($pendingHandovers as $handover)
-        <div class="hms-card"><h2 class="font-semibold">Incoming drawer handover #{{ $handover->id }} · {{ $handover->handover_status }}</h2><p class="text-sm">Outgoing count ₱{{ $handover->cash_total }}. A different incoming operator must count and accept custody. Any disagreement requires independent review.</p>
+        <div class="hms-card"><h2 class="font-semibold">Drawer handover #{{ $handover->id }} · {{ $handover->handover_status }}</h2><p class="text-sm">Outgoing count ₱{{ $handover->cash_total }}. A different incoming operator must count and accept custody. Any disagreement requires independent review.</p>
+            @if($handover->opened_by === auth()->id())
+                <p class="mt-2 text-sm font-semibold text-amber-800">Another cashier must accept your closed drawer. Ask the incoming cashier to sign in, open Shifts &amp; Drawer, and count and accept this handover.</p>
+            @elseif($handover->incoming_user_id && $handover->incoming_user_id !== auth()->id())
+                <p class="mt-2 text-sm text-slate-600">This handover is assigned to a different incoming cashier.</p>
+            @elseif($handover->handover_status === 'disputed')
+                <p class="mt-2 text-sm text-amber-800">An admin or owner must review the count disagreement in Approvals &amp; Tasks before this handover can be accepted.</p>
+            @endif
             @if(in_array($handover->handover_status, ['pending', 'variance_approved']) && $handover->opened_by !== auth()->id() && (!$handover->incoming_user_id || $handover->incoming_user_id === auth()->id()))
             <form method="POST" action="{{ route('shifts.accept', $handover) }}" class="flex flex-wrap gap-3 mt-4">@csrf<input name="operation_key" type="hidden" value="{{ (string) \Illuminate\Support\Str::uuid() }}"><label>Incoming count<input name="accepted_cash" required type="number" step="0.01" min="0" class="form-control-hms"></label><label>Handover notes<input name="notes" required maxlength="1000" class="form-control-hms"></label><button class="btn-hms-primary">Count and accept handover</button></form>
             @endif

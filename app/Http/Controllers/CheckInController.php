@@ -11,6 +11,7 @@ use App\Services\AuditService;
 use App\Services\BillingService;
 use App\Services\DiscountService;
 use App\Services\FinancialPostingService;
+use App\Services\ShiftAccessService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -72,11 +73,14 @@ class CheckInController extends Controller
         return redirect()->route('dashboard')->with('success', 'Guest checked in successfully.');
     }
 
-    public function showCheckout(Folio $folio): View
+    public function showCheckout(Request $request, Folio $folio, ShiftAccessService $shiftAccess): View
     {
         abort_unless($folio->isActive(), 409, 'This folio has already been settled.');
 
-        return view('checkout.process', $this->viewData($folio) + ['allOccupied' => Room::where('status', 'occupied')->with('activeFolio.guest')->get()]);
+        return view('checkout.process', $this->viewData($folio) + [
+            'allOccupied' => Room::where('status', 'occupied')->with('activeFolio.guest')->get(),
+            'drawerStatus' => $shiftAccess->paymentStatus($request->user()),
+        ]);
     }
 
     public function processCheckout(Request $request, Folio $folio): RedirectResponse

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CashMovement;
 use App\Models\Expense;
+use App\Models\Folio;
 use App\Models\Room;
 use App\Models\Shift;
 use App\Models\User;
@@ -55,13 +56,24 @@ class ShiftController extends Controller
             });
         }
         $pendingHandovers = $pendingHandovers->orderBy('id')->get();
+        $drawerStatus = $this->shiftAccess->paymentStatus($request->user());
 
-        return view('shifts.index', compact('activeShift', 'pastShifts', 'shiftExpenses', 'openingFloat', 'cashRevenue', 'gcashCollections', 'totalExpenses', 'expectedCash', 'canOperateActiveShift', 'pendingHandovers'));
+        return view('shifts.index', compact('activeShift', 'pastShifts', 'shiftExpenses', 'openingFloat', 'cashRevenue', 'gcashCollections', 'totalExpenses', 'expectedCash', 'canOperateActiveShift', 'pendingHandovers', 'drawerStatus'));
     }
 
     public function openShift(Request $request, AuditService $audit): RedirectResponse
     {
-        $validated = $request->validate(['opening_float' => 'nullable|numeric|min:0|max:100000']);
+        if ($request->filled('checkout_folio_id')) {
+            Gate::authorize('manage_folios');
+            Gate::authorize('record_payments');
+        }
+        $validated = $request->validate([
+            'opening_float' => 'required|numeric|min:0|max:100000|decimal:0,2',
+            'checkout_folio_id' => 'nullable|integer|exists:folios,id',
+        ], ['opening_float.required' => 'Enter the cash actually in the drawer. Enter 0 if it is empty.']);
+        if (! empty($validated['checkout_folio_id']) && ! Folio::findOrFail($validated['checkout_folio_id'])->isActive()) {
+            throw ValidationException::withMessages(['checkout_folio_id' => 'This stay has already been settled. Start your shift from Shifts & Drawer.']);
+        }
         try {
             app(FinancialPostingService::class)->execute($request, 'shift.open', null, $validated, function () use ($validated, $request, $audit): array {
                 app(BusinessDayService::class)->assertWritable();
@@ -71,7 +83,7 @@ class ShiftController extends Controller
                 if (Shift::whereNull('closed_at')->lockForUpdate()->exists()) {
                     throw ValidationException::withMessages(['shift' => 'There is already an open shift in progress.']);
                 }
-                $float = (float) ($validated['opening_float'] ?? 5000);
+                $float = (float) $validated['opening_float'];
                 $shift = Shift::create([
                     'opened_by' => $request->user()->id, 'shift_type' => Shift::typeForTime(now()),
                     'shift_date' => now()->toDateString(), 'opened_at' => now(), 'opening_float' => $float,
@@ -85,7 +97,11 @@ class ShiftController extends Controller
             throw ValidationException::withMessages(['shift' => 'There is already an open shift in progress.']);
         }
 
-        return redirect()->route('shifts.index')->with('success', 'New shift opened successfully.');
+        if (! empty($validated['checkout_folio_id'])) {
+            return redirect()->route('checkout.process', $validated['checkout_folio_id'])->with('success', 'Cashier shift started. You can now record this checkout payment.');
+        }
+
+        return redirect()->route('shifts.index')->with('success', 'Cashier shift started. Payments will be recorded in this drawer.');
     }
 
     public function storeExpense(Request $request, AuditService $audit): RedirectResponse
