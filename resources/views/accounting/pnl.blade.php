@@ -39,7 +39,7 @@
     <!-- Executive KPI Row -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <div class="bg-white p-3 border-l-4 border-emerald-600 shadow-sm">
-            <span class="font-bold text-slate-500 uppercase text-[10px] block">Gross Collections</span>
+            <span class="font-bold text-slate-500 uppercase text-[10px] block">Gross Revenue</span>
             <div class="text-xl font-mono font-black text-emerald-800 mt-0.5">₱{{ number_format($grossRevenue, 2) }}</div>
             <div class="text-[10px] text-slate-400 mt-0.5">{{ $totalCheckIns }} Stays in {{ $rangeLabel }}</div>
         </div>
@@ -59,9 +59,9 @@
         </div>
 
         <div class="bg-white p-3 border-l-4 border-purple-600 shadow-sm">
-            <span class="font-bold text-slate-500 uppercase text-[10px] block">12% Inclusive VAT Split</span>
+            <span class="font-bold text-slate-500 uppercase text-[10px] block">Tax from issued configured invoices</span>
             <div class="text-xl font-mono font-black text-purple-800 mt-0.5">₱{{ number_format($vatOutputAmount, 2) }}</div>
-            <div class="text-[10px] text-slate-400 mt-0.5">Vatable Base: ₱{{ number_format($netVatableSales, 2) }}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Revenue less recorded invoice tax: ₱{{ number_format($netVatableSales, 2) }}</div>
         </div>
     </div>
 
@@ -104,7 +104,7 @@
                     <div class="flex items-center justify-between p-2 bg-slate-50 border border-slate-200">
                         <div>
                             <div class="font-bold text-slate-900">Amenity & Extra Guest Surcharges</div>
-                            <div class="text-[10px] text-slate-500">Extra persons (₱200), towels (₱100), bedding (₱150)</div>
+                            <div class="text-[10px] text-slate-500">Extra persons (₱{{ number_format(config('sedona.extra_person_rate'), 0) }}), towels (₱{{ number_format(config('sedona.extra_towel_rate'), 0) }}), bedding (₱{{ number_format(config('sedona.extra_bedding_rate'), 0) }})</div>
                         </div>
                         <span class="font-mono font-bold text-slate-900">₱{{ number_format($surchargesRev, 2) }}</span>
                     </div>
@@ -120,8 +120,8 @@
                     <div class="space-y-1.5 text-xs">
                         <div class="flex items-center justify-between p-2 bg-rose-50/70 border border-rose-200">
                             <div>
-                                <span class="font-bold text-rose-900">Senior Citizen / PWD Discounts (20%)</span>
-                                <div class="text-[10px] text-rose-600">Statutory deductions with valid government ID</div>
+                                <span class="font-bold text-rose-900">Authorized Room Discounts</span>
+                                <div class="text-[10px] text-rose-600">Recorded statutory and approved discretionary discounts</div>
                             </div>
                             <span class="font-mono font-bold text-rose-700">-₱{{ number_format($seniorPwdDiscounts, 2) }}</span>
                         </div>
@@ -135,7 +135,12 @@
                         </div>
 
                         <div class="flex items-center justify-between p-2 bg-slate-100 border border-slate-300 font-bold">
-                            <span class="text-slate-800">NET CASH & GCASH COLLECTED:</span>
+                            <span class="text-slate-800">Sales Returns</span>
+                            <span class="font-mono text-slate-900">-₱{{ number_format($salesReturns, 2) }}</span>
+                        </div>
+
+                        <div class="flex items-center justify-between p-2 bg-slate-100 border border-slate-300 font-bold">
+                            <span class="text-slate-800">NET SETTLED REVENUE:</span>
                             <span class="font-mono text-slate-900">₱{{ number_format($netRevenueCollected, 2) }}</span>
                         </div>
                     </div>
@@ -144,11 +149,11 @@
                 <!-- Payment Channel Split -->
                 <div class="mt-4 pt-3 border-t border-slate-200 grid grid-cols-2 gap-2 text-xs">
                     <div class="p-2 bg-slate-50 border border-slate-200">
-                        <span class="font-bold text-slate-500 uppercase text-[10px] block">Physical Cash Inflow</span>
+                        <span class="font-bold text-slate-500 uppercase text-[10px] block">Net Cash Collections</span>
                         <span class="font-mono font-bold text-emerald-700 text-sm">₱{{ number_format($cashCollections, 2) }}</span>
                     </div>
                     <div class="p-2 bg-slate-50 border border-slate-200">
-                        <span class="font-bold text-slate-500 uppercase text-[10px] block">GCash E-Wallet Inflow</span>
+                        <span class="font-bold text-slate-500 uppercase text-[10px] block">Net GCash Collections</span>
                         <span class="font-mono font-bold text-blue-700 text-sm">₱{{ number_format($gcashCollections, 2) }}</span>
                     </div>
                 </div>
@@ -195,6 +200,16 @@
                     </div>
 
                     <div class="flex items-center justify-between p-2.5 bg-rose-50 border border-rose-300 font-bold mt-2">
+                        <span>Other Sundry Expenses</span>
+                        <span class="font-mono font-bold text-slate-900">₱{{ number_format($expensesByCategory['other'], 2) }}</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2 bg-slate-50 border border-slate-200">
+                        <span>Matched Provider / Bank Fees</span>
+                        <span class="font-mono font-bold text-slate-900">₱{{ number_format($expensesByCategory['provider_fees'], 2) }}</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2.5 bg-rose-50 border border-rose-300 font-bold mt-2">
                         <span class="text-rose-900 uppercase">TOTAL OPERATING EXPENSES (OPEX):</span>
                         <span class="font-mono text-base text-rose-700">₱{{ number_format($totalOpex, 2) }}</span>
                     </div>
@@ -207,7 +222,7 @@
                             NET OPERATING PROFIT (EBITDA)
                         </div>
                         <div class="text-[10px] {{ $netOperatingProfit >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">
-                            Net Collections minus Total Operating Expenses
+                            Net revenue less recorded tax and operating expenses
                         </div>
                     </div>
                     <div class="text-2xl font-mono font-black {{ $netOperatingProfit >= 0 ? 'text-emerald-800' : 'text-rose-700' }}">

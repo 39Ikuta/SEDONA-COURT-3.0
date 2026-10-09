@@ -36,7 +36,7 @@
     <!-- Staff Directory Table -->
     <div class="hms-card">
         <div class="hms-card-header border-b pb-2 mb-2 flex items-center justify-between">
-            <span>REGISTERED SYSTEM OPERATORS ({{ $users->count() }} ACTIVE USERS)</span>
+            <span>REGISTERED SYSTEM OPERATORS ({{ $users->where('is_active', true)->count() }} ACTIVE / {{ $users->count() }} TOTAL)</span>
             <span class="text-[11px] font-normal text-slate-500">Authentication Scheme: bcrypt</span>
         </div>
 
@@ -60,7 +60,12 @@
                             $role = $user->roles->first()?->name ?? 'none';
                         @endphp
                         <tr>
-                            <td class="font-bold text-slate-900 text-left pl-3">{{ $user->name }}</td>
+                            <td class="font-bold text-slate-900 text-left pl-3">
+                                {{ $user->name }}
+                                @if(!$user->is_active)
+                                    <span class="block text-[10px] text-rose-700 uppercase">Deactivated</span>
+                                @endif
+                            </td>
                             <td class="font-mono text-slate-700 text-left pl-2">{{ $user->email }}</td>
                             <td>
                                 @if($role === 'owner')
@@ -109,19 +114,19 @@
                                 <td>
                                     <div class="flex items-center justify-center space-x-1.5">
                                         <button type="button" 
-                                            onclick="openResetModal({{ $user->id }}, '{{ addslashes($user->name) }}', '{{ addslashes($user->email) }}')"
+                                            onclick="openResetModal(this.dataset.userId, this.dataset.userName, this.dataset.userEmail)" data-user-id="{{ $user->id }}" data-user-name="{{ $user->name }}" data-user-email="{{ $user->email }}"
                                             class="px-2 py-0.5 bg-slate-800 hover:bg-black text-white text-[10px] font-bold rounded shadow-sm">
                                             🔑 Reset Pass
                                         </button>
-                                        @if($user->id !== auth()->id())
-                                            <form method="POST" action="{{ route('admin.users.destroy', $user->id) }}" class="inline" onsubmit="return confirm('Are you sure you want to delete account for {{ addslashes($user->name) }}?')">
+                                        @if($user->id !== auth()->id() && $user->is_active)
+                                            <form method="POST" action="{{ route('admin.users.destroy', $user->id) }}" class="inline" onsubmit="return confirm('Deactivate this staff account? Transaction history will be preserved.')">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit" class="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded shadow-sm">
-                                                    Delete
+                                                    Deactivate
                                                 </button>
                                             </form>
-                                        @else
+                                        @elseif($user->id === auth()->id())
                                             <span class="text-slate-400 text-[10px] italic">You</span>
                                         @endif
                                     </div>
@@ -171,8 +176,8 @@
 
                 <div>
                     <label class="block text-[11px] font-bold text-slate-700 mb-1">Initial Password: <span class="text-rose-600">*</span></label>
-                    <input type="text" name="password" required value="password" minlength="6" class="form-control-hms font-mono">
-                    <span class="text-[10px] text-slate-500">Default: password (can be changed on first login)</span>
+                    <input type="password" name="password" required autocomplete="new-password" minlength="6" class="form-control-hms font-mono">
+                    <span class="text-[10px] text-slate-500">Choose a unique password (minimum 6 characters).</span>
                 </div>
 
                 <div class="flex items-center justify-end space-x-2 pt-2 border-t">
@@ -206,7 +211,7 @@
 
                 <div>
                     <label class="block text-[11px] font-bold text-slate-700 mb-1">New Password: <span class="text-rose-600">*</span></label>
-                    <input type="text" name="password" required value="password" minlength="6" class="form-control-hms font-mono font-bold">
+                    <input type="password" name="password" required autocomplete="new-password" minlength="6" class="form-control-hms font-mono font-bold">
                     <span class="text-[10px] text-slate-500">Enter new password for this user (minimum 6 characters).</span>
                 </div>
 

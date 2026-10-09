@@ -6,6 +6,7 @@ use App\Models\Folio;
 use App\Models\Guest;
 use App\Models\Room;
 use App\Models\User;
+use Carbon\Carbon;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -19,6 +20,7 @@ class DepositSlipAndBillingTest extends TestCase
         parent::setUp();
         $this->seed(DatabaseSeeder::class);
     }
+
     public function test_deposit_slip_reflects_actual_deposit_and_omits_removed_text()
     {
         $cashier = User::where('email', 'pau@sedonapms.com')->first();
@@ -56,10 +58,11 @@ class DepositSlipAndBillingTest extends TestCase
         $response->assertDontSee('TERMS & INDEMNITY AGREEMENT:');
         $response->assertDontSee('Missing keycard or damaged property');
 
-        // When deposit query parameter is passed
+        // A printable cannot fabricate a deposit collection through its query string.
         $responseWithDeposit = $this->actingAs($cashier)->get(route('folios.deposit_slip', ['folio' => $folio->id, 'deposit' => 250]));
         $responseWithDeposit->assertStatus(200);
-        $responseWithDeposit->assertSee('₱250.00');
+        $responseWithDeposit->assertSee('₱0.00');
+        $responseWithDeposit->assertDontSee('₱250.00');
     }
 
     public function test_billing_statement_reflects_overridden_check_in_time_and_room_charge()
@@ -129,7 +132,7 @@ class DepositSlipAndBillingTest extends TestCase
         $resp->assertRedirect(route('dashboard'));
         $folio = Folio::where('room_id', $room->id)->where('status', 'active')->first();
         $this->assertNotNull($folio);
-        $this->assertEquals(\Carbon\Carbon::parse($customTime)->format('Y-m-d H:i'), $folio->checked_in_at->format('Y-m-d H:i'));
-        $this->assertEquals(\Carbon\Carbon::parse($customTime)->addHours(3)->format('Y-m-d H:i'), $folio->expected_checkout_at->format('Y-m-d H:i'));
+        $this->assertEquals(Carbon::parse($customTime)->format('Y-m-d H:i'), $folio->checked_in_at->format('Y-m-d H:i'));
+        $this->assertEquals(Carbon::parse($customTime)->addHours(3)->format('Y-m-d H:i'), $folio->expected_checkout_at->format('Y-m-d H:i'));
     }
 }

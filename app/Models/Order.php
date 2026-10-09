@@ -9,18 +9,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Order extends Model
 {
     protected $fillable = [
-        'user_id', 'folio_id', 'room_id', 'transaction_id',
+        'user_id', 'shift_id', 'folio_id', 'room_id', 'transaction_id',
         'type', 'status', 'special_instructions', 'total',
         'payment_method', 'cash_tendered', 'gcash_amount',
         'gcash_reference', 'change_due', 'dispatched_at',
     ];
 
     protected $casts = [
-        'total'          => 'decimal:2',
-        'cash_tendered'  => 'decimal:2',
-        'gcash_amount'   => 'decimal:2',
-        'change_due'     => 'decimal:2',
-        'dispatched_at'  => 'datetime',
+        'total' => 'decimal:2',
+        'cash_tendered' => 'decimal:2',
+        'gcash_amount' => 'decimal:2',
+        'change_due' => 'decimal:2',
+        'dispatched_at' => 'datetime',
     ];
 
     // ── Relationships ────────────────────────────────────────────────
@@ -47,10 +47,25 @@ class Order extends Model
 
     // ── Helpers ──────────────────────────────────────────────────────
 
-    public function isNew(): bool       { return $this->status === 'new'; }
-    public function isPreparing(): bool { return $this->status === 'preparing'; }
-    public function isReady(): bool     { return $this->status === 'ready'; }
-    public function isDelivered(): bool { return $this->status === 'delivered'; }
+    public function isNew(): bool
+    {
+        return $this->status === 'new';
+    }
+
+    public function isPreparing(): bool
+    {
+        return $this->status === 'preparing';
+    }
+
+    public function isReady(): bool
+    {
+        return $this->status === 'ready';
+    }
+
+    public function isDelivered(): bool
+    {
+        return $this->status === 'delivered';
+    }
 
     public function recalculateTotal(): void
     {

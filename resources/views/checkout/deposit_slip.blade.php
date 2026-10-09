@@ -91,11 +91,16 @@
 <body>
 
     <div class="no-print">
-        <button class="btn-print" onclick="window.print()">🖨️ Print 80mm Deposit Slip</button>
+        <form method="POST" action="{{ route('folios.deposit_slip.print', $folio) }}" style="display: inline;">
+            @csrf
+            <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+            <button class="btn-print">🖨️ Request deposit slip print / copy</button>
+        </form>
         <button class="btn-print" style="background:#4b5563; margin-left:6px;" onclick="window.close()">Close</button>
     </div>
 
     <div class="thermal-container" id="printable-deposit-slip">
+        <div class="text-center" style="font-size: 10px; font-weight: bold;">{{ isset($receiptCopy) ? ($receiptCopy === 1 ? 'FIRST RECORDED PRINT REQUEST' : 'COPY — PRINT REQUEST #'.$receiptCopy) : 'PREVIEW — NO PRINT REQUEST RECORDED' }}</div>
         <!-- Header -->
         <div class="text-center">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
@@ -183,4 +188,7 @@
     </div>
 
 </body>
+@if($printRequested ?? false)
+<script>window.addEventListener('load', () => window.print());</script>
+@endif
 </html>

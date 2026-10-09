@@ -5,6 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class Room extends Model
 {
@@ -18,11 +21,11 @@ class Room extends Model
 
     protected $casts = [
         'is_staff_quarters' => 'boolean',
-        'base_rate_3h'      => 'decimal:2',
-        'base_rate_6h'      => 'decimal:2',
-        'base_rate_12h'     => 'decimal:2',
-        'base_rate_24h'     => 'decimal:2',
-        'base_rate_promo'   => 'decimal:2',
+        'base_rate_3h' => 'decimal:2',
+        'base_rate_6h' => 'decimal:2',
+        'base_rate_12h' => 'decimal:2',
+        'base_rate_24h' => 'decimal:2',
+        'base_rate_promo' => 'decimal:2',
     ];
 
     // ── Relationships ───────────────────────────────────────────────
@@ -35,8 +38,8 @@ class Room extends Model
     public function activeFolio(): HasOne
     {
         return $this->hasOne(Folio::class)
-                    ->where('status', 'active')
-                    ->latestOfMany();
+            ->where('status', 'active')
+            ->latestOfMany();
     }
 
     public function bookings(): HasMany
@@ -64,10 +67,10 @@ class Room extends Model
     public function getRateForTier(string $tier): float
     {
         return match ($tier) {
-            '3h'    => (float) $this->base_rate_3h,
-            '6h'    => (float) $this->base_rate_6h,
-            '12h'   => (float) $this->base_rate_12h,
-            '24h'   => (float) $this->base_rate_24h,
+            '3h' => (float) $this->base_rate_3h,
+            '6h' => (float) $this->base_rate_6h,
+            '12h' => (float) $this->base_rate_12h,
+            '24h' => (float) $this->base_rate_24h,
             'promo' => (float) $this->base_rate_promo,
             default => 0.0,
         };
@@ -76,10 +79,10 @@ class Room extends Model
     public function getTierHours(string $tier): int
     {
         return match ($tier) {
-            '3h'    => 3,
-            '6h'    => 6,
-            '12h'   => 12,
-            '24h'   => 24,
+            '3h' => 3,
+            '6h' => 6,
+            '12h' => 12,
+            '24h' => 24,
             'promo' => 12,
             default => 0,
         };
@@ -102,31 +105,34 @@ class Room extends Model
      */
     public function getOrCreateStaffFolio(): Folio
     {
-        $folio = $this->activeFolio;
-        if ($folio) {
-            return $folio;
-        }
+        return DB::transaction(function (): Folio {
+            static::whereKey($this->id)->lockForUpdate()->firstOrFail();
+            $folio = Folio::where('room_id', $this->id)->where('status', 'active')->lockForUpdate()->first();
+            if ($folio) {
+                return $folio;
+            }
 
-        $guest = Guest::firstOrCreate(
-            ['contact' => 'STAFF-QUARTERS-12'],
-            ['name' => 'Permanent Employee Quarters', 'headcount' => 2, 'is_senior' => false, 'is_pwd' => false]
-        );
+            $guest = Guest::firstOrCreate(
+                ['contact' => 'STAFF-QUARTERS-12'],
+                ['name' => 'Permanent Employee Quarters', 'headcount' => 2, 'is_senior' => false, 'is_pwd' => false]
+            );
 
-        return Folio::create([
-            'room_id' => $this->id,
-            'guest_id' => $guest->id,
-            'user_id' => \Illuminate\Support\Facades\Auth::id() ?? 1,
-            'transaction_id' => 'STAFF-12-' . strtoupper(substr(uniqid(), -4)),
-            'rate_tier' => 'promo',
-            'checked_in_at' => now(),
-            'expected_checkout_at' => now()->addYear(),
-            'status' => 'active',
-            'room_charge' => 0.00,
-            'surcharge_total' => 0.00,
-            'pos_total' => 0.00,
-            'gross_total' => 0.00,
-            'net_total' => 0.00,
-            'pos_items' => [],
-        ]);
+            return Folio::create([
+                'room_id' => $this->id,
+                'guest_id' => $guest->id,
+                'user_id' => Auth::id() ?? 1,
+                'transaction_id' => 'STAFF-'.$this->number.'-'.strtoupper(Str::random(12)),
+                'rate_tier' => 'promo',
+                'checked_in_at' => now(),
+                'expected_checkout_at' => now()->addYear(),
+                'status' => 'active',
+                'room_charge' => 0.00,
+                'surcharge_total' => 0.00,
+                'pos_total' => 0.00,
+                'gross_total' => 0.00,
+                'net_total' => 0.00,
+                'pos_items' => [],
+            ]);
+        });
     }
 }

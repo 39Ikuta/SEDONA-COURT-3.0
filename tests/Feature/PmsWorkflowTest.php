@@ -9,6 +9,7 @@ use App\Models\Room;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class PmsWorkflowTest extends TestCase
@@ -33,22 +34,22 @@ class PmsWorkflowTest extends TestCase
 
         // Check in guest to Room 1
         $checkinResponse = $this->actingAs($cashier)->post(route('checkin.store'), [
-            'room_id'     => $room->id,
-            'guest_name'  => 'Juan Dela Cruz',
-            'rate_tier'   => '12h',
-            'headcount'   => 2,
-            'is_senior'   => 0,
+            'room_id' => $room->id,
+            'guest_name' => 'Juan Dela Cruz',
+            'rate_tier' => '12h',
+            'headcount' => 2,
+            'is_senior' => 0,
         ]);
 
         $checkinResponse->assertRedirect(route('dashboard'));
         $this->assertDatabaseHas('rooms', [
-            'id'     => $room->id,
+            'id' => $room->id,
             'status' => 'occupied',
         ]);
         $this->assertDatabaseHas('folios', [
-            'room_id'   => $room->id,
+            'room_id' => $room->id,
             'rate_tier' => '12h',
-            'status'    => 'active',
+            'status' => 'active',
         ]);
     }
 
@@ -60,10 +61,10 @@ class PmsWorkflowTest extends TestCase
 
         // Check in Room 1
         $this->actingAs($cashier)->post(route('checkin.store'), [
-            'room_id'     => $sourceRoom->id,
-            'guest_name'  => 'Transfer Guest',
-            'rate_tier'   => '3h',
-            'headcount'   => 1,
+            'room_id' => $sourceRoom->id,
+            'guest_name' => 'Transfer Guest',
+            'rate_tier' => '3h',
+            'headcount' => 1,
         ]);
 
         $folio = Folio::where('room_id', $sourceRoom->id)->where('status', 'active')->first();
@@ -72,7 +73,7 @@ class PmsWorkflowTest extends TestCase
         // Perform Room Transfer
         $transferResponse = $this->actingAs($cashier)->post(route('folios.transfer', $folio->id), [
             'target_room_id' => $targetRoom->id,
-            'reason'         => 'Air conditioning issue in Room 1',
+            'reason' => 'Air conditioning issue in Room 1',
         ]);
 
         $transferResponse->assertRedirect(route('dashboard'));
@@ -89,21 +90,21 @@ class PmsWorkflowTest extends TestCase
 
         // Check in room
         $this->actingAs($cashier)->post(route('checkin.store'), [
-            'room_id'    => $room->id,
+            'room_id' => $room->id,
             'guest_name' => 'Food Guest',
-            'rate_tier'  => '12h',
-            'headcount'  => 2,
+            'rate_tier' => '12h',
+            'headcount' => 2,
         ]);
 
         $folio = Folio::where('room_id', $room->id)->where('status', 'active')->first();
         $posItem = PosItem::first();
 
         // Place POS order for Room 1
-        $this->actingAs($cashier)->post(route('pos.order.store'), [
-            'order_type'           => 'room_charge',
-            'room_id'              => $room->id,
-            'items'                => [
-                ['id' => $posItem->id, 'qty' => 2]
+        $this->actingAs($cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'room_charge',
+            'room_id' => $room->id,
+            'items' => [
+                ['id' => $posItem->id, 'qty' => 2],
             ],
             'special_instructions' => 'Serve hot',
         ]);
@@ -142,27 +143,26 @@ class PmsWorkflowTest extends TestCase
 
         // Check in room 5
         $this->actingAs($cashier)->post(route('checkin.store'), [
-            'room_id'    => $room->id,
+            'room_id' => $room->id,
             'guest_name' => 'Skip Guest',
-            'rate_tier'  => '3h',
-            'headcount'  => 1,
+            'rate_tier' => '3h',
+            'headcount' => 1,
         ]);
 
         $folio = Folio::where('room_id', $room->id)->where('status', 'active')->first();
         $this->assertNotNull($folio);
 
         // Cashier requests force checkout
-        $forceReqResponse = $this->actingAs($cashier)->post(route('folios.force_checkout', $folio->id), [
+        $forceReqResponse = $this->actingAs($cashier)->post(route('folios.force_checkout', $folio->id), ['operation_key' => (string) Str::uuid(),
             'force_reason' => 'Guest skipped out without settlement',
         ]);
 
-        $forceReqResponse->assertRedirect(route('dashboard'));
+        $forceReqResponse->assertRedirect(route('approvals.index'));
         $this->assertTrue((bool) $folio->fresh()->force_checkout);
         $this->assertEquals('Guest skipped out without settlement', $folio->fresh()->force_reason);
 
         // Admin approves force checkout
-        $approveResponse = $this->actingAs($admin)->post(route('admin.force_checkout.approve', $folio->id));
-        $approveResponse->assertRedirect(route('dashboard'));
+        $this->executeLatestFinancialRequest();
 
         $this->assertEquals('checked_out', $folio->fresh()->status);
         $this->assertEquals('available', $room->fresh()->status);

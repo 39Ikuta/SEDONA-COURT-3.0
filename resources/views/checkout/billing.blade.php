@@ -203,88 +203,36 @@
                 </tr>
             </thead>
             <tbody>
-                <!-- Lodging Charge -->
                 <tr>
                     <td class="col-item">Room Lodging Charge ({{ strtoupper($folio->rate_tier) }})</td>
                     <td class="col-qty font-mono">1</td>
                     <td class="col-price font-mono">{{ number_format($roomRate, 2) }}</td>
                     <td class="col-total font-mono font-bold">{{ number_format($roomRate, 2) }}</td>
                 </tr>
-
-                @if($folio->status === 'checked_out' && !request()->has('checked_in_at') && !request()->has('checked_out_at'))
-                    @if($folio->extra_hours > 0)
-                        <tr>
-                            <td class="col-item">Excess Hours ({{ $folio->extra_hours }}h)</td>
-                            <td class="col-qty font-mono">{{ $folio->extra_hours }}</td>
-                            <td class="col-price font-mono">130.00</td>
-                            <td class="col-total font-mono font-bold">{{ number_format($folio->surcharge_total, 2) }}</td>
-                        </tr>
-                    @endif
-                @else
-                    <!-- Stay Extension (+Xh Xtend @ ₱130/hr) -->
-                    @if($xtendHours > 0)
-                        <tr>
-                            <td class="col-item">Stay Extension (+{{ $xtendHours }}h Xtend)</td>
-                            <td class="col-qty font-mono">{{ $xtendHours }}</td>
-                            <td class="col-price font-mono">130.00</td>
-                            <td class="col-total font-mono font-bold">{{ number_format($xtendRate, 2) }}</td>
-                        </tr>
-                    @endif
-
-                    <!-- Excess Overtime (+Xh Overstay @ ₱130/hr) -->
-                    @if($excessHours > 0)
-                        <tr>
-                            <td class="col-item">Excess Hours (+{{ $excessHours }}h Overstay)</td>
-                            <td class="col-qty font-mono">{{ $excessHours }}</td>
-                            <td class="col-price font-mono">130.00</td>
-                            <td class="col-total font-mono font-bold">{{ number_format($excessRate, 2) }}</td>
-                        </tr>
-                    @elseif($xtendHours == 0 && ($folio->extra_hours ?? 0) > 0)
-                        <tr>
-                            <td class="col-item">Excess Hours ({{ $folio->extra_hours }}h)</td>
-                            <td class="col-qty font-mono">{{ $folio->extra_hours }}</td>
-                            <td class="col-price font-mono">130.00</td>
-                            <td class="col-total font-mono font-bold">{{ number_format($folio->extra_hours * 130, 2) }}</td>
-                        </tr>
-                    @endif
+                @if($xtendHours > 0)
+                <tr>
+                    <td class="col-item">Stay Extension (+{{ $xtendHours }}h Xtend)</td>
+                    <td class="col-qty font-mono">{{ $xtendHours }}</td>
+                    <td class="col-price font-mono">130.00</td>
+                    <td class="col-total font-mono font-bold">{{ number_format($xtendRate, 2) }}</td>
+                </tr>
                 @endif
-
-                <!-- Extra Guests -->
-                @if($folio->extra_persons > 0)
-                    <tr>
-                        <td class="col-item">Extra Guest</td>
-                        <td class="col-qty font-mono">{{ $folio->extra_persons }}</td>
-                        <td class="col-price font-mono">200.00</td>
-                        <td class="col-total font-mono font-bold">{{ number_format($folio->extra_persons * 200, 2) }}</td>
-                    </tr>
+                @if($excessHours > 0)
+                <tr>
+                    <td class="col-item">Excess Hours (+{{ $excessHours }}h Overstay)</td>
+                    <td class="col-qty font-mono">{{ $excessHours }}</td>
+                    <td class="col-price font-mono">130.00</td>
+                    <td class="col-total font-mono font-bold">{{ number_format($excessRate, 2) }}</td>
+                </tr>
                 @endif
-
-                <!-- Extra Towels -->
-                @if($folio->extra_towels > 0)
-                    <tr>
-                        <td class="col-item">Extra Towels</td>
-                        <td class="col-qty font-mono">{{ $folio->extra_towels }}</td>
-                        <td class="col-price font-mono">100.00</td>
-                        <td class="col-total font-mono font-bold">{{ number_format($folio->extra_towels * 100, 2) }}</td>
-                    </tr>
-                @endif
-
-                <!-- POS Items -->
-                @if(!empty($folio->pos_items) && is_array($folio->pos_items))
-                    @foreach($folio->pos_items as $p)
-                        @php
-                            $qty = (int)($p['qty'] ?? 1);
-                            $subtotal = (float)($p['subtotal'] ?? 0);
-                            $price = isset($p['price']) ? (float)$p['price'] : ($qty > 0 ? $subtotal / $qty : $subtotal);
-                        @endphp
-                        <tr>
-                            <td class="col-item">{{ $p['name'] ?? 'Item' }}</td>
-                            <td class="col-qty font-mono">{{ $qty }}</td>
-                            <td class="col-price font-mono">{{ number_format($price, 2) }}</td>
-                            <td class="col-total font-mono font-bold">{{ number_format($subtotal, 2) }}</td>
-                        </tr>
-                    @endforeach
-                @endif
+                @foreach($addOnItems as $item)
+                <tr>
+                    <td class="col-item">{{ $item['name'] }}</td>
+                    <td class="col-qty font-mono">{{ $item['qty'] }}</td>
+                    <td class="col-price font-mono">{{ number_format($item['price'], 2) }}</td>
+                    <td class="col-total font-mono font-bold">{{ number_format($item['amount'], 2) }}</td>
+                </tr>
+                @endforeach
             </tbody>
         </table>
         <div class="divider"></div>

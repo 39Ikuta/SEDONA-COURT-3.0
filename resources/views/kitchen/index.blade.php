@@ -189,15 +189,14 @@
 
 @push('scripts')
 <script>
-    const currentNewOrders = {{ $pendingOrders->where('status', 'new')->count() }};
-    const prevNewOrders = parseInt(sessionStorage.getItem('sedona_kds_new_orders') || '0');
-
-    if (currentNewOrders > 0 && currentNewOrders > prevNewOrders) {
-        if (window.sedonaAudio) {
+    document.addEventListener('DOMContentLoaded', () => {
+        const currentNewOrders = {{ $pendingOrders->where('status', 'new')->count() }};
+        const prevNewOrders = parseInt(sessionStorage.getItem('sedona_kds_new_orders') || '0', 10);
+        if (currentNewOrders > 0 && currentNewOrders > prevNewOrders && window.sedonaAudio) {
             window.sedonaAudio.playKitchenChime();
         }
-    }
-    sessionStorage.setItem('sedona_kds_new_orders', currentNewOrders.toString());
+        sessionStorage.setItem('sedona_kds_new_orders', currentNewOrders.toString());
+    });
 
     // Auto refresh KDS screen every 15 seconds to fetch new orders
     setTimeout(() => {

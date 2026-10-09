@@ -2,6 +2,7 @@
 
 return [
     'hotel_name' => env('APP_NAME', 'Sedona Court PMS'),
+    'seed_password' => env('SEDONA_SEED_PASSWORD'),
     'extra_person_rate' => env('SEDONA_EXTRA_PERSON_RATE', 150),
     'extra_bedding_rate' => env('SEDONA_EXTRA_BEDDING_RATE', 100),
     'extra_towel_rate' => env('SEDONA_EXTRA_TOWEL_RATE', 100),

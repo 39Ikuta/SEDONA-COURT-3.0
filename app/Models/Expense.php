@@ -4,11 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class Expense extends Model
 {
     protected $fillable = [
         'user_id',
+        'shift_id',
         'voucher_number',
         'expense_date',
         'category',
@@ -18,11 +20,12 @@ class Expense extends Model
         'receipt_reference',
         'status',
         'notes',
+        'reversal_of_id', 'approval_request_id',
     ];
 
     protected $casts = [
         'expense_date' => 'date',
-        'amount'       => 'decimal:2',
+        'amount' => 'decimal:2',
     ];
 
     public function user(): BelongsTo
@@ -32,8 +35,6 @@ class Expense extends Model
 
     public static function generateVoucherNumber(): string
     {
-        $dateStr = date('Ymd');
-        $count = self::whereDate('created_at', today())->count() + 1;
-        return 'EXP-' . $dateStr . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
+        return 'EXP-'.now()->format('Ymd').'-'.strtoupper(Str::random(12));
     }
 }

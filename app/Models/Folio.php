@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\BillingService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,29 +22,29 @@ class Folio extends Model
         'gross_total', 'discount_amount', 'discount_type', 'discount_id_ref', 'senior_pwd_discount', 'net_total',
         'payment_method', 'cash_tendered', 'gcash_amount',
         'gcash_reference', 'change_due',
-        'force_checkout', 'force_reason', 'force_by',
+        'force_requested_by', 'force_checkout', 'force_reason', 'force_by', 'checked_out_by', 'overtime_hours', 'loss_slip_reference',
     ];
 
     protected $casts = [
-        'pos_items'                => 'array',
-        'checked_in_at'            => 'datetime',
-        'expected_checkout_at'     => 'datetime',
-        'checked_out_at'           => 'datetime',
-        'deposit_collected_at'     => 'datetime',
-        'deposit_refunded_at'      => 'datetime',
-        'senior_pwd_discount'      => 'boolean',
-        'force_checkout'           => 'boolean',
-        'room_charge'              => 'decimal:2',
-        'surcharge_total'          => 'decimal:2',
-        'security_deposit'         => 'decimal:2',
-        'deposit_refunded_amount'  => 'decimal:2',
-        'pos_total'                => 'decimal:2',
-        'gross_total'              => 'decimal:2',
-        'discount_amount'          => 'decimal:2',
-        'net_total'                => 'decimal:2',
-        'cash_tendered'            => 'decimal:2',
-        'gcash_amount'             => 'decimal:2',
-        'change_due'               => 'decimal:2',
+        'pos_items' => 'array',
+        'checked_in_at' => 'datetime',
+        'expected_checkout_at' => 'datetime',
+        'checked_out_at' => 'datetime',
+        'deposit_collected_at' => 'datetime',
+        'deposit_refunded_at' => 'datetime',
+        'senior_pwd_discount' => 'boolean',
+        'force_checkout' => 'boolean',
+        'room_charge' => 'decimal:2',
+        'surcharge_total' => 'decimal:2',
+        'security_deposit' => 'decimal:2',
+        'deposit_refunded_amount' => 'decimal:2',
+        'pos_total' => 'decimal:2',
+        'gross_total' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
+        'net_total' => 'decimal:2',
+        'cash_tendered' => 'decimal:2',
+        'gcash_amount' => 'decimal:2',
+        'change_due' => 'decimal:2',
     ];
 
     // ── Relationships ────────────────────────────────────────────────
@@ -78,6 +79,16 @@ class Folio extends Model
         return $this->belongsTo(User::class, 'force_by');
     }
 
+    public function checkedOutBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'checked_out_by');
+    }
+
+    public function paymentEntries(): HasMany
+    {
+        return $this->hasMany(PaymentEntry::class);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────
 
     public function isActive(): bool
@@ -92,7 +103,10 @@ class Folio extends Model
 
     public function remainingSeconds(): int
     {
-        if (!$this->isActive()) return 0;
+        if (! $this->isActive()) {
+            return 0;
+        }
+
         return max(0, now()->diffInSeconds($this->expected_checkout_at, false));
     }
 
@@ -102,30 +116,10 @@ class Folio extends Model
      */
     public function recalculate(): void
     {
-        $posTotal = collect($this->pos_items ?? [])->sum(fn($i) => $i['subtotal'] ?? 0);
-
-        $surchargeRate  = config('sedona.extra_person_rate', 150);
-        $beddingRate    = config('sedona.extra_bedding_rate', 100);
-        $towelRate      = config('sedona.extra_towel_rate', 50);
-        $extraHourRate  = config('sedona.extra_hour_rate', 100);
-
-        $surchargeTotal =
-            ($this->extra_persons  * $surchargeRate) +
-            ($this->extra_bedding  * $beddingRate)   +
-            ($this->extra_towels   * $towelRate)      +
-            ($this->extra_hours    * $extraHourRate);
-
-        $gross = $this->room_charge + $surchargeTotal + $posTotal;
-
-        $discount = $this->senior_pwd_discount
-            ? round($gross * 0.20, 2)
-            : 0;
-
-        $this->surcharge_total = $surchargeTotal;
-        $this->pos_total       = $posTotal;
-        $this->gross_total     = $gross;
-        $this->discount_amount = $discount;
-        $this->net_total       = $gross - $discount;
+        if (! $this->isActive()) {
+            return;
+        }
+        $this->fill(app(BillingService::class)->calculate($this, includeOvertime: false)['attributes']);
         $this->save();
     }
 
@@ -135,7 +129,7 @@ class Folio extends Model
     public static function generateTransactionId(): string
     {
         do {
-            $id = 'SCTI-' . str_pad(random_int(1, 999999), 6, '0', STR_PAD_LEFT);
+            $id = 'SCTI-'.str_pad(random_int(1, 999999), 6, '0', STR_PAD_LEFT);
         } while (self::where('transaction_id', $id)->exists());
 
         return $id;

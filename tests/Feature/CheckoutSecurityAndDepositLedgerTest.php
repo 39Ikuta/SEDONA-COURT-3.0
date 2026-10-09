@@ -2,16 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Models\Expense;
 use App\Models\Folio;
 use App\Models\Guest;
 use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\PosItem;
 use App\Models\Room;
 use App\Models\Shift;
 use App\Models\User;
 use App\Services\InventoryService;
+use Carbon\Carbon;
+use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class CheckoutSecurityAndDepositLedgerTest extends TestCase
@@ -19,22 +22,29 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
     use RefreshDatabase;
 
     protected User $cashier;
+
     protected Room $roomClassic;
+
     protected Room $room12Staff;
+
     protected PosItem $eggItem;
+
     protected PosItem $tapsilog;
+
     protected PosItem $calamares;
+
     protected PosItem $sisigEgg;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->travelTo(now()->setTime(12, 0));
 
-        $this->seed(\Database\Seeders\DatabaseSeeder::class);
+        $this->seed(DatabaseSeeder::class);
 
         $this->cashier = User::where('email', 'pau@sedonapms.com')->first() ?? User::first();
 
-        $this->roomClassic = Room::where('number', '1')->first() ?? Room::create([
+        $this->roomClassic = Room::where('type', 'Classic Room')->first() ?? Room::create([
             'number' => '1', 'floor' => 1, 'name' => 'Classic 1', 'type' => 'Classic Room',
             'status' => 'available', 'is_staff_quarters' => false,
             'base_rate_3h' => 395, 'base_rate_6h' => 790, 'base_rate_12h' => 1195,
@@ -190,13 +200,13 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
             ],
         ];
 
-        $postOrder = $this->actingAs($this->cashier)->post(route('pos.order.store'), $orderData);
+        $postOrder = $this->actingAs($this->cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid()] + $orderData);
         $postOrder->assertRedirect(route('pos.index'));
 
         // Staff folio should now exist and hold the order
         $staffFolio = $this->room12Staff->activeFolio;
         $this->assertNotNull($staffFolio);
-        $this->assertEquals(0.00, (float)$staffFolio->room_charge);
+        $this->assertEquals(0.00, (float) $staffFolio->room_charge);
         $this->assertNotEmpty($staffFolio->pos_items);
         $this->assertEquals('Tapsilog', $staffFolio->pos_items[0]['name']);
 
@@ -230,7 +240,7 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
             'discount_type' => 'SENIOR',
             'discount_id_ref' => 'OSCA-9921',
             'pos_items' => [
-                ['name' => 'Mineral Water', 'qty' => 2, 'price' => 25.00, 'subtotal' => 50.00]
+                ['name' => 'Mineral Water', 'qty' => 2, 'price' => 25.00, 'subtotal' => 50.00],
             ],
         ]);
 
@@ -292,25 +302,26 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
             'total_amount_to_pay' => 10.00,  // Tampered balance!
         ];
 
-        $checkoutResponse = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), $tamperedPayload);
+        $this->actingAs($this->cashier)->post(route('shifts.open'), ['operation_key' => (string) Str::uuid()])->assertSessionHasNoErrors();
+        $checkoutResponse = $this->post(route('checkout.submit', $folio->id), ['operation_key' => (string) Str::uuid()] + $tamperedPayload);
         $checkoutResponse->assertRedirect(route('dashboard'));
 
         $folio->refresh();
 
         // Server must enforce real discount (₱40.00), not tampered ₱300
-        $this->assertEquals(40.00, (float)$folio->discount_amount);
+        $this->assertEquals(40.00, (float) $folio->discount_amount);
 
         // Calculation: 395 (room) - 40 (discount) - 100 (deposit) = 255 balance
-        $this->assertEquals(255.00, (float)$folio->net_total);
+        $this->assertEquals(255.00, (float) $folio->net_total);
         $this->assertEquals('checked_out', $folio->status);
         $this->assertEquals('applied_to_bill', $folio->deposit_status);
         $this->assertEquals('split', $folio->payment_method);
-        $this->assertEquals(200.00, (float)$folio->cash_tendered);
-        $this->assertEquals(100.00, (float)$folio->gcash_amount);
+        $this->assertEquals(200.00, (float) $folio->cash_tendered);
+        $this->assertEquals(100.00, (float) $folio->gcash_amount);
         $this->assertEquals('GCASH-REF-8899', $folio->gcash_reference);
 
         // Remaining cash due after ₱100 GCash = ₱155. Cash tendered was ₱200, so change = ₱45
-        $this->assertEquals(45.00, (float)$folio->change_due);
+        $this->assertEquals(45.00, (float) $folio->change_due);
     }
 
     /**
@@ -385,12 +396,12 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
     public function test_shift_expected_drawer_cash_deducts_cash_expenses(): void
     {
         // Clean out pre-seeded expenses and folios for exact formula validation
-        \App\Models\Expense::query()->delete();
+        Expense::query()->delete();
         Folio::query()->delete();
         Order::query()->delete();
 
         $shift = Shift::whereNull('closed_at')->first();
-        if (!$shift) {
+        if (! $shift) {
             $shift = Shift::create([
                 'opened_by' => $this->cashier->id,
                 'shift_type' => 'day',
@@ -434,7 +445,7 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
         ]);
 
         // Cash expense payout of ₱350
-        \App\Models\Expense::create([
+        Expense::create([
             'shift_id' => $shift->id,
             'user_id' => $this->cashier->id,
             'voucher_number' => 'EXP-TEST-001',
@@ -454,19 +465,19 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
         $response->assertSee('[Float + Cash Inflow - Cash Expenses]');
     }
 
-    public function test_cashier_can_edit_check_in_time_and_room_rate_at_checkout(): void
+    public function test_cashier_can_edit_check_in_time_and_room_rate_through_approved_override(): void
     {
-        $guest = \App\Models\Guest::create([
+        $guest = Guest::create([
             'name' => 'Editable Time Guest',
             'phone' => '09123456789',
             'headcount' => 2,
         ]);
 
-        $folio = \App\Models\Folio::create([
+        $folio = Folio::create([
             'room_id' => $this->roomClassic->id,
             'guest_id' => $guest->id,
             'user_id' => $this->cashier->id,
-            'transaction_id' => \App\Models\Folio::generateTransactionId(),
+            'transaction_id' => Folio::generateTransactionId(),
             'rate_tier' => '3h',
             'checked_in_at' => now()->subHours(2),
             'expected_checkout_at' => now()->addHour(),
@@ -484,7 +495,10 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
 
         // Cashier edits check-in time to ~4.8 hours ago (5 hour billing bucket) and adjusts base room rate to 450
         $newCheckIn = now()->subMinutes(290)->format('Y-m-d H:i:s');
-        $submitResponse = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), [
+        $this->actingAs($this->cashier)->post(route('shifts.open'), ['operation_key' => (string) Str::uuid()])->assertSessionHasNoErrors();
+        $this->post(route('approvals.store'), ['operation_key' => (string) Str::uuid(), 'kind' => 'folio_override', 'source_id' => $folio->id, 'payload' => ['room_charge' => 450, 'checked_in_at' => $newCheckIn], 'reason' => 'Correct recorded rate and arrival'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->executeLatestFinancialRequest();
+        $submitResponse = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), ['operation_key' => (string) Str::uuid(),
             'payment_method' => 'cash',
             'cash_tendered' => 1000.00,
             'checked_in_at' => $newCheckIn,
@@ -495,10 +509,9 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
 
         $folio->refresh();
         $this->assertEquals(450.00, (float) $folio->room_charge);
-        $this->assertEquals(\Carbon\Carbon::parse($newCheckIn)->format('Y-m-d H:i'), $folio->checked_in_at->format('Y-m-d H:i'));
+        $this->assertEquals(Carbon::parse($newCheckIn)->format('Y-m-d H:i'), $folio->checked_in_at->format('Y-m-d H:i'));
         // 5 hours actual stay - 3 hours tier = 2 excess hours = 2 * 130 = 260 surcharge
         // Total charge = 450 + 260 = 710
         $this->assertEquals(710.00, (float) $folio->gross_total);
     }
 }
-

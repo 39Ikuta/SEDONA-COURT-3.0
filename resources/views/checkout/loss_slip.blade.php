@@ -128,7 +128,7 @@
             <div>
                 <div class="info-row">
                     <span>Loss Slip Ref:</span>
-                    <strong style="font-family: monospace; color: #b91c1c;">FCE-{{ str_pad($folio->id, 6, '0', STR_PAD_LEFT) }}</strong>
+                    <strong style="font-family: monospace; color: #b91c1c;">{{ $folio->loss_slip_reference }}</strong>
                 </div>
                 <div class="info-row">
                     <span>Folio Number:</span>

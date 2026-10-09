@@ -15,7 +15,7 @@ class Booking extends Model
     ];
 
     protected $casts = [
-        'arrival_at'   => 'datetime',
+        'arrival_at' => 'datetime',
         'departure_at' => 'datetime',
     ];
 
@@ -50,15 +50,9 @@ class Booking extends Model
     {
         return self::where('room_id', $roomId)
             ->where('status', 'scheduled')
-            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
-            ->where(function ($q) use ($arrival, $departure) {
-                $q->whereBetween('arrival_at', [$arrival, $departure])
-                  ->orWhereBetween('departure_at', [$arrival, $departure])
-                  ->orWhere(function ($q2) use ($arrival, $departure) {
-                      $q2->where('arrival_at', '<=', $arrival)
-                         ->where('departure_at', '>=', $departure);
-                  });
-            })
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+            ->where('arrival_at', '<', $departure)
+            ->where('departure_at', '>', $arrival)
             ->exists();
     }
 }

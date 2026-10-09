@@ -107,7 +107,7 @@
     <section class="xl:col-span-9 space-y-3 min-w-0">
 
         <!-- Pending force checkout approvals -->
-        @if(count($pendingForceCheckouts ?? []) > 0)
+        @if(count($pendingForceCheckouts ?? []) > 0 && auth()->user()->can('review-financial'))
             <div class="bg-amber-50 border border-amber-400 rounded-xl p-3 text-xs">
                 <div class="font-bold text-amber-900 mb-1">ATTENTION: Pending Force Checkout Requests ({{ count($pendingForceCheckouts) }})</div>
                 <div class="space-y-1.5">
@@ -118,10 +118,7 @@
                                 Guest: {{ $pfc->guest->name ?? 'Guest' }} &bull;
                                 Unsettled Total: <strong class="font-mono text-red-700">₱{{ number_format($pfc->net_total, 2) }}</strong>
                             </div>
-                            <form method="POST" action="{{ route('admin.force_checkout.approve', $pfc->id) }}" onsubmit="return confirm('Approve Force Checkout? This will write off ₱{{ number_format($pfc->net_total, 2) }} as an audited loss slip.')">
-                                @csrf
-                                <button type="submit" class="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded">Approve Loss Slip</button>
-                            </form>
+                            <a href="{{ route('approvals.index') }}" class="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded">Review recorded request</a>
                         </div>
                     @endforeach
                 </div>
@@ -239,7 +236,7 @@
                         </div>
                     </div>
                 @else
-                    <div onclick="openCheckInModal({{ $room->id }}, '{{ $room->number }}', '{{ $room->type }}', {{ $room->base_rate_3h }}, {{ $room->base_rate_12h }}, {{ $room->base_rate_24h }}, {{ $room->base_rate_promo }})"
+                    <div onclick="openCheckInModal(this.dataset)" data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-3h="{{ $room->base_rate_3h }}" data-rate-6h="{{ $room->base_rate_6h }}" data-rate-12h="{{ $room->base_rate_12h }}" data-rate-24h="{{ $room->base_rate_24h }}" data-rate-promo="{{ $room->base_rate_promo }}"
                          class="bg-[#f2fbf4] rounded-xl border border-emerald-200 p-3 flex flex-col justify-between min-h-[168px] cursor-pointer hover:shadow-md hover:border-emerald-400 transition">
                         <div class="flex items-start justify-between gap-1">
                             <div>

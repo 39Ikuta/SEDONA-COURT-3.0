@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Official Receipt - {{ $folio->transaction_id }}</title>
+    <title>Settlement Receipt - {{ $folio->transaction_id }}</title>
     <style>
         @page {
             size: 80mm auto;
@@ -116,20 +116,29 @@
 <body>
 
     <div class="no-print">
-        <button class="btn-print" onclick="window.print()">🖨️ Print 80mm Official Receipt</button>
+        @if(!$folio->isActive())
+        <form method="POST" action="{{ route('folios.receipt.print', $folio) }}" style="display: inline;">
+            @csrf
+            <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+            <button class="btn-print">🖨️ Request receipt print / copy</button>
+        </form>
+        @else
+        <button class="btn-print" onclick="window.print()">Print bill preview</button>
+        @endif
         <button class="btn-print" style="background:#4b5563; margin-left:6px;" onclick="window.close()">Close</button>
     </div>
 
     <div class="thermal-container" id="printable-receipt">
+        <div class="text-center" style="font-size: 10px; font-weight: bold;">{{ isset($receiptCopy) ? ($receiptCopy === 1 ? 'FIRST RECORDED PRINT REQUEST' : 'COPY — PRINT REQUEST #'.$receiptCopy) : 'PREVIEW — NO PRINT REQUEST RECORDED' }}</div>
         <div class="text-center">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
             <div style="font-size: 9px;">TRAVELLER'S INN &amp; LODGING</div>
             <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
-            <div style="font-size: 9px;">TEL: +63 (0939) 905-2816 &bull; TIN: 402-881-294-000</div>
+            <div style="font-size: 9px;">TEL: +63 (0939) 905-2816</div>
         </div>
 
         <div class="double-divider"></div>
-        <div class="text-center font-bold" style="font-size: 11px;">OFFICIAL SETTLEMENT RECEIPT</div>
+        <div class="text-center font-bold" style="font-size: 11px;">{{ $folio->isActive() ? 'DRAFT BILL - PAYMENT PENDING' : ($folio->force_by ? 'WRITE-OFF RECORD' : 'SETTLEMENT RECEIPT') }}</div>
         <div class="divider"></div>
 
         <div class="row">
@@ -168,58 +177,36 @@
                 </tr>
             </thead>
             <tbody>
-                @php
-                    $tierH = $folio->room ? $folio->room->getTierHours($folio->rate_tier) : 3;
-                @endphp
                 <tr>
-                    <td class="col-item">Room Base ({{ $tierH }}h)</td>
+                    <td class="col-item">Room Base ({{ $tierHours }}h)</td>
                     <td class="col-qty font-mono">1</td>
-                    <td class="col-price font-mono">{{ number_format($folio->room_charge, 2) }}</td>
-                    <td class="col-total font-mono font-bold">{{ number_format($folio->room_charge, 2) }}</td>
+                    <td class="col-price font-mono">{{ number_format($roomRate, 2) }}</td>
+                    <td class="col-total font-mono font-bold">{{ number_format($roomRate, 2) }}</td>
                 </tr>
-
-                @if($folio->extra_hours > 0)
-                    <tr>
-                        <td class="col-item">Excess Hours ({{ $folio->extra_hours }}h)</td>
-                        <td class="col-qty font-mono">{{ $folio->extra_hours }}</td>
-                        <td class="col-price font-mono">130.00</td>
-                        <td class="col-total font-mono font-bold">{{ number_format($folio->extra_hours * 130, 2) }}</td>
-                    </tr>
+                @if($xtendHours > 0)
+                <tr>
+                    <td class="col-item">Stay Extension (+{{ $xtendHours }}h Xtend)</td>
+                    <td class="col-qty font-mono">{{ $xtendHours }}</td>
+                    <td class="col-price font-mono">130.00</td>
+                    <td class="col-total font-mono font-bold">{{ number_format($xtendRate, 2) }}</td>
+                </tr>
                 @endif
-
-                @if($folio->extra_persons > 0)
-                    <tr>
-                        <td class="col-item">Extra Guest</td>
-                        <td class="col-qty font-mono">{{ $folio->extra_persons }}</td>
-                        <td class="col-price font-mono">200.00</td>
-                        <td class="col-total font-mono font-bold">{{ number_format($folio->extra_persons * 200, 2) }}</td>
-                    </tr>
+                @if($excessHours > 0)
+                <tr>
+                    <td class="col-item">Excess Hours (+{{ $excessHours }}h Overstay)</td>
+                    <td class="col-qty font-mono">{{ $excessHours }}</td>
+                    <td class="col-price font-mono">130.00</td>
+                    <td class="col-total font-mono font-bold">{{ number_format($excessRate, 2) }}</td>
+                </tr>
                 @endif
-
-                @if($folio->extra_towels > 0)
-                    <tr>
-                        <td class="col-item">Extra Towels</td>
-                        <td class="col-qty font-mono">{{ $folio->extra_towels }}</td>
-                        <td class="col-price font-mono">100.00</td>
-                        <td class="col-total font-mono font-bold">{{ number_format($folio->extra_towels * 100, 2) }}</td>
-                    </tr>
-                @endif
-
-                @if(!empty($folio->pos_items) && is_array($folio->pos_items))
-                    @foreach($folio->pos_items as $p)
-                        @php
-                            $qty = (int)($p['qty'] ?? 1);
-                            $subtotal = (float)($p['subtotal'] ?? 0);
-                            $price = isset($p['price']) ? (float)$p['price'] : ($qty > 0 ? $subtotal / $qty : $subtotal);
-                        @endphp
-                        <tr>
-                            <td class="col-item">{{ $p['name'] ?? 'Item' }}</td>
-                            <td class="col-qty font-mono">{{ $qty }}</td>
-                            <td class="col-price font-mono">{{ number_format($price, 2) }}</td>
-                            <td class="col-total font-mono font-bold">{{ number_format($subtotal, 2) }}</td>
-                        </tr>
-                    @endforeach
-                @endif
+                @foreach($addOnItems as $item)
+                <tr>
+                    <td class="col-item">{{ $item['name'] }}</td>
+                    <td class="col-qty font-mono">{{ $item['qty'] }}</td>
+                    <td class="col-price font-mono">{{ number_format($item['price'], 2) }}</td>
+                    <td class="col-total font-mono font-bold">{{ number_format($item['amount'], 2) }}</td>
+                </tr>
+                @endforeach
             </tbody>
         </table>
         <div class="divider"></div>
@@ -275,9 +262,11 @@
         <div class="divider"></div>
 
         <div class="row">
-            <span>Payment Method:</span>
+            <span>{{ $folio->force_by ? 'Resolution:' : 'Payment Method:' }}</span>
             <span class="font-bold">
-                @if(($folio->payment_method ?? '') === 'split')
+                @if($folio->force_by)
+                    APPROVED WRITE-OFF
+                @elseif(($folio->payment_method ?? '') === 'split')
                     SPLIT (CASH + GCASH)
                 @elseif(($folio->payment_method ?? '') === 'gcash')
                     GCASH E-WALLET
@@ -343,7 +332,7 @@
         </div>
 
         <div class="text-center" style="font-size: 10px; margin-top: 10px;">
-            <div>Attending Cashier: <strong>{{ $folio->cashier->name ?? 'Front Desk Staff' }} // FD-01</strong></div>
+            <div>Attending Cashier: <strong>{{ $folio->checkedOutBy->name ?? $folio->cashier->name ?? 'Front Desk Staff' }} // FD-01</strong></div>
             <div style="margin-top: 4px; font-weight: bold;">Thank you for choosing Sedona Court!</div>
             <div style="font-size: 9px; color: #444;">Please present your Exit Gate Pass upon vehicle departure.</div>
             <div style="margin-top: 6px; font-size: 8px; color: #666;">"This document serves as an Official Settlement Slip"</div>
@@ -357,4 +346,7 @@
     </div>
 
 </body>
+@if($printRequested ?? false)
+<script>window.addEventListener('load', () => window.print());</script>
+@endif
 </html>

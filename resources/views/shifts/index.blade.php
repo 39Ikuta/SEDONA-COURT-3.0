@@ -13,7 +13,7 @@
 <div class="px-3 pt-2 space-y-4 max-w-6xl mx-auto">
 
     <!-- Header -->
-    <div class="bg-white p-3 border-l-4 border-[#421A2B] shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+    <div class="workspace-toolbar flex flex-wrap items-center justify-between gap-3 text-xs">
         <div>
             <h1 class="font-bold text-slate-900 text-sm uppercase tracking-wide">Cashier Shift Management & Cash Drawer Turnover</h1>
             <p class="text-slate-500">Day Shift (06:00 AM – 06:00 PM) & Night Shift (06:00 PM – 06:00 AM). Audit physical cash drawer count, manage shift petty cash expenses, and reconcile float.</p>
@@ -22,6 +22,7 @@
         @if(!$activeShift)
             <form method="POST" action="{{ route('shifts.open') }}" class="flex items-center space-x-2">
                 @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
                 <div class="flex items-center space-x-1">
                     <label class="text-[11px] font-bold text-slate-600">Float (₱):</label>
                     <input type="number" name="opening_float" value="5000.00" step="100" min="0" max="100000" class="form-control-hms w-28 text-right font-mono font-bold text-xs">
@@ -30,9 +31,9 @@
                     + Open New Shift Float
                 </button>
             </form>
-        @else
+        @elseif($canOperateActiveShift)
             <div class="flex items-center space-x-2">
-                <button type="button" onclick="openExpenseModal()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded shadow flex items-center space-x-1">
+                <button type="button" onclick="openExpenseModal()" @disabled($activeShift->is_frozen) class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded shadow flex items-center space-x-1">
                     <span>💸</span>
                     <span>Log Shift Expense (Cash Out)</span>
                 </button>
@@ -44,8 +45,23 @@
         @endif
     </div>
 
+    @foreach($pendingHandovers as $handover)
+        <div class="hms-card"><h2 class="font-semibold">Incoming drawer handover #{{ $handover->id }} · {{ $handover->handover_status }}</h2><p class="text-sm">Outgoing count ₱{{ $handover->cash_total }}. A different incoming operator must count and accept custody. Any disagreement requires independent review.</p>
+            @if(in_array($handover->handover_status, ['pending', 'variance_approved']) && $handover->opened_by !== auth()->id() && (!$handover->incoming_user_id || $handover->incoming_user_id === auth()->id()))
+            <form method="POST" action="{{ route('shifts.accept', $handover) }}" class="flex flex-wrap gap-3 mt-4">@csrf<input name="operation_key" type="hidden" value="{{ (string) \Illuminate\Support\Str::uuid() }}"><label>Incoming count<input name="accepted_cash" required type="number" step="0.01" min="0" class="form-control-hms"></label><label>Handover notes<input name="notes" required maxlength="1000" class="form-control-hms"></label><button class="btn-hms-primary">Count and accept handover</button></form>
+            @endif
+        </div>
+    @endforeach
+    <div class="text-sm"><a href="{{ route('approvals.index') }}" class="underline">Request cash drops, replenishment or bank deposits; review pending tasks</a>. Close and hand over your drawer before signing out.</div>
+
     <!-- Active Shift Box (if open) -->
-    @if($activeShift)
+    @if($activeShift && !$canOperateActiveShift)
+        <div class="hms-card" role="status">
+            <strong>Drawer in use by {{ $activeShift->openedBy->name ?? 'another cashier' }}.</strong>
+            <p>Ask the assigned cashier or an administrator to complete closeout before opening your shift. Guest check-in and room charges remain available.</p>
+        </div>
+    @endif
+    @if($canOperateActiveShift)
         <div class="hms-card">
             <div class="flex items-center justify-between border-b pb-2 mb-3">
                 <div class="flex items-center space-x-2">
@@ -53,7 +69,7 @@
                         ACTIVE {{ strtoupper($activeShift->shift_type) }} SHIFT IN PROGRESS
                     </span>
                     <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded uppercase">
-                        Float Active
+                        {{ $activeShift->is_frozen ? 'Frozen — posting blocked' : 'Drawer open' }}
                     </span>
                 </div>
                 <div class="text-xs text-slate-600 font-mono">
@@ -69,8 +85,8 @@
                 </div>
 
                 <div class="p-2.5 bg-slate-50 border border-slate-200">
-                    <span class="font-bold text-slate-500 uppercase text-[10px] block">2. Cash Collections</span>
-                    <div class="font-mono font-bold text-base text-emerald-700 mt-0.5">+₱{{ number_format($cashRevenue, 2) }}</div>
+                    <span class="font-bold text-slate-500 uppercase text-[10px] block">2. Net Cash Collections</span>
+                    <div class="font-mono font-bold text-base text-emerald-700 mt-0.5">₱{{ number_format($cashRevenue, 2) }}</div>
                 </div>
 
                 <div class="p-2.5 bg-rose-50 border border-rose-200">
@@ -85,10 +101,12 @@
                 </div>
 
                 <div class="p-2.5 bg-slate-50 border border-slate-200">
-                    <span class="font-bold text-slate-500 uppercase text-[10px] block">Digital / GCash Sales</span>
-                    <div class="font-mono font-bold text-base text-blue-700 mt-0.5">₱{{ number_format($activeShift->gcash_total, 2) }}</div>
+                    <span class="font-bold text-slate-500 uppercase text-[10px] block">Net GCash Collections</span>
+                    <div class="font-mono font-bold text-base text-blue-700 mt-0.5">₱{{ number_format($gcashCollections, 2) }}</div>
                 </div>
             </div>
+
+            <p class="text-xs text-slate-500 mb-3">Collections include deposit receipts and refunds. Earned revenue is reported separately.</p>
 
             <!-- Shift Operational Disbursements Journal -->
             <div class="border border-slate-200 rounded p-3 bg-slate-50/50 mb-4">
@@ -136,11 +154,12 @@
                 @endif
             </div>
 
-            <!-- Blind Shift Handover & Denomination Closeout Form -->
+            <!-- Counted Shift Closeout Form -->
             <form method="POST" action="{{ route('shifts.close', $activeShift->id) }}" class="space-y-3 pt-3 border-t border-slate-200">
                 @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
 
-                <div class="section-bar-grey">PHYSICAL CASH DRAWER COUNT (BLIND CLOSEOUT)</div>
+                <div class="section-bar-grey">PHYSICAL CASH DRAWER COUNT (COUNTED CLOSEOUT)</div>
 
                 <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-xs">
                     <div>
@@ -200,9 +219,10 @@
                     <textarea name="handoff_notes" rows="2" placeholder="e.g. Room 13 currently extended by 3 hours. Key issued for Room 7. Cash float balanced." class="form-control-hms">{{ $activeShift->handoff_notes }}</textarea>
                 </div>
 
+                @include('shifts.override-reason')
                 <div class="flex items-center justify-end space-x-2 pt-2">
-                    <button type="submit" onclick="return confirm('Close shift and finalize drawer handover?')" class="px-5 py-2 bg-[#421A2B] hover:bg-[#341421] text-white font-bold text-xs rounded shadow">
-                        Close Shift & Finalize Handover
+                    <button type="submit" @disabled($activeShift->is_frozen) onclick="return confirm('Close shift and record the final drawer count?')" class="px-5 py-2 bg-[#421A2B] hover:bg-[#341421] text-white font-bold text-xs rounded shadow">
+                        Close Shift & Record Count
                     </button>
                 </div>
             </form>
@@ -213,7 +233,7 @@
     <div class="hms-card">
         <div class="hms-card-header border-b pb-2 mb-2 flex items-center justify-between">
             <span>PAST SHIFT TURNOVER LOG</span>
-            <span class="text-[11px] font-normal text-slate-500">Historical Drawer Audits & Shift Slips</span>
+            <span class="text-[11px] font-normal text-slate-500">Shifts you opened, closed, or participated in; administrators can review all shifts</span>
         </div>
         <div class="overflow-x-auto">
             <table class="hms-table">
@@ -275,6 +295,8 @@
 
         <form method="POST" action="{{ route('shifts.expense.store') }}" class="p-4 space-y-3 text-xs">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+            @include('shifts.override-reason')
 
             <div class="p-2 bg-amber-50 border border-amber-200 text-amber-900 text-[11px] rounded">
                 This amount will be disbursed in cash immediately from the drawer and subtracted from the expected shift turnover total.

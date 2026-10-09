@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Master Pricing & Catalog Editor')
 @section('subtitle', 'System Configuration | Master Pricing & POS Item Maintenance')
@@ -13,7 +13,7 @@
 <div class="px-3 pt-2 space-y-4 max-w-7xl mx-auto">
 
     <!-- Header -->
-    <div class="bg-white p-3 border-l-4 border-[#421A2B] shadow-sm flex items-center justify-between">
+    <div class="workspace-toolbar flex items-center justify-between">
         <div>
             <h1 class="font-bold text-slate-900 text-sm uppercase tracking-wide">Master Rates & Item Catalog Maintenance</h1>
             <p class="text-xs text-slate-500">Authorized administrators and executives can adjust room stay duration prices and menu catalog rates.</p>
@@ -83,35 +83,35 @@
                                 </td>
                                 <td>&#8212;</td>
                             @else
-                                <form method="POST" action="{{ route('admin.pricing.update') }}">
-                                    @csrf
-                                    <input type="hidden" name="room_id" value="{{ $room->id }}">
                                     <td>
-                                        <input type="number" step="0.01" name="base_rate_3h" value="{{ $room->base_rate_3h }}" class="form-control-hms font-mono text-right !w-20">
+                                        <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_3h" value="{{ $room->base_rate_3h }}" class="form-control-hms font-mono text-right !w-20">
                                     </td>
                                     <td>
-                                        <input type="number" step="0.01" name="base_rate_6h" value="{{ $room->base_rate_6h }}" class="form-control-hms font-mono text-right !w-20">
+                                        <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_6h" value="{{ $room->base_rate_6h }}" class="form-control-hms font-mono text-right !w-20">
                                     </td>
                                     <td>
-                                        <input type="number" step="0.01" name="base_rate_12h" value="{{ $room->base_rate_12h }}" class="form-control-hms font-mono text-right !w-24">
+                                        <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_12h" value="{{ $room->base_rate_12h }}" class="form-control-hms font-mono text-right !w-24">
                                     </td>
                                     <td>
-                                        <input type="number" step="0.01" name="base_rate_24h" value="{{ $room->base_rate_24h }}" class="form-control-hms font-mono text-right !w-24">
+                                        <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_24h" value="{{ $room->base_rate_24h }}" class="form-control-hms font-mono text-right !w-24">
                                     </td>
                                     <td>
-                                        <input type="number" step="0.01" name="base_rate_promo" value="{{ $room->base_rate_promo }}" class="form-control-hms font-mono text-right !w-24">
+                                        <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_promo" value="{{ $room->base_rate_promo }}" class="form-control-hms font-mono text-right !w-24">
                                     </td>
                                     <td>
-                                        <button type="submit" formaction="{{ route('rooms.maintenance.toggle', $room->id) }}" class="px-2 py-1 {{ $room->status === 'maintenance' ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-700' }} text-[10px] font-bold rounded">
+                                        <button form="roomPricing{{ $room->id }}" type="submit" formaction="{{ route('rooms.maintenance.toggle', $room->id) }}" class="px-2 py-1 {{ $room->status === 'maintenance' ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-700' }} text-[10px] font-bold rounded">
                                             {{ $room->status === 'maintenance' ? 'In Maintenance' : 'Set Out of Order' }}
                                         </button>
                                     </td>
                                     <td>
+                                        <form id="roomPricing{{ $room->id }}" method="POST" action="{{ route('admin.pricing.update') }}">
+                                            @csrf
+                                            <input type="hidden" name="room_id" value="{{ $room->id }}">
                                         <button type="submit" class="px-3 py-1 bg-[#0284c7] hover:bg-[#0369a1] text-white text-[11px] font-bold rounded">
                                             Save Rate
                                         </button>
+                                        </form>
                                     </td>
-                                </form>
                             @endif
                         </tr>
                     @endforeach
@@ -149,28 +149,29 @@
                             <td class="font-bold text-[11px] text-slate-600 text-left pl-3">{{ $item->category }}</td>
                             <td class="font-bold text-slate-900 text-left pl-3">{{ $item->name }}</td>
 
-                            <form method="POST" action="{{ route('admin.pricing.update') }}">
-                                @csrf
-                                <input type="hidden" name="pos_item_id" value="{{ $item->id }}">
                                 <td style="width: 140px;">
-                                    <input type="number" step="0.01" name="price" value="{{ $item->price }}" class="form-control-hms font-mono text-right !w-28 font-bold">
+                                    <input form="itemPricing{{ $item->id }}" type="number" step="0.01" name="price" value="{{ $item->price }}" class="form-control-hms font-mono text-right !w-28 font-bold">
                                 </td>
                                 <td style="width: 120px;">
                                     <label class="flex items-center justify-center space-x-1 cursor-pointer">
-                                        <input type="checkbox" name="is_available" value="1" {{ $item->is_available ? 'checked' : '' }} class="rounded text-red-700">
-                                        <span class="text-xs font-semibold">{{ $item->is_available ? 'Active' : 'Disabled' }}</span>
+                                        <input form="itemPricing{{ $item->id }}" type="hidden" name="is_available" value="0">
+                                        <input form="itemPricing{{ $item->id }}" type="checkbox" name="is_available" value="1" {{ $item->getRawOriginal('is_available') ? 'checked' : '' }} class="rounded text-red-700">
+                                        <span class="text-xs font-semibold">{{ $item->getRawOriginal('is_available') ? 'Active' : 'Disabled' }}</span>
                                     </label>
                                 </td>
                                 <td style="width: 100px;">
+                                    <form id="itemPricing{{ $item->id }}" method="POST" action="{{ route('admin.pricing.update') }}">
+                                    @csrf
+                                    <input type="hidden" name="pos_item_id" value="{{ $item->id }}">
                                     <button type="submit" class="px-3 py-1 bg-[#0284c7] hover:bg-[#0369a1] text-white text-[11px] font-bold rounded">
                                         Update
                                     </button>
+                                    </form>
                                 </td>
-                            </form>
 
                             <td style="width: 80px;">
                                 <form method="POST" action="{{ route('admin.pricing.items.destroy', $item->id) }}"
-                                      onsubmit="return confirm('Remove this item from catalog? This cannot be undone.')">
+                                      onsubmit="return confirm('Retire this item from the active catalog? Existing transaction history will be preserved.')">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold rounded border border-rose-200">
@@ -256,6 +257,7 @@
 
             <div class="flex flex-wrap items-center gap-4">
                 <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="hidden" name="is_available" value="0">
                     <input type="checkbox" name="is_available" value="1"
                         {{ old('is_available', '1') === '1' ? 'checked' : '' }}
                         class="rounded border-slate-300 text-[#421A2B]">

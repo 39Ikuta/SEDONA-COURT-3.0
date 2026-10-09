@@ -1,0 +1,272 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
+
+class Element {
+    constructor(tag = 'div') {
+        this.tagName = tag;
+        this.children = [];
+        this.textContent = '';
+        this.listeners = {};
+        this.classList = { add() {}, remove() {}, toggle() {} };
+    }
+
+    appendChild(child) {
+        this.children.push(child);
+        return child;
+    }
+
+    replaceChildren(...children) {
+        this.children = children;
+    }
+
+    addEventListener(event, handler) {
+        this.listeners[event] = handler;
+    }
+
+    set innerHTML(value) {
+        assert.doesNotMatch(value, /<img|onerror|<script/i, 'Untrusted text reached the HTML parser');
+        this.children = [];
+    }
+}
+
+function documentWith(ids) {
+    const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
+    const listeners = {};
+    return { elements, listeners, addEventListener: (event, handler) => { listeners[event] = handler; }, createElement: tag => new Element(tag), getElementById: id => elements[id] };
+}
+
+function descendants(element) {
+    return [element, ...element.children.flatMap(descendants)];
+}
+
+test('alarm names stay literal text and snooze callbacks preserve their arguments', () => {
+    const source = readFileSync(new URL('../../resources/js/audio.js', import.meta.url), 'utf8').split('// Global instance')[0];
+    const document = documentWith(['activeAlarmBanner', 'alarmBannerRoomsList', 'alarmBannerTitle', 'alarmBannerIcon']);
+    const window = {};
+    runInNewContext(`${source}\nwindow.Engine = SedonaAudioEngine;`, { window, document });
+    const engine = Object.create(window.Engine.prototype);
+    const calls = [];
+    engine.snoozeRoom = (...args) => calls.push(args);
+    const guestName = '<img src=x onerror=alert(1)>';
+    engine.updateAlarmBanner([{ roomId: '5', roomNumber: "201'", guestName, timeSummary: 'Overdue', stageLabel: 'Due', stageBadgeClass: 'bg-rose-600', folioId: 19, checkoutTimeStr: '2026-10-07', currentStage: 2 }], 2);
+    const nodes = descendants(document.elements.alarmBannerRoomsList);
+    assert.ok(nodes.some(node => node.textContent === guestName));
+    assert.equal(nodes.filter(node => node.tagName === 'img').length, 0);
+    nodes.find(node => node.textContent === 'Snooze 5m').listeners.click();
+    assert.deepEqual(calls, [['5', 5]]);
+    assert.equal(nodes.find(node => node.textContent === 'Checkout').href, '/checkout/19');
+});
+
+test('cart names stay literal text while quantities and submitted item fields work', () => {
+    const blade = readFileSync(new URL('../../resources/views/pos/index.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.lastIndexOf('<script>') + 8, blade.lastIndexOf('</script>'));
+    const document = documentWith(['cartItemsContainer', 'cartGrandTotal', 'submitOrderBtn']);
+    const context = { document };
+    runInNewContext(source, context);
+    const name = '<img src=x onerror=alert(1)>';
+    context.addToCart('9', name, 50);
+    let nodes = descendants(document.elements.cartItemsContainer);
+    assert.ok(nodes.some(node => node.textContent === name));
+    assert.equal(nodes.find(node => node.name === 'items[0][id]').value, '9');
+    nodes.find(node => node.textContent === '+').listeners.click();
+    nodes = descendants(document.elements.cartItemsContainer);
+    assert.equal(nodes.find(node => node.name === 'items[0][qty]').value, 2);
+    assert.equal(document.elements.cartGrandTotal.textContent, '₱100.00');
+    assert.equal(document.elements.submitOrderBtn.disabled, false);
+});
+
+for (const view of ['index', 'tv']) {
+    test(`kitchen ${view} waits for deferred audio before acknowledging new orders`, () => {
+        const blade = readFileSync(new URL(`../../resources/views/kitchen/${view}.blade.php`, import.meta.url), 'utf8');
+        const source = blade.slice(blade.lastIndexOf('<script>') + 8, blade.lastIndexOf('</script>')).replace(/\{\{[^]*?\}\}/g, '2');
+        const document = documentWith(['tv-clock', 'tv-date']);
+        const window = {};
+        const stored = new Map();
+        let chimes = 0;
+        runInNewContext(source, { document, window, sessionStorage: { getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value) }, setInterval() {}, setTimeout() {} });
+        assert.equal(stored.size, 0);
+        window.sedonaAudio = { playKitchenChime() { chimes++; } };
+        document.listeners.DOMContentLoaded();
+        assert.equal(chimes, 1);
+        assert.equal([...stored.values()][0], '2');
+    });
+}
+
+test('checkin preview reads each configured rate from the HTML dataset keys', () => {
+    const blade = readFileSync(new URL('../../resources/views/dashboard/partials/folio-modals.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.lastIndexOf('<script>') + 8, blade.lastIndexOf('</script>'));
+    const document = documentWith(['checkInRoomId', 'checkInModalTitle', 'checkInDateTime', 'checkInDateTimeDisplay', 'checkInTierSelect', 'checkInRatePreview', 'checkInModal']);
+    const context = { document, setInterval() {}, clearInterval() {} };
+    runInNewContext(source, context);
+    const roomDataset = { roomId: '12', roomNumber: '201', roomType: 'Classic', 'rate-3h': '395', 'rate-6h': '777', 'rate-12h': '975', 'rate-24h': '1700', ratePromo: '750' };
+    for (const [tier, expected] of [['6h', '₱777.00'], ['3h', '₱395.00'], ['12h', '₱975.00'], ['24h', '₱1,700.00'], ['promo', '₱750.00']]) {
+        document.elements.checkInTierSelect.value = tier;
+        context.openCheckInModal(roomDataset);
+        assert.equal(document.elements.checkInRatePreview.textContent, expected);
+    }
+});
+
+test('walkin tender inputs require only the selected method and never invent money received', () => {
+    const blade = readFileSync(new URL('../../resources/views/pos/index.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.lastIndexOf('<script>') + 8, blade.lastIndexOf('</script>'));
+    const document = documentWith(['orderTypeSelect', 'roomChargeSection', 'walkinPosSection', 'walkinPaymentMethod', 'walkinCashFields', 'walkinGcashFields', 'walkinCashTendered', 'walkinGcashAmount', 'walkinGcashReference']);
+    const context = { document };
+    runInNewContext(source, context);
+    document.elements.orderTypeSelect.value = 'walkin_pos';
+    document.elements.walkinPaymentMethod.value = 'cash';
+    context.toggleOrderDestination();
+    assert.equal(document.elements.walkinCashTendered.required, true);
+    assert.equal(document.elements.walkinCashTendered.disabled, false);
+    assert.equal(document.elements.walkinGcashAmount.disabled, true);
+    assert.equal(document.elements.walkinCashTendered.value, undefined);
+    document.elements.walkinPaymentMethod.value = 'gcash';
+    context.toggleWalkinPayment();
+    assert.equal(document.elements.walkinCashTendered.disabled, true);
+    assert.equal(document.elements.walkinGcashAmount.required, true);
+    assert.equal(document.elements.walkinGcashReference.required, true);
+    assert.equal(document.elements.walkinGcashAmount.value, undefined);
+    document.elements.orderTypeSelect.value = 'room_charge';
+    context.toggleOrderDestination();
+    assert.equal(document.elements.walkinPaymentMethod.disabled, true);
+    for (const id of ['walkinCashTendered', 'walkinGcashAmount', 'walkinGcashReference']) {
+        assert.equal(document.elements[id].required, false);
+        assert.equal(document.elements[id].disabled, true);
+    }
+});
+
+test('checkout waits for captured autosaves in order and blocks later draft writes', async () => {
+    const blade = readFileSync(new URL('../../resources/views/checkout/process.blade.php', import.meta.url), 'utf8');
+    const saveSource = blade.slice(blade.indexOf('let initializingSettlement = true;'), blade.indexOf('function togglePaymentInputs()'));
+    const submitSource = blade.slice(blade.indexOf("document.getElementById('checkoutProcessForm').addEventListener('submit'"), blade.lastIndexOf('</script>'));
+    const document = documentWith(['paymentMethodSelect', 'inpCashTendered', 'inpGcashAmount', 'inpGcashRef', 'inpDiscountRef', 'inpCheckInTime', 'checkoutProcessForm']);
+    const overrideReason = { value: 'Covering assigned cashier' };
+    document.querySelector = selector => selector.includes('shift_override_reason') ? overrideReason : { value: 'csrf-token' };
+    document.elements.paymentMethodSelect.value = 'cash';
+    document.elements.inpCashTendered.value = '200';
+    const requests = [];
+    let submitted = false;
+    document.elements.checkoutProcessForm.submit = () => { submitted = true; };
+    const context = {
+        document, console, currentDeposit: 500, applyDeposit: true, currentDiscountType: 'NONE',
+        currentRoomRate: 395, finalBalanceToPay: 0, depositSaveTimer: null, checkInSaveTimer: null,
+        clearTimeout() {},
+        fetch(url, options) {
+            return new Promise(resolve => requests.push({ body: JSON.parse(options.body), resolve }));
+        },
+    };
+    runInNewContext(`${saveSource}\n${submitSource}`.replace(/\{\{[^]*?\}\}/g, 'local'), context);
+
+    await context.saveSettlementDraftToServer();
+    assert.equal(requests.length, 0, 'Opening checkout must not save an empty draft');
+    runInNewContext('initializingSettlement = false;', context);
+    const firstSave = context.saveSettlementDraftToServer();
+    context.currentDeposit = 300;
+    overrideReason.value = 'Correcting the covered deposit';
+    document.elements.inpCashTendered.value = '400';
+    const secondSave = context.saveSettlementDraftToServer();
+    await new Promise(setImmediate);
+    assert.equal(requests.length, 1);
+    assert.equal(Object.hasOwn(requests[0].body, 'security_deposit'), false, 'Drafts cannot submit a deposit collection');
+    assert.equal(requests[0].body.cash_tendered, 200);
+    assert.equal(requests[0].body.shift_override_reason, 'Covering assigned cashier');
+    requests[0].resolve({ ok: true, json: async () => ({ success: true }) });
+    await firstSave;
+    await new Promise(setImmediate);
+    assert.equal(requests.length, 2);
+    assert.equal(Object.hasOwn(requests[1].body, 'security_deposit'), false);
+    assert.equal(requests[1].body.cash_tendered, 400);
+    assert.equal(requests[1].body.shift_override_reason, 'Correcting the covered deposit');
+
+    const form = document.elements.checkoutProcessForm;
+    const submission = form.listeners.submit.call(form, { preventDefault() {} });
+    context.saveSettlementDraftToServer();
+    await new Promise(setImmediate);
+    assert.equal(submitted, false, 'Settlement must wait for outstanding drafts');
+    requests[1].resolve({ ok: true, json: async () => ({ success: true }) });
+    await secondSave;
+    await submission;
+    assert.equal(submitted, true);
+    assert.equal(requests.length, 2, 'No draft may write after settlement starts');
+});
+
+test('checkout requires a reference only when a GCash payment is entered', () => {
+    const blade = readFileSync(new URL('../../resources/views/checkout/process.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf('function calculateChange()'), blade.indexOf('// Initialize display state'));
+    const document = documentWith(['paymentMethodSelect', 'inpCashTendered', 'inpGcashAmount', 'inpGcashRef', 'inpChange']);
+    const context = { document, finalBalanceToPay: 785, depositSaveTimer: null, syncBillingStatementUrl() {}, clearTimeout() {}, setTimeout() {} };
+    runInNewContext(source, context);
+    document.elements.paymentMethodSelect.value = 'split';
+    document.elements.inpCashTendered.value = '500.04';
+    document.elements.inpGcashAmount.value = '300';
+    context.calculateChange();
+    assert.equal(document.elements.inpGcashRef.required, true);
+    assert.equal(document.elements.inpChange.value, '₱15.04');
+    document.elements.paymentMethodSelect.value = 'cash';
+    context.calculateChange();
+    assert.equal(document.elements.inpGcashRef.required, false);
+    document.elements.paymentMethodSelect.value = 'split';
+    document.elements.inpGcashAmount.value = '0';
+    context.calculateChange();
+    assert.equal(document.elements.inpGcashRef.required, false);
+    document.elements.paymentMethodSelect.value = 'gcash';
+    document.elements.inpGcashAmount.value = '785';
+    context.calculateChange();
+    assert.equal(document.elements.inpGcashRef.required, true);
+});
+
+test('mobile navigation restores page interaction on dismissal and desktop resize', () => {
+    const blade = readFileSync(new URL('../../resources/views/layouts/app.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf('function togglePrimaryNav()'), blade.indexOf('function toggleNavDropdown(event)'));
+    const element = (...initialClasses) => {
+        const classes = new Set(initialClasses);
+        return {
+            attributes: {}, focusCount: 0,
+            classList: {
+                contains: name => classes.has(name),
+                add: name => classes.add(name),
+                remove: name => classes.delete(name),
+                toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
+            },
+            setAttribute(name, value) { this.attributes[name] = value; },
+            focus() { this.focusCount++; },
+        };
+    };
+    const sidebar = element();
+    const firstLink = element();
+    sidebar.querySelector = () => firstLink;
+    const overlay = element('hidden');
+    const toggle = element();
+    const workspace = { inert: false };
+    const body = element();
+    const elements = { primaryNavMobile: sidebar, sidebarOverlay: overlay, primaryNavToggle: toggle };
+    let onBreakpointChange;
+    const document = { body, getElementById: id => elements[id], querySelector: () => workspace };
+    const window = { matchMedia: () => ({ addEventListener: (event, handler) => { onBreakpointChange = handler; } }) };
+    const context = { document, window };
+    runInNewContext(source, context);
+
+    context.togglePrimaryNav();
+    assert.equal(sidebar.classList.contains('is-open'), true);
+    assert.equal(overlay.classList.contains('hidden'), false);
+    assert.equal(workspace.inert, true);
+    assert.equal(body.classList.contains('nav-open'), true);
+    assert.equal(toggle.attributes['aria-expanded'], 'true');
+    assert.equal(firstLink.focusCount, 1);
+
+    onBreakpointChange({ matches: false });
+    assert.equal(workspace.inert, true);
+    onBreakpointChange({ matches: true });
+    assert.equal(sidebar.classList.contains('is-open'), false);
+    assert.equal(overlay.classList.contains('hidden'), true);
+    assert.equal(workspace.inert, false);
+    assert.equal(body.classList.contains('nav-open'), false);
+    assert.equal(toggle.attributes['aria-expanded'], 'false');
+    assert.equal(toggle.focusCount, 0, 'Desktop resize must not focus the hidden mobile button');
+
+    context.togglePrimaryNav();
+    context.closePrimaryNav();
+    assert.equal(workspace.inert, false);
+    assert.equal(toggle.focusCount, 1);
+});

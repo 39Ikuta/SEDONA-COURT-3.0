@@ -7,85 +7,68 @@ use App\Models\Folio;
 use App\Models\Order;
 use App\Models\Room;
 use App\Models\Shift;
+use App\Services\ApprovalService;
+use App\Services\AuditService;
+use App\Services\BusinessDayService;
+use App\Services\FinancialPostingService;
+use App\Services\FinancialSummaryService;
+use App\Services\ShiftAccessService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AccountingController extends Controller
 {
+    public function __construct(private FinancialSummaryService $financials) {}
+
     /**
      * Profit & Loss (P&L) Statement & Executive BI.
      */
     public function pnl(Request $request): View
     {
+        $this->validateDateRange($request);
         $range = $request->query('range', 'this_week');
         $customStart = $request->query('start_date');
         $customEnd = $request->query('end_date');
 
         [$startDate, $endDate, $rangeLabel] = $this->resolveDateRange($range, $customStart, $customEnd);
 
-        // 1. Folios in range
-        $settledFolios = Folio::with(['room', 'guest', 'cashier'])
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->get();
-
-        $roomLodgingRev = (float) $settledFolios->sum('room_charge');
-        $overtimeRev = (float) $settledFolios->sum(fn($f) => $f->extra_hours * 130);
-        $surchargesRev = (float) $settledFolios->sum(fn($f) => ($f->extra_persons * 200) + ($f->extra_towels * 100) + ($f->extra_bedding * 150));
-        $folioPosRev = (float) $settledFolios->sum('pos_total');
-
-        // Walk-in POS orders in range
-        $walkinPosRev = (float) Order::where('type', 'walkin_pos')
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->sum('total');
-
-        $totalDiningRev = $folioPosRev + $walkinPosRev;
-        $grossRevenue = $roomLodgingRev + $overtimeRev + $surchargesRev + $totalDiningRev;
-
-        // Deductions & Allowances
-        $seniorPwdDiscounts = (float) $settledFolios->sum('discount_amount');
-        $lossSlips = (float) $settledFolios->where('force_checkout', true)->sum('net_total');
-
-        $netRevenueCollected = max(0, $grossRevenue - $seniorPwdDiscounts - $lossSlips);
-
-        // 12% Inclusive VAT Split
-        $netVatableSales = round($grossRevenue / 1.12, 2);
-        $vatOutputAmount = round($grossRevenue - $netVatableSales, 2);
-
-        // 2. Operating Expenses in range
-        $expenses = Expense::whereBetween('expense_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->where('status', 'approved')
-            ->get();
-
-        $expensesByCategory = [
-            'utilities'            => (float) $expenses->where('category', 'utilities')->sum('amount'),
-            'laundry_linens'       => (float) $expenses->where('category', 'laundry_linens')->sum('amount'),
-            'maintenance_repairs'  => (float) $expenses->where('category', 'maintenance_repairs')->sum('amount'),
-            'kitchen_inventory'    => (float) $expenses->where('category', 'kitchen_inventory')->sum('amount'),
-            'staff_allowances'     => (float) $expenses->where('category', 'staff_allowances')->sum('amount'),
-            'administrative'       => (float) $expenses->where('category', 'administrative')->sum('amount'),
-            'other'                => (float) $expenses->where('category', 'other')->sum('amount'),
-        ];
-
-        $totalOpex = array_sum($expensesByCategory);
-        $netOperatingProfit = $netRevenueCollected - $totalOpex;
-
-        // KPI Counts
+        $summary = $this->financials->period($startDate, $endDate);
+        $settledFolios = $summary['folios'];
+        $expenses = $summary['expenses'];
+        $roomLodgingRev = $summary['roomRevenue'];
+        $overtimeRev = $summary['overtimeRevenue'];
+        $surchargesRev = $summary['surchargesRevenue'];
+        $totalDiningRev = $summary['diningRevenue'];
+        $grossRevenue = $summary['grossRevenue'];
+        $seniorPwdDiscounts = $summary['discounts'];
+        $lossSlips = $summary['losses'];
+        $salesReturns = $summary['salesReturns'];
+        $netRevenueCollected = $summary['netRevenue'];
+        $vatOutputAmount = $summary['invoiceTax'];
+        $netVatableSales = round($netRevenueCollected - $vatOutputAmount, 2);
+        $expensesByCategory = array_fill_keys(['utilities', 'laundry_linens', 'maintenance_repairs',
+            'kitchen_inventory', 'staff_allowances', 'administrative', 'other'], 0.0);
+        foreach ($expenses as $expense) {
+            $category = array_key_exists($expense->category, $expensesByCategory) ? $expense->category : 'other';
+            $expensesByCategory[$category] += (float) $expense->amount;
+        }
+        $expensesByCategory['provider_fees'] = $summary['providerFees'];
+        $totalOpex = $summary['totalExpenses'] + $summary['providerFees'];
+        $netOperatingProfit = $summary['profit'];
         $totalCheckIns = $settledFolios->count();
         $totalRooms = Room::where('is_staff_quarters', false)->count();
-
-        // Payment mix
-        $cashCollections = (float) $settledFolios->where('payment_method', 'cash')->sum('net_total') + (float) Order::where('type', 'walkin_pos')->where('payment_method', 'cash')->whereBetween('created_at', [$startDate, $endDate])->sum('total');
-        $gcashCollections = (float) $settledFolios->where('payment_method', 'gcash')->sum('net_total') + (float) Order::where('type', 'walkin_pos')->where('payment_method', 'gcash')->whereBetween('created_at', [$startDate, $endDate])->sum('total');
+        $cashCollections = $summary['cashCollections'];
+        $gcashCollections = $summary['gcashCollections'];
 
         return view('accounting.pnl', compact(
             'range', 'rangeLabel', 'startDate', 'endDate',
             'roomLodgingRev', 'overtimeRev', 'surchargesRev', 'totalDiningRev', 'grossRevenue',
-            'seniorPwdDiscounts', 'lossSlips', 'netRevenueCollected',
+            'seniorPwdDiscounts', 'lossSlips', 'salesReturns', 'netRevenueCollected',
             'netVatableSales', 'vatOutputAmount',
             'expensesByCategory', 'totalOpex', 'netOperatingProfit',
             'totalCheckIns', 'totalRooms',
@@ -110,21 +93,21 @@ class AccountingController extends Controller
 
         $thisMonthTotal = (float) Expense::whereMonth('expense_date', now()->month)
             ->whereYear('expense_date', now()->year)
-            ->where('status', 'approved')
+            ->whereIn('status', ['approved', 'pending_review', 'rejected_paid'])
             ->sum('amount');
 
         $todayTotal = (float) Expense::whereDate('expense_date', today())
-            ->where('status', 'approved')
+            ->whereIn('status', ['approved', 'pending_review', 'rejected_paid'])
             ->sum('amount');
 
         $categories = [
-            'utilities'           => 'Utilities (Power, Water, Internet)',
-            'laundry_linens'      => 'Housekeeping & Laundry Linens',
+            'utilities' => 'Utilities (Power, Water, Internet)',
+            'laundry_linens' => 'Housekeeping & Laundry Linens',
             'maintenance_repairs' => 'Repairs & Property Maintenance',
-            'kitchen_inventory'   => 'Kitchen & F&B Grocery Restock',
-            'staff_allowances'    => 'Staff Wages & Duty Allowances',
-            'administrative'      => 'Administrative & Government Permits',
-            'other'               => 'Other Sundry Expenses',
+            'kitchen_inventory' => 'Kitchen & F&B Grocery Restock',
+            'staff_allowances' => 'Staff Wages & Duty Allowances',
+            'administrative' => 'Administrative & Government Permits',
+            'other' => 'Other Sundry Expenses',
         ];
 
         return view('accounting.expenses', compact(
@@ -135,47 +118,73 @@ class AccountingController extends Controller
     /**
      * Store New Expense Voucher.
      */
-    public function storeExpense(Request $request): RedirectResponse
+    public function storeExpense(Request $request, ShiftAccessService $shiftAccess, AuditService $audit): RedirectResponse
     {
         $validated = $request->validate([
-            'expense_date'      => 'required|date',
-            'category'          => 'required|string|max:50',
-            'description'       => 'required|string|max:255',
-            'amount'            => 'required|numeric|min:1',
-            'payment_source'    => 'required|in:cash_drawer,petty_cash,bank_transfer',
+            'expense_date' => 'required|date_format:Y-m-d|before_or_equal:today',
+            'category' => 'required|string|max:50',
+            'description' => 'required|string|max:255',
+            'amount' => 'required|numeric|min:1|max:500000|decimal:0,2',
+            'payment_source' => 'required|in:cash_drawer,petty_cash,bank_transfer',
             'receipt_reference' => 'nullable|string|max:50',
-            'notes'             => 'nullable|string|max:500',
+            'notes' => 'nullable|string|max:500',
+            'shift_override_reason' => 'nullable|string|max:500',
         ]);
 
         $voucherNumber = Expense::generateVoucherNumber();
 
-        Expense::create([
-            'user_id'           => Auth::id() ?? 1,
-            'voucher_number'    => $voucherNumber,
-            'expense_date'      => $validated['expense_date'],
-            'category'          => $validated['category'],
-            'description'       => $validated['description'],
-            'amount'            => $validated['amount'],
-            'payment_source'    => $validated['payment_source'],
-            'receipt_reference' => $validated['receipt_reference'] ?? null,
-            'status'            => 'approved',
-            'notes'             => $validated['notes'] ?? null,
-        ]);
+        app(FinancialPostingService::class)->execute($request, 'expense.record', null, $validated, function () use ($validated, $voucherNumber, $request, $shiftAccess, $audit): array {
+            app(BusinessDayService::class)->assertWritable($validated['expense_date']);
+            $shift = null;
+            if ($validated['payment_source'] === 'cash_drawer' && $validated['expense_date'] !== app(BusinessDayService::class)->date()) {
+                throw ValidationException::withMessages(['expense_date' => 'Actual drawer payments must use the current business date.']);
+            }
+            if ($validated['payment_source'] === 'cash_drawer') {
+                $shift = Shift::whereNull('closed_at')->lockForUpdate()->first();
+                if (! $shift || $shift->is_frozen) {
+                    throw ValidationException::withMessages(['payment_source' => 'Cash drawer expenses require an open, unfrozen shift.']);
+                }
+                $shiftAccess->authorizeOperation($request->user(), $shift, $validated['shift_override_reason'] ?? null, 'expense.cash_drawer');
+            }
+            $expense = Expense::create([
+                'user_id' => Auth::id() ?? 1,
+                'shift_id' => $shift?->id,
+                'voucher_number' => $voucherNumber,
+                'expense_date' => $validated['expense_date'],
+                'category' => $validated['category'],
+                'description' => $validated['description'],
+                'amount' => $validated['amount'],
+                'payment_source' => $validated['payment_source'],
+                'receipt_reference' => $validated['receipt_reference'] ?? null,
+                'status' => 'pending_review',
+                'notes' => $validated['notes'] ?? null,
+            ]);
+            $audit->record($request, 'expense.recorded', $expense, $expense->only(['voucher_number', 'amount', 'shift_id', 'payment_source', 'status', 'receipt_reference']));
+            app(ApprovalService::class)->request($request, 'expense_review', $expense->id, [], 'Review paid expense '.$expense->voucher_number, $expense->receipt_reference);
+            if ($shift) {
+                $shift->update(['total_expenses' => $this->financials->shift($shift)['drawerExpenses']]);
+            }
+
+            return ['expense_id' => $expense->id];
+        });
 
         return redirect()->route('admin.accounting.expenses')
-            ->with('success', "Expense voucher {$voucherNumber} created for ₱" . number_format($validated['amount'], 2) . ".");
+            ->with('success', "Expense voucher {$voucherNumber} created for ₱".number_format($validated['amount'], 2).'.');
     }
 
     /**
      * Void or Delete Expense.
      */
-    public function deleteExpense(Expense $expense): RedirectResponse
+    public function deleteExpense(Request $request, Expense $expense, AuditService $audit): RedirectResponse
     {
-        $voucher = $expense->voucher_number;
-        $expense->delete();
+        $data = $request->validate(['reason' => 'required|string|max:1000', 'evidence_reference' => 'required|string|max:255']);
+        app(FinancialPostingService::class)->execute($request, 'approval.expense_reversal', $expense->id, $data, function () use ($request, $expense, $data): array {
+            $approval = app(ApprovalService::class)->request($request, 'expense_reversal', $expense->id, [], $data['reason'], $data['evidence_reference']);
 
-        return redirect()->route('admin.accounting.expenses')
-            ->with('success', "Expense voucher {$voucher} has been removed from ledger.");
+            return ['approval_id' => $approval->id];
+        });
+
+        return redirect()->route('approvals.index')->with('success', 'Expense retained. Its cash-return reversal awaits review.');
     }
 
     /**
@@ -220,11 +229,11 @@ class AccountingController extends Controller
     public function lossesIndex(): View
     {
         $lossFolios = Folio::with(['room', 'guest', 'cashier', 'forcedBy'])
-            ->where('force_checkout', true)
+            ->where('force_checkout', true)->where('status', 'checked_out')->whereNotNull('force_by')
             ->latest()
             ->paginate(20);
 
-        $totalWrittenOff = (float) Folio::where('force_checkout', true)->sum('net_total');
+        $totalWrittenOff = (float) Folio::where('force_checkout', true)->where('status', 'checked_out')->whereNotNull('force_by')->sum('net_total');
 
         return view('accounting.losses', compact('lossFolios', 'totalWrittenOff'));
     }
@@ -234,50 +243,46 @@ class AccountingController extends Controller
      */
     public function exportCsv(Request $request): StreamedResponse
     {
+        $this->validateDateRange($request);
         $range = $request->query('range', 'this_month');
         [$startDate, $endDate, $rangeLabel] = $this->resolveDateRange($range, $request->query('start_date'), $request->query('end_date'));
+        $summary = $this->financials->period($startDate, $endDate);
+        $filename = 'Sedona_Court_Financial_Report_'.$startDate->format('Ymd').'_to_'.$endDate->format('Ymd').'.csv';
 
-        $folios = Folio::with(['room', 'guest'])
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->get();
-
-        $expenses = Expense::whereBetween('expense_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->where('status', 'approved')
-            ->get();
-
-        $filename = 'Sedona_Court_Financial_Report_' . $startDate->format('Ymd') . '_to_' . $endDate->format('Ymd') . '.csv';
-
-        return response()->streamDownload(function () use ($folios, $expenses, $rangeLabel, $startDate, $endDate) {
+        return response()->streamDownload(function () use ($summary, $rangeLabel, $startDate, $endDate): void {
             $handle = fopen('php://output', 'w');
-
-            fputcsv($handle, ['SEDONA COURT TRAVELLER\'S INN - OFFICIAL FINANCIAL STATEMENT']);
+            fputcsv($handle, ['SEDONA COURT FINANCIAL STATEMENT']);
             fputcsv($handle, ['Period', $rangeLabel, 'From', $startDate->format('m/d/Y'), 'To', $endDate->format('m/d/Y')]);
             fputcsv($handle, []);
-
             fputcsv($handle, ['REVENUE STREAMS', 'AMOUNT (PHP)']);
-            fputcsv($handle, ['Room Lodging Base Revenue', number_format($folios->sum('room_charge'), 2)]);
-            fputcsv($handle, ['Overtime & Excess Surcharges (₱130/hr)', number_format($folios->sum(fn($f) => $f->extra_hours * 130), 2)]);
-            fputcsv($handle, ['POS Dining & Beverage Sales', number_format($folios->sum('pos_total'), 2)]);
-            fputcsv($handle, ['GROSS REVENUE', number_format($folios->sum('gross_total'), 2)]);
-            fputcsv($handle, ['Less: Senior / PWD Discounts (20%)', number_format($folios->sum('discount_amount'), 2)]);
-            fputcsv($handle, ['Less: Audited Loss Slips (FCE-######)', number_format($folios->where('force_checkout', true)->sum('net_total'), 2)]);
-            fputcsv($handle, ['NET REVENUE COLLECTED', number_format($folios->sum('net_total'), 2)]);
-            fputcsv($handle, []);
-
-            fputcsv($handle, ['OPERATING EXPENSES (OPEX)', 'AMOUNT (PHP)']);
-            foreach ($expenses->groupBy('category') as $cat => $items) {
-                fputcsv($handle, [ucwords(str_replace('_', ' ', $cat)), number_format($items->sum('amount'), 2)]);
+            foreach (['Room Lodging Base Revenue' => 'roomRevenue', 'Overtime & Extensions' => 'overtimeRevenue',
+                'Other Surcharges' => 'surchargesRevenue', 'POS Dining & Beverage Sales' => 'diningRevenue',
+                'GROSS REVENUE' => 'grossRevenue', 'Less: Discounts' => 'discounts',
+                'Less: Approved Loss Slips' => 'losses', 'Less: Sales Returns' => 'salesReturns', 'NET SETTLED REVENUE' => 'netRevenue', 'Less: Recorded Invoice Tax' => 'invoiceTax'] as $label => $key) {
+                fputcsv($handle, [$label, number_format($summary[$key], 2, '.', '')]);
             }
-            fputcsv($handle, ['TOTAL OPERATING EXPENSES', number_format($expenses->sum('amount'), 2)]);
             fputcsv($handle, []);
-
-            $netProfit = $folios->sum('net_total') - $expenses->sum('amount');
-            fputcsv($handle, ['NET OPERATING PROFIT (EBITDA)', number_format($netProfit, 2)]);
-
+            fputcsv($handle, ['OPERATING EXPENSES (OPEX)', 'AMOUNT (PHP)']);
+            foreach ($summary['expenses']->groupBy('category') as $category => $expenses) {
+                $label = ucwords(str_replace('_', ' ', $category));
+                if (preg_match('/^[=+@\-\t\r]/', $label)) {
+                    $label = "'".$label;
+                }
+                fputcsv($handle, [$label, number_format($expenses->sum('amount'), 2, '.', '')]);
+            }
+            fputcsv($handle, ['Matched Provider / Bank Fees', number_format($summary['providerFees'], 2, '.', '')]);
+            fputcsv($handle, ['TOTAL OPERATING EXPENSES', number_format($summary['totalExpenses'] + $summary['providerFees'], 2, '.', '')]);
+            fputcsv($handle, ['NET OPERATING PROFIT (EBITDA)', number_format($summary['profit'], 2, '.', '')]);
             fclose($handle);
-        }, $filename, [
-            'Content-Type'        => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    private function validateDateRange(Request $request): void
+    {
+        $request->validate([
+            'range' => 'nullable|in:today,this_week,this_month,last_month,custom',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
         ]);
     }
 
@@ -287,27 +292,27 @@ class AccountingController extends Controller
             'today' => [
                 now()->startOfDay(),
                 now()->endOfDay(),
-                'Today (' . now()->format('M d, Y') . ')',
+                'Today ('.now()->format('M d, Y').')',
             ],
             'this_week' => [
                 now()->startOfWeek(),
                 now()->endOfWeek(),
-                'This Week (' . now()->startOfWeek()->format('M d') . ' - ' . now()->endOfWeek()->format('M d, Y') . ')',
+                'This Week ('.now()->startOfWeek()->format('M d').' - '.now()->endOfWeek()->format('M d, Y').')',
             ],
             'this_month' => [
                 now()->startOfMonth(),
                 now()->endOfMonth(),
-                'This Month (' . now()->format('F Y') . ')',
+                'This Month ('.now()->format('F Y').')',
             ],
             'last_month' => [
-                now()->subMonth()->startOfMonth(),
-                now()->subMonth()->endOfMonth(),
-                'Last Month (' . now()->subMonth()->format('F Y') . ')',
+                now()->subMonthNoOverflow()->startOfMonth(),
+                now()->subMonthNoOverflow()->endOfMonth(),
+                'Last Month ('.now()->subMonthNoOverflow()->format('F Y').')',
             ],
             'custom' => [
                 $customStart ? Carbon::parse($customStart)->startOfDay() : now()->startOfMonth(),
                 $customEnd ? Carbon::parse($customEnd)->endOfDay() : now()->endOfDay(),
-                'Custom Range (' . ($customStart ?? '') . ' to ' . ($customEnd ?? '') . ')',
+                'Custom Range ('.($customStart ?? '').' to '.($customEnd ?? '').')',
             ],
             default => [
                 now()->startOfWeek(),

@@ -1,45 +1,47 @@
 @extends('layouts.app')
 
-@section('title', 'Front Desk Operations Matrix')
-@section('subtitle', 'Front Desk Operations | 32-Room Visual Operations Grid')
+@section('title', 'Front Desk')
+@section('subtitle', 'A clear view of your rooms, guests, and daily operations.')
 
 
 @section('content')
-<div class="px-2 pt-2 space-y-3">
+<div class="dashboard-page">
 
     <!-- KPI Summary Row -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 px-1 text-xs">
-        <div class="bg-white p-2.5 border-l-4 border-slate-700 shadow-sm flex items-center justify-between">
-            <span class="font-bold text-slate-600 uppercase text-[11px]">Total Rooms</span>
-            <span class="font-mono font-bold text-base text-slate-900">{{ $totalRooms }}</span>
+    <div class="dashboard-stats">
+        <div class="stat-card">
+            <div class="stat-label"><span>Total rooms</span><span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/></svg></span></div>
+            <div class="stat-number">{{ $totalRooms }}</div>
+            <p class="stat-detail">Guest rooms across the property</p>
         </div>
-        <div class="bg-white p-2.5 border-l-4 border-available shadow-sm flex items-center justify-between">
-            <span class="font-bold text-emerald-800 uppercase text-[11px]">Available</span>
-            <span class="font-mono font-bold text-base text-available">{{ $availableRooms }}</span>
+        <div class="stat-card stat-available">
+            <div class="stat-label"><span>Available</span><span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4z M8 12l3 3 5-6"/></svg></span></div>
+            <div class="stat-number">{{ $availableRooms }}</div>
+            <p class="stat-detail">Ready for the next check-in</p>
         </div>
-        <div class="bg-white p-2.5 border-l-4 border-occupied shadow-sm flex items-center justify-between">
-            <span class="font-bold text-rose-800 uppercase text-[11px]">Occupied</span>
-            <span class="font-mono font-bold text-base text-occupied">{{ $occupiedRooms }}</span>
+        <div class="stat-card stat-occupied">
+            <div class="stat-label"><span>Occupied</span><span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 18V7 M21 18v-7 M3 15h18 M3 9h5v6 M8 11h13v4"/></svg></span></div>
+            <div class="stat-number">{{ $occupiedRooms }}</div>
+            <p class="stat-detail">Guests currently staying</p>
         </div>
-        <div class="bg-white p-2.5 border-l-4 border-classic shadow-sm flex items-center justify-between">
-            <span class="font-bold text-amber-800 uppercase text-[11px]">Occupancy</span>
-            <span class="font-mono font-bold text-base text-amber-700">{{ $occupancyRate }}%</span>
+        <div class="stat-card stat-occupancy">
+            <div class="stat-label"><span>Occupancy</span><span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 20V4 M4 20h16 M8 16v-5 M13 16V7 M18 16V3"/></svg></span></div>
+            <div class="stat-number">{{ $occupancyRate }}%</div>
+            <div class="occupancy-track" aria-hidden="true"><span style="width: {{ $occupancyRate }}%"></span></div>
         </div>
     </div>
 
     @if(auth()->check() && auth()->user()->hasAnyRole(['cashier', 'front_desk']))
         <!-- Cashier personal shift performance (own sales only — never global) -->
-        <div class="mx-1 bg-white border border-slate-200 shadow-sm px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-            <div class="flex items-center gap-2 min-w-0">
-                <span class="pill shrink-0" style="background-color:#421A2B;color:#fff;border-color:#341421;">My Shift</span>
-                <span class="font-bold text-slate-500 uppercase text-[10px] tracking-wider shrink-0 hidden md:inline">{{ $myShiftLabel ?? '' }}</span>
-                <span class="font-mono font-black text-sm text-brand whitespace-nowrap">₱{{ number_format($myShiftRevenue ?? 0, 2) }}</span>
-                <span class="text-[11px] text-slate-500 whitespace-nowrap">{{ $myCheckIns ?? 0 }} check-ins &bull; {{ $myOrdersCount ?? 0 }} orders</span>
+        <div class="shift-summary">
+            <div class="shift-summary-label">
+                <span class="shift-summary-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7h18v13H3z M7 7V4h10v3 M3 12h18 M10 12v3h4v-3"/></svg></span>
+                <div><strong>My shift</strong><br><small>{{ $myShiftLabel ?? '' }}</small></div>
             </div>
-            <div class="flex flex-wrap items-center justify-start sm:justify-end gap-1.5">
-                <span class="pill pill-available shrink-0"><span class="pill-dot"></span>{{ $availableRooms }} Available</span>
-                <span class="pill pill-occupied shrink-0"><span class="pill-dot"></span>{{ $occupiedRooms }} Occupied</span>
-                <span class="text-[11px] font-semibold text-slate-500 whitespace-nowrap shrink-0">{{ $occupancyRate }}% Occ.</span>
+            <div class="shift-summary-details">
+                <span><b>{{ $myCheckIns ?? 0 }}</b> check-ins</span>
+                <span><b>{{ $myOrdersCount ?? 0 }}</b> orders</span>
+                <span class="shift-summary-amount"><small>Net sales</small> ₱{{ number_format($myShiftRevenue ?? 0, 2) }}</span>
             </div>
         </div>
     @endif
@@ -59,12 +61,7 @@
                             Unsettled Total: <strong class="font-mono text-red-700">₱{{ number_format($pfc->net_total, 2) }}</strong> &bull;
                             Reason: <span class="italic text-slate-700">{{ $pfc->force_reason ?? 'Skip-out' }}</span>
                         </div>
-                        <form method="POST" action="{{ route('admin.force_checkout.approve', $pfc->id) }}" onsubmit="return confirm('Approve Force Checkout? This will write off ₱{{ number_format($pfc->net_total, 2) }} as an audited loss slip.')">
-                            @csrf
-                            <button type="submit" class="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded">
-                                Approve Loss Slip (FCE-######)
-                            </button>
-                        </form>
+                        <a href="{{ route('approvals.index') }}" class="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded">Review recorded request</a>
                     </div>
                 @endforeach
             </div>
@@ -88,23 +85,23 @@
     </div>
 
     <!-- Main 2-Column Matrix -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+    <div class="dashboard-panels">
 
         <!-- LEFT COLUMN: AVAILABLE ROOMS -->
-        <div class="lg:col-span-4">
+        <div>
             <div class="hms-card">
                 <div class="hms-card-header border-b pb-2 mb-2 flex items-center justify-between">
-                    <span class="text-available font-bold text-sm">AVAILABLE ROOMS</span>
-                    <span class="text-xs text-slate-500 font-normal">({{ $rooms->where('status', 'available')->where('is_staff_quarters', false)->count() }} Ready)</span>
+                    <span class="room-panel-title"><span class="pill-dot text-emerald-500"></span>Available rooms</span>
+                    <span class="room-panel-count">{{ $rooms->where('status', 'available')->where('is_staff_quarters', false)->count() }} ready</span>
                 </div>
 
-                <div class="overflow-x-auto max-h-[700px] overflow-y-auto">
-                    <table class="hms-table">
+                <div class="room-list-scroll">
+                    <table class="hms-table available-room-table">
                         <thead class="sticky top-0 z-10 bg-slate-100">
                             <tr>
-                                <th style="width: 75px;">ACTION</th>
-                                <th style="width: 70px;">ROOM</th>
-                                <th style="width: 45px;">FL</th>
+                                <th>ACTION</th>
+                                <th>ROOM</th>
+                                <th>FL</th>
                                 <th>ROOM TYPE</th>
                             </tr>
                         </thead>
@@ -112,7 +109,7 @@
                             @forelse($rooms->where('status', 'available') as $room)
                                 @if($room->is_staff_quarters)
                                     <tr class="bg-indigo-50/70">
-                                        <td class="space-x-1 whitespace-nowrap">
+                                        <td class="space-y-1">
                                             <span class="px-2 py-0.5 bg-indigo-700 text-white text-[10px] font-bold rounded">Staff</span>
                                             @php $staffFolio = $room->activeFolio ?? $room->getOrCreateStaffFolio(); @endphp
                                             <button onclick="openAddOnModal({{ $staffFolio->id }}, '{{ $room->number }} (Staff Quarters)')" class="px-2 py-0.5 bg-[#0284c7] hover:bg-[#0369a1] text-white text-[10px] font-bold rounded shadow-sm">
@@ -126,7 +123,7 @@
                                 @else
                                     <tr>
                                         <td>
-                                            <button onclick="openCheckInModal({{ $room->id }}, '{{ $room->number }}', '{{ $room->type }}', {{ $room->base_rate_3h }}, {{ $room->base_rate_12h }}, {{ $room->base_rate_24h }}, {{ $room->base_rate_promo }})" class="btn-checkin">
+                                            <button onclick="openCheckInModal(this.dataset)" data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-3h="{{ $room->base_rate_3h }}" data-rate-6h="{{ $room->base_rate_6h }}" data-rate-12h="{{ $room->base_rate_12h }}" data-rate-24h="{{ $room->base_rate_24h }}" data-rate-promo="{{ $room->base_rate_promo }}" class="btn-checkin">
                                                 Check In
                                             </button>
                                         </td>
@@ -153,111 +150,70 @@
         </div>
 
         <!-- RIGHT COLUMN: OCCUPIED ROOMS -->
-        <div class="lg:col-span-8">
+        <div>
             <div class="hms-card">
                 <div class="hms-card-header border-b pb-2 mb-2 flex items-center justify-between">
-                    <span class="text-occupied font-bold text-sm">OCCUPIED ROOMS</span>
-                    <span class="text-xs text-slate-500 font-normal">({{ $rooms->where('status', 'occupied')->count() }} Active Guests)</span>
+                    <span class="room-panel-title"><span class="pill-dot text-brand"></span>Occupied rooms</span>
+                    <span class="room-panel-count">{{ $rooms->where('status', 'occupied')->count() }} active</span>
                 </div>
 
-                <div class="overflow-x-auto max-h-[700px] overflow-y-auto">
-                    <table class="hms-table">
-                        <thead class="sticky top-0 z-10 bg-slate-100">
+                @if($rooms->where('status', 'occupied')->isNotEmpty())
+                <div class="room-list-scroll occupied-room-list">
+                    <table class="hms-table occupied-room-table" aria-label="Occupied rooms">
+                        <thead class="sticky top-0 z-10">
                             <tr>
-                                <th style="min-width: 175px;">PRIMARY ACTIONS</th>
-                                <th style="width: 55px;">ROOM</th>
-                                <th style="width: 80px;">DATE</th>
-                                <th style="width: 85px;">CHECK-IN TIME</th>
-                                <th style="width: 45px;">PAX</th>
-                                <th style="width: 60px;">STAY</th>
-                                <th style="width: 110px;">REMAINING</th>
-                                <th style="width: 85px;">STATUS</th>
-                                <th style="min-width: 220px;">FOLIO & SERVICE ACTIONS</th>
+                                <th scope="col">Room</th>
+                                <th scope="col">Check-in</th>
+                                <th scope="col">Pax / Stay</th>
+                                <th scope="col">Remaining</th>
+                                <th scope="col">Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($rooms->where('status', 'occupied') as $room)
+                            @foreach($rooms->where('status', 'occupied') as $room)
                                 @php
                                     $folio = $room->activeFolio;
                                 @endphp
                                 @if($folio)
-                                    <tr data-room-id="{{ $room->id }}"
+                                    <tr class="occupied-room-summary"
+                                        data-room-id="{{ $room->id }}"
                                         data-room-number="{{ $room->number }}"
                                         data-guest-name="{{ $folio->guest->name ?? 'Guest' }}"
                                         data-checkout-time="{{ $folio->expected_checkout_at->toIso8601String() }}"
                                         data-folio-id="{{ $folio->id }}"
                                         data-status="{{ $room->status }}">
-                                        
-                                        <!-- Primary Actions -->
-                                        <td class="space-x-1 whitespace-nowrap text-left">
-                                            <a href="{{ route('checkout.process', $folio->id) }}" class="btn-occupied font-bold">
-                                                Occupied
-                                            </a>
-                                            <button onclick="openXtendModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-xtend font-bold">
-                                                Xtend
-                                            </button>
-                                            <button onclick="openDiscountModal({{ $folio->id }}, '{{ $room->number }}', '{{ $room->type }}', '{{ $folio->rate_tier }}', '{{ $folio->discount_type ?? 'NONE' }}', '{{ $folio->discount_id_ref ?? '' }}')" class="btn-discount font-bold">
-                                                Discount
-                                            </button>
-                                            <button onclick="openTransferModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-transfer font-bold">
-                                                Transfer
-                                            </button>
-                                        </td>
-
-                                        <!-- Room Number -->
-                                        <td class="font-bold font-mono text-sm text-slate-900">
-                                            {{ $room->number }}
-                                        </td>
-
-                                        <!-- Check In Date -->
-                                        <td class="font-mono text-[11px]">{{ $folio->checked_in_at->format('m/d/Y') }}</td>
-
-                                        <!-- Check In Time -->
-                                        <td class="font-mono text-[11px]">{{ $folio->checked_in_at->format('h:i A') }}</td>
-
-                                        <!-- No of Guest -->
-                                        <td class="font-bold">{{ $folio->guest->headcount ?? 2 }}</td>
-
-                                        <!-- Stay Tier -->
-                                        <td class="font-bold font-mono">{{ strtoupper($folio->rate_tier) }}</td>
-
-                                        <!-- Live Reactive Stay Countdown Timer -->
-                                        <td class="stay-countdown-timer font-mono text-[11px]">
-                                            Calculating...
-                                        </td>
-
-                                        <!-- Status Badge -->
-                                        <td>
-                                            <span class="pill pill-occupied">
-                                                <span class="pill-dot"></span>OCCUPIED
-                                            </span>
-                                        </td>
-
-                                        <!-- Folio & Service Actions -->
-                                        <td class="space-x-1 whitespace-nowrap text-right">
-                                            <button onclick="openAddOnModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-addon font-bold">
-                                                Add On
-                                            </button>
-                                            <a href="{{ route('folios.orderslip', $folio->id) }}" target="_blank" class="btn-orderslip font-bold">
-                                                Order Slip
-                                            </a>
-                                            <a href="{{ route('pos.index') }}" class="btn-xorder font-bold">
-                                                X Order
-                                            </a>
-                                            <button onclick="openForceCheckoutModal({{ $folio->id }}, '{{ $room->number }}', '{{ number_format($folio->net_total, 2) }}')" class="btn-force font-bold" title="Force Checkout Request">
-                                                Force
-                                            </button>
+                                        <td data-label="Room" class="font-bold font-mono text-sm">{{ $room->number }}</td>
+                                        <td data-label="Check-in" class="font-mono text-[11px]">{{ $folio->checked_in_at->format('m/d/Y') }}<br>{{ $folio->checked_in_at->format('h:i A') }}</td>
+                                        <td data-label="Pax / Stay"><span class="font-bold">{{ $folio->guest->headcount ?? 2 }} pax</span><br><span class="font-mono">{{ strtoupper($folio->rate_tier) }}</span></td>
+                                        <td data-label="Remaining" class="stay-countdown-timer font-mono text-[11px]">Calculating...</td>
+                                        <td data-label="Status"><span class="pill pill-occupied"><span class="pill-dot"></span>OCCUPIED</span></td>
+                                    </tr>
+                                    <tr class="occupied-room-action-row">
+                                        <td colspan="5">
+                                            <div class="occupied-room-actions" role="group" aria-label="Actions for room {{ $room->number }}">
+                                                <a href="{{ route('checkout.process', $folio->id) }}" class="btn-occupied font-bold">Occupied</a>
+                                                <button onclick="openXtendModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-xtend font-bold">Xtend</button>
+                                                <button onclick="openDiscountModal(this.dataset.folioId, this.dataset.roomNumber, this.dataset.roomType, this.dataset.rateTier, this.dataset.discountType, this.dataset.discountRef)" data-folio-id="{{ $folio->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-tier="{{ $folio->rate_tier }}" data-discount-type="{{ $folio->discount_type ?? 'NONE' }}" data-discount-ref="{{ $folio->discount_id_ref ?? '' }}" class="btn-discount font-bold">Discount</button>
+                                                <button onclick="openTransferModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-transfer font-bold">Transfer</button>
+                                                <button onclick="openAddOnModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-addon font-bold">Add On</button>
+                                                <a href="{{ route('folios.orderslip', $folio->id) }}" target="_blank" class="btn-orderslip font-bold">Order Slip</a>
+                                                <a href="{{ route('pos.index') }}" class="btn-xorder font-bold">X Order</a>
+                                                <button onclick="openForceCheckoutModal({{ $folio->id }}, '{{ $room->number }}', '{{ number_format($folio->net_total, 2) }}')" class="btn-force font-bold" title="Force Checkout Request">Force</button>
+                                            </div>
                                         </td>
                                     </tr>
                                 @endif
-                            @empty
-                                <tr>
-                                    <td colspan="9" class="py-8 text-center text-slate-400">No rooms currently occupied.</td>
-                                </tr>
-                            @endforelse
+                            @endforeach
                         </tbody>
                     </table>
                 </div>
+                @else
+                    <div class="rooms-empty text-center">
+                        <span class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 18V7 M21 18v-7 M3 15h18 M3 9h5v6 M8 11h13v4"/></svg></span>
+                        <span class="empty-title">No rooms currently occupied.</span>
+                        <span class="empty-description">New guest stays will appear here after check-in.</span>
+                    </div>
+                @endif
             </div>
         </div>
 

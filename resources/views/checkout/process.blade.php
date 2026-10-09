@@ -10,7 +10,24 @@
 @endsection
 
 @section('content')
-<div class="px-3 pt-2 max-w-6xl mx-auto">
+<div class="hms-card mb-4 text-sm"><a href="{{ route('approvals.index') }}" class="underline font-semibold">Request rate, time or discretionary discount changes</a>. Execute the approved request, then reload checkout.</div>
+<div class="checkout-page px-3 pt-2 max-w-6xl mx-auto">
+
+    @can('record_payments')
+    <form method="POST" action="{{ route('folios.deposit.collect', $folio) }}" class="hms-card mb-4" onsubmit="return confirm('Confirm you have received this deposit from the guest?')">
+        @csrf
+        <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <h2 class="font-bold text-brand mb-2">Record deposit received</h2>
+        <p class="text-sm text-slate-600 mb-3">Record actual money received. This adds to the deposit already held.</p>
+        <div class="flex flex-wrap items-end gap-3">
+            <label class="text-sm">Amount received<input name="amount" type="number" min="0.01" max="100000" step="0.01" required class="form-control-hms block"></label>
+            <label class="text-sm">Method<select name="payment_method" class="form-control-hms block"><option value="cash">Cash</option><option value="gcash">GCash</option></select></label>
+            <label class="text-sm">GCash reference (required for GCash)<input name="gcash_reference" maxlength="50" class="form-control-hms block"></label>
+            <button class="btn-hms-primary">Record deposit received</button>
+        </div>
+        @include('shifts.override-reason')
+    </form>
+    @endcan
 
     <div class="hms-card">
         <div class="flex items-center justify-between border-b pb-2 mb-3">
@@ -24,9 +41,22 @@
 
         <form method="POST" action="{{ route('checkout.submit', $folio->id) }}" id="checkoutProcessForm">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+            @include('shifts.override-reason')
+
+            @if($errors->any())
+                <div role="alert" class="mb-3 border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                    <strong>Checkout could not be completed.</strong>
+                    <ul class="mt-1 list-disc pl-5">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
             <!-- Top Stay Details 3-Column Grid (Tamper-Proof Readouts) -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2 mb-3 text-xs bg-slate-50 p-3 border border-slate-200">
+            <div class="checkout-details mb-3 text-xs bg-slate-50 p-3 border border-slate-200">
                 
                 <!-- Col 1: Room Number, Check In Time, Room Rate -->
                 <div class="space-y-2">
@@ -44,7 +74,7 @@
                                style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" 
                                class="form-control-hms !text-left text-[11px] font-mono font-bold text-slate-800"
                                title="Guest check-in time recorded in system">
-                        <input type="hidden" name="checked_in_at" id="inpCheckInTime" value="{{ $checkInTime->format('Y-m-d\TH:i') }}">
+                        <input type="hidden" name="checked_in_at" readonly id="inpCheckInTime" value="{{ $checkInTime->format('Y-m-d\TH:i') }}">
                     </div>
 
                     <div class="flex items-center">
@@ -54,7 +84,7 @@
                             <input type="number" 
                                    step="0.01" 
                                    min="0" 
-                                   name="room_charge" 
+                                   name="room_charge" readonly
                                    id="inpRoomRate" 
                                    value="{{ number_format($roomRate, 2, '.', '') }}" 
                                    oninput="onRoomRateChange(this.value)" 
@@ -122,14 +152,12 @@
                                    step="0.01" 
                                    min="0" 
                                    max="100000" 
-                                   name="security_deposit" 
+                                   readonly
                                    id="inpDeposit" 
                                    value="{{ number_format($deposit, 2, '.', '') }}" 
                                    placeholder="0.00" 
-                                   oninput="onDepositChange(this.value)" 
-                                   onblur="saveDepositToServer(this.value)" 
                                    class="form-control-hms font-mono font-bold text-emerald-800 !w-32 pl-6 text-center bg-white border-slate-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 shadow-inner" 
-                                   title="Cashier: Enter or adjust guest deposit held in trust">
+                                   title="Deposit confirmed as received; use Record deposit received to add money">
                         </div>
                     </div>
 
@@ -269,7 +297,7 @@
                                     <option value="none" {{ strtolower($folio->discount_type ?? 'none') === 'none' ? 'selected' : '' }}>None (₱0.00)</option>
                                     <option value="senior" {{ strtolower($folio->discount_type ?? '') === 'senior' ? 'selected' : '' }}>Senior Citizen (-₱{{ number_format($discountOptions['SENIOR'] ?? 79, 2) }})</option>
                                     <option value="pwd" {{ strtolower($folio->discount_type ?? '') === 'pwd' ? 'selected' : '' }}>PWD Disability (-₱{{ number_format($discountOptions['PWD'] ?? 79, 2) }})</option>
-                                    <option value="dc" {{ strtolower($folio->discount_type ?? '') === 'dc' ? 'selected' : '' }}>Sedona Card / DC (-₱{{ number_format($discountOptions['DC'] ?? 40, 2) }})</option>
+                                    <option value="dc" @disabled(strtolower($folio->discount_type ?? '') !== 'dc') {{ strtolower($folio->discount_type ?? '') === 'dc' ? 'selected' : '' }}>Sedona Card / DC (-₱{{ number_format($discountOptions['DC'] ?? 40, 2) }})</option>
                                 </select>
                             </div>
 
@@ -318,25 +346,25 @@
                             <div class="flex items-center justify-between">
                                 <label class="font-bold text-slate-700 text-[11px]">PAYMENT METHOD:</label>
                                 <select name="payment_method" id="paymentMethodSelect" onchange="togglePaymentInputs()" class="form-control-hms !w-44 font-bold">
-                                    <option value="cash" selected>Cash Payment</option>
-                                    <option value="gcash">GCash E-Wallet</option>
-                                    <option value="split">Split (Cash + GCash)</option>
+                                    <option value="cash" @selected(old('payment_method', $folio->payment_method ?? 'cash') === 'cash')>Cash Payment</option>
+                                    <option value="gcash" @selected(old('payment_method', $folio->payment_method) === 'gcash')>GCash E-Wallet</option>
+                                    <option value="split" @selected(old('payment_method', $folio->payment_method) === 'split')>Split (Cash + GCash)</option>
                                 </select>
                             </div>
 
                             <div class="flex items-center justify-between" id="rowCashTendered">
-                                <label class="font-bold text-slate-700 text-[11px]">CASH TENDERED (₱):</label>
-                                <input type="number" step="0.01" id="inpCashTendered" name="cash_tendered" placeholder="0.00" oninput="calculateChange()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44 font-bold text-right">
+                                <label for="inpCashTendered" class="font-bold text-slate-700 text-[11px]">CASH TENDERED (₱):</label>
+                                <input type="number" min="0" step="0.01" id="inpCashTendered" name="cash_tendered" value="{{ old('cash_tendered', $folio->cash_tendered) }}" placeholder="0.00" oninput="calculateChange()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44 font-bold text-right">
                             </div>
 
                             <div class="flex items-center justify-between" id="rowGcashAmount" style="display: none;">
-                                <label class="font-bold text-slate-700 text-[11px]">GCASH AMOUNT PAID (₱):</label>
-                                <input type="number" step="0.01" id="inpGcashAmount" name="gcash_amount" placeholder="0.00" oninput="calculateChange()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44 font-bold text-right">
+                                <label for="inpGcashAmount" class="font-bold text-slate-700 text-[11px]">GCASH AMOUNT PAID (₱):</label>
+                                <input type="number" min="0" step="0.01" id="inpGcashAmount" name="gcash_amount" value="{{ old('gcash_amount', $folio->gcash_amount) }}" placeholder="0.00" oninput="calculateChange()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44 font-bold text-right">
                             </div>
 
                             <div class="flex items-center justify-between" id="rowGcashRef" style="display: none;">
-                                <label class="font-bold text-slate-700 text-[11px]">GCASH REFERENCE #:</label>
-                                <input type="text" id="inpGcashRef" name="gcash_reference" placeholder="e.g. 10098234821" oninput="calculateChange()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44">
+                                <label for="inpGcashRef" class="font-bold text-slate-700 text-[11px]">GCASH REFERENCE #:</label>
+                                <input type="text" maxlength="50" id="inpGcashRef" name="gcash_reference" value="{{ old('gcash_reference', $folio->gcash_reference) }}" placeholder="Required for GCash payments" oninput="calculateChange()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44">
                             </div>
 
                             <div class="flex items-center justify-between bg-emerald-50 p-2 border border-emerald-300">
@@ -393,7 +421,7 @@
     let addHoursRate = {{ (float)$addHoursRate }};
     let grossTotal = {{ (float)$totalCharge }};
     const discountRates = @json($discountOptions);
-    let currentDiscountType = "{{ strtolower($folio->discount_type ?? 'none') }}";
+    let currentDiscountType = "{{ strtolower($discountType ?? 'none') }}";
     let currentDiscountAmount = {{ (float)($totalDiscount ?? 0) }};
     let amountAfterDiscount = {{ $amountToPay }};
     let currentDeposit = {{ $deposit }};
@@ -452,6 +480,7 @@
             }
         }
 
+        currentDiscountAmount = Math.min(currentRoomRate, currentDiscountAmount);
         // Update Total Discount readout
         const inpTotalDiscount = document.getElementById('inpTotalDiscount');
         if (inpTotalDiscount) {
@@ -477,8 +506,7 @@
         if (isNaN(cInDate.getTime())) return;
 
         const diffMs = Math.max(0, checkOutTimestamp - cInDate.getTime());
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-        const actualHoursDiff = Math.max(1, Math.ceil(diffMinutes / 60));
+        const actualHoursDiff = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
         const excessHours = Math.max(0, actualHoursDiff - totalBookedHours);
         addHoursRate = (xtendHours + excessHours) * addHourUnitPrice;
 
@@ -531,6 +559,8 @@
     }
 
     function recalcGrossAndSettlement() {
+        currentDiscountAmount = Math.min(currentRoomRate, discountRates[currentDiscountType.toUpperCase()] || 0);
+        document.getElementById('inpTotalDiscount').value = `-₱${currentDiscountAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const subTotal = currentRoomRate + addHoursRate + addOnsTotal;
         grossTotal = subTotal;
 
@@ -556,16 +586,6 @@
         }
         updateCalculations();
         saveSettlementDraftToServer();
-    }
-
-    function onDepositChange(val) {
-        currentDeposit = Math.max(0, parseFloat(val) || 0);
-        updateCalculations();
-
-        clearTimeout(depositSaveTimer);
-        depositSaveTimer = setTimeout(() => {
-            saveDepositToServer(currentDeposit);
-        }, 400);
     }
 
     function updateCalculations() {
@@ -710,11 +730,11 @@
         billingLink.href = url.toString();
     }
 
-    function saveDepositToServer(deposit) {
-        saveSettlementDraftToServer();
-    }
-
+    let initializingSettlement = true;
+    let draftSaveQueue = Promise.resolve();
+    let settlementSubmitting = false;
     function saveSettlementDraftToServer() {
+        if (initializingSettlement || settlementSubmitting) return draftSaveQueue;
         const csrfToken = document.querySelector('input[name="_token"]')?.value || '{{ csrf_token() }}';
         const method = document.getElementById('paymentMethodSelect')?.value || 'cash';
         const cashTendered = parseFloat(document.getElementById('inpCashTendered')?.value) || 0;
@@ -732,29 +752,33 @@
             change = cashTendered > 0 ? Math.max(0, cashTendered - remainingCashDue) : 0;
         }
 
-        fetch("{{ route('folios.deposit', $folio->id) }}", {
+        const draftBody = JSON.stringify({
+            apply_deposit: applyDeposit ? 1 : 0,
+            discount_type: currentDiscountType,
+            discount_id_ref: discountRef,
+            checked_in_at: document.getElementById('inpCheckInTime')?.value,
+            room_charge: currentRoomRate,
+            payment_method: method,
+            cash_tendered: cashTendered,
+            gcash_amount: gcashAmount,
+            gcash_reference: gcashRef,
+            shift_override_reason: document.querySelector('#checkoutProcessForm [name="shift_override_reason"]')?.value || null
+        });
+        draftSaveQueue = draftSaveQueue.then(() => fetch("{{ route('folios.deposit', $folio->id) }}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: JSON.stringify({
-                security_deposit: currentDeposit,
-                apply_deposit: applyDeposit ? 1 : 0,
-                discount_type: currentDiscountType,
-                discount_id_ref: discountRef,
-                checked_in_at: document.getElementById('inpCheckInTime')?.value,
-                room_charge: currentRoomRate,
-                payment_method: method,
-                cash_tendered: cashTendered,
-                gcash_amount: gcashAmount,
-                gcash_reference: gcashRef,
-                change_due: change
-            })
+            body: draftBody
+        }))
+        .then(res => {
+            if (!res.ok) throw new Error('Settlement draft could not be saved.');
+            return res.json();
         })
-        .then(res => res.json())
         .catch(err => console.error('Error auto-saving settlement draft:', err));
+        return draftSaveQueue;
     }
 
     function togglePaymentInputs() {
@@ -769,13 +793,13 @@
             rowCash.style.display = 'flex';
             rowGcash.style.display = 'none';
             rowRef.style.display = 'none';
-            inpGcash.value = '';
+            if (!initializingSettlement) inpGcash.value = '';
         } else if (method === 'gcash') {
             rowCash.style.display = 'none';
             rowGcash.style.display = 'flex';
             rowRef.style.display = 'flex';
-            inpCash.value = '';
-            inpGcash.value = finalBalanceToPay.toFixed(2);
+            if (!initializingSettlement) inpCash.value = '';
+
         } else if (method === 'split') {
             rowCash.style.display = 'flex';
             rowGcash.style.display = 'flex';
@@ -789,6 +813,7 @@
         const method = document.getElementById('paymentMethodSelect').value;
         const cashTendered = parseFloat(document.getElementById('inpCashTendered').value) || 0;
         const gcashAmount = parseFloat(document.getElementById('inpGcashAmount').value) || 0;
+        document.getElementById('inpGcashRef').required = method !== 'cash' && gcashAmount > 0;
         let change = 0;
 
         if (method === 'cash') {
@@ -812,6 +837,17 @@
 
     // Initialize display state
     togglePaymentInputs();
+    clearTimeout(depositSaveTimer);
+    initializingSettlement = false;
+    document.getElementById('checkoutProcessForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (settlementSubmitting) return;
+        settlementSubmitting = true;
+        clearTimeout(depositSaveTimer);
+        clearTimeout(checkInSaveTimer);
+        await draftSaveQueue;
+        this.submit();
+    });
 </script>
 @endpush
 @endsection

@@ -19,9 +19,7 @@ class AuthController extends Controller
             return redirect()->route('dashboard');
         }
 
-        $demoUsers = User::with('roles')->get();
-
-        return view('auth.login', compact('demoUsers'));
+        return view('auth.login');
     }
 
     protected function redirectForUser(User $user): RedirectResponse
@@ -33,8 +31,9 @@ class AuthController extends Controller
         if ($user->hasRole('customer_display')) {
             return redirect()->route('kiosk.view');
         }
+
         return redirect()->intended(route('dashboard'))
-            ->with('success', 'Welcome back, ' . $user->name . '!');
+            ->with('success', 'Welcome back, '.$user->name.'!');
     }
 
     /**
@@ -49,26 +48,16 @@ class AuthController extends Controller
 
         $remember = $request->boolean('remember');
 
-        if (Auth::attempt($credentials, $remember)) {
+        if (Auth::attempt([...$credentials, 'is_active' => true], $remember)) {
             $request->session()->regenerate();
+            $request->session()->put('password_hash_'.Auth::getDefaultDriver(), Auth::guard()->hashPasswordForCookie(Auth::user()->getAuthPassword()));
+
             return $this->redirectForUser(Auth::user());
         }
 
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',
         ])->onlyInput('email');
-    }
-
-    /**
-     * Quick 1-click switch login for demo / testing.
-     */
-    public function quickLogin(Request $request, string $email): RedirectResponse
-    {
-        $user = User::where('email', $email)->firstOrFail();
-        Auth::login($user);
-        $request->session()->regenerate();
-
-        return $this->redirectForUser($user);
     }
 
     /**

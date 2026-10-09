@@ -3,11 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\PosItem;
-use App\Models\Room;
+use App\Models\Shift;
 use App\Models\User;
 use App\Services\InventoryService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class RelationalEggInventoryTest extends TestCase
@@ -15,17 +16,23 @@ class RelationalEggInventoryTest extends TestCase
     use RefreshDatabase;
 
     protected User $cashier;
+
     protected PosItem $egg;
+
     protected PosItem $chicksilog;
+
     protected PosItem $bangsilog;
+
     protected PosItem $fries;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->travelTo(now()->setTime(12, 0));
         $this->seed(DatabaseSeeder::class);
 
         $this->cashier = User::where('email', 'pau@sedonapms.com')->first();
+        Shift::create(['opened_by' => $this->cashier->id, 'shift_type' => 'day', 'shift_date' => today(), 'opened_at' => now()]);
 
         $this->egg = PosItem::where('name', 'Egg (Fried/Boiled)')->first();
         $this->chicksilog = PosItem::where('name', 'Chicksilog')->first();
@@ -49,10 +56,11 @@ class RelationalEggInventoryTest extends TestCase
         $this->assertEquals(50, $this->egg->fresh()->stock_quantity);
 
         // Ordering 1x Chicksilog via POS
-        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), [
-            'order_type'     => 'walkin_pos',
+        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'walkin_pos',
             'payment_method' => 'cash',
-            'items'          => [
+            'cash_tendered' => 10000,
+            'items' => [
                 ['id' => $this->chicksilog->id, 'qty' => 1],
             ],
         ]);
@@ -70,27 +78,28 @@ class RelationalEggInventoryTest extends TestCase
 
         // Verify inventory movement events
         $this->assertDatabaseHas('inventory_events', [
-            'pos_item_id'     => $this->chicksilog->id,
-            'event_type'      => 'walkin_pos',
+            'pos_item_id' => $this->chicksilog->id,
+            'event_type' => 'walkin_pos',
             'quantity_change' => -1,
-            'balance_after'   => 19,
+            'balance_after' => 19,
         ]);
 
         $this->assertDatabaseHas('inventory_events', [
-            'pos_item_id'     => $this->egg->id,
-            'event_type'      => 'recipe_ingredient',
+            'pos_item_id' => $this->egg->id,
+            'event_type' => 'recipe_ingredient',
             'quantity_change' => -1,
-            'balance_after'   => 49,
+            'balance_after' => 49,
         ]);
     }
 
     public function test_non_egg_dish_order_does_not_deduct_egg(): void
     {
         // Ordering French Fries
-        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), [
-            'order_type'     => 'walkin_pos',
+        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'walkin_pos',
             'payment_method' => 'cash',
-            'items'          => [
+            'cash_tendered' => 10000,
+            'items' => [
                 ['id' => $this->fries->id, 'qty' => 5],
             ],
         ]);
@@ -106,10 +115,11 @@ class RelationalEggInventoryTest extends TestCase
     public function test_order_fails_when_dish_stock_is_insufficient(): void
     {
         // Attempting to order 25x Chicksilog when only 20 are available
-        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), [
-            'order_type'     => 'walkin_pos',
+        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'walkin_pos',
             'payment_method' => 'cash',
-            'items'          => [
+            'cash_tendered' => 10000,
+            'items' => [
                 ['id' => $this->chicksilog->id, 'qty' => 25],
             ],
         ]);
@@ -128,10 +138,11 @@ class RelationalEggInventoryTest extends TestCase
         $inventoryService->setStockCount($this->egg->id, 2); // Only 2 eggs left
 
         // Attempting to order 5x Chicksilog (requires 5 eggs)
-        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), [
-            'order_type'     => 'walkin_pos',
+        $response = $this->actingAs($this->cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'walkin_pos',
             'payment_method' => 'cash',
-            'items'          => [
+            'cash_tendered' => 10000,
+            'items' => [
                 ['id' => $this->chicksilog->id, 'qty' => 5],
             ],
         ]);

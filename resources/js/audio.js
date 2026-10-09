@@ -589,44 +589,45 @@ class SedonaAudioEngine {
                 if (bannerIcon) bannerIcon.textContent = '🔕';
             }
 
-            bannerList.innerHTML = activeAlarmRooms.map(r => {
-                const statusNotes = r.isSnoozed ? '<span class="text-amber-400 font-bold ml-1.5">[Snoozed]</span>' :
-                                   (r.isSilenced ? '<span class="text-slate-400 font-bold ml-1.5">[Silenced]</span>' : '');
+            bannerList.replaceChildren();
+            const appendText = (parent, tag, className, text) => {
+                const element = document.createElement(tag);
+                element.className = className;
+                element.textContent = text;
+                parent.appendChild(element);
+                return element;
+            };
 
-                return `
-                    <div class="flex flex-wrap items-center justify-between bg-white text-slate-900 px-3 py-2 border border-slate-300 rounded shadow-sm text-xs gap-2">
-                        <div class="flex items-center space-x-2 flex-wrap">
-                            <span class="px-2 py-0.5 font-black text-[10px] rounded uppercase ${r.stageBadgeClass}">
-                                ${r.stageLabel}
-                            </span>
-                            <strong class="font-mono text-sm font-black text-slate-900">ROOM ${r.roomNumber}</strong>
-                            <span class="text-slate-400">&bull;</span>
-                            <span class="text-slate-700 font-medium">${r.guestName}</span>
-                            <span class="text-slate-400">&bull;</span>
-                            <span class="font-bold font-mono text-purple-900">${r.timeSummary}</span>
-                            ${statusNotes}
-                        </div>
-                        <div class="flex items-center space-x-1.5 ml-auto">
-                            ${r.folioId ? `
-                                <button type="button" onclick="openXtendModal(${r.folioId}, '${r.roomNumber}')" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] rounded shadow-sm" title="Extend Stay (Recalibrates Alarms)">
-                                    + Xtend
-                                </button>
-                            ` : ''}
-                            <button type="button" onclick="sedonaAudio.snoozeRoom('${r.roomId}', 5)" class="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded shadow-sm" title="Snooze for 5 minutes">
-                                Snooze 5m
-                            </button>
-                            <button type="button" onclick="sedonaAudio.silenceStage('${r.roomId}', '${r.checkoutTimeStr}', ${r.currentStage})" class="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white font-bold text-[10px] rounded shadow-sm" title="Silence this alarm stage">
-                                Silence
-                            </button>
-                            ${r.folioId ? `
-                                <a href="/checkout/${r.folioId}" class="px-2.5 py-1 bg-rose-700 hover:bg-rose-800 text-white font-black text-[11px] rounded shadow-sm">
-                                    Checkout
-                                </a>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('');
+            activeAlarmRooms.forEach(room => {
+                const row = appendText(bannerList, 'div', 'flex flex-wrap items-center justify-between bg-white text-slate-900 px-3 py-2 border border-slate-300 rounded shadow-sm text-xs gap-2', '');
+                const details = appendText(row, 'div', 'flex items-center space-x-2 flex-wrap', '');
+                appendText(details, 'span', `px-2 py-0.5 font-black text-[10px] rounded uppercase ${room.stageBadgeClass}`, room.stageLabel);
+                appendText(details, 'strong', 'font-mono text-sm font-black text-slate-900', `ROOM ${room.roomNumber}`);
+                appendText(details, 'span', 'text-slate-400', '•');
+                appendText(details, 'span', 'text-slate-700 font-medium', room.guestName);
+                appendText(details, 'span', 'text-slate-400', '•');
+                appendText(details, 'span', 'font-bold font-mono text-purple-900', room.timeSummary);
+                if (room.isSnoozed || room.isSilenced) {
+                    appendText(details, 'span', `${room.isSnoozed ? 'text-amber-400' : 'text-slate-400'} font-bold ml-1.5`, room.isSnoozed ? '[Snoozed]' : '[Silenced]');
+                }
+
+                const actions = appendText(row, 'div', 'flex items-center space-x-1.5 ml-auto', '');
+                const addButton = (text, className, title, action) => {
+                    const button = appendText(actions, 'button', className, text);
+                    button.type = 'button';
+                    button.title = title;
+                    button.addEventListener('click', action);
+                };
+                if (room.folioId) {
+                    addButton('+ Xtend', 'px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] rounded shadow-sm', 'Extend Stay (Recalibrates Alarms)', () => window.openXtendModal(room.folioId, room.roomNumber));
+                }
+                addButton('Snooze 5m', 'px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded shadow-sm', 'Snooze for 5 minutes', () => this.snoozeRoom(room.roomId, 5));
+                addButton('Silence', 'px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white font-bold text-[10px] rounded shadow-sm', 'Silence this alarm stage', () => this.silenceStage(room.roomId, room.checkoutTimeStr, room.currentStage));
+                if (room.folioId) {
+                    const checkout = appendText(actions, 'a', 'px-2.5 py-1 bg-rose-700 hover:bg-rose-800 text-white font-black text-[11px] rounded shadow-sm', 'Checkout');
+                    checkout.href = `/checkout/${encodeURIComponent(room.folioId)}`;
+                }
+            });
         } else {
             this.setSoundMode(null);
             banner.classList.add('hidden');
@@ -643,4 +644,3 @@ setInterval(() => {
         window.sedonaAudio.evaluateAlarms();
     }
 }, 1000);
-

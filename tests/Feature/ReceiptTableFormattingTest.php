@@ -4,10 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\Folio;
 use App\Models\Guest;
-use App\Models\PosItem;
 use App\Models\Room;
+use App\Models\Shift;
 use App\Models\User;
+use App\Services\DiscountService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ReceiptTableFormattingTest extends TestCase
@@ -15,7 +18,9 @@ class ReceiptTableFormattingTest extends TestCase
     use RefreshDatabase;
 
     protected User $cashier;
+
     protected Room $room;
+
     protected Guest $guest;
 
     protected function setUp(): void
@@ -24,6 +29,7 @@ class ReceiptTableFormattingTest extends TestCase
         $this->seed();
 
         $this->cashier = User::where('email', 'pau@sedonapms.com')->first() ?? User::first();
+        Shift::create(['opened_by' => $this->cashier->id, 'shift_type' => 'day', 'shift_date' => today(), 'opened_at' => now()]);
         $this->room = Room::where('number', '1')->first() ?? Room::first();
         $this->guest = Guest::first() ?? Guest::create(['name' => 'Test Guest', 'contact' => '09171112222', 'headcount' => 1]);
     }
@@ -44,7 +50,8 @@ class ReceiptTableFormattingTest extends TestCase
             'checked_out_at' => now(),
             'status' => 'checked_out',
             'room_charge' => 695.00,
-            'extra_hours' => 3,
+            'extra_hours' => 0,
+            'overtime_hours' => 3,
             'pos_items' => [
                 ['name' => 'Nova Multigrain Chips (40g)', 'qty' => 1, 'price' => 45.00, 'subtotal' => 45.00],
                 ['name' => 'Porksilog', 'qty' => 1, 'price' => 150.00, 'subtotal' => 150.00],
@@ -74,7 +81,7 @@ class ReceiptTableFormattingTest extends TestCase
 
         // Item names and separated figures
         $response->assertSee('Room Base (3h)');
-        $response->assertSee('Excess Hours (3h)');
+        $response->assertSee('Excess Hours (+3h Overstay)');
         $response->assertSee('Nova Multigrain Chips (40g)');
         $response->assertSee('Porksilog');
 
@@ -173,7 +180,7 @@ class ReceiptTableFormattingTest extends TestCase
      */
     public function test_billing_statement_matches_checkout_calculation_with_extension_and_overtime(): void
     {
-        \Carbon\Carbon::setTestNow('2026-10-03 12:00:00');
+        Carbon::setTestNow('2026-10-03 12:00:00');
 
         try {
             // 17 hours total stay: 3h tier + 3h extension + 11h excess overstay
@@ -194,23 +201,23 @@ class ReceiptTableFormattingTest extends TestCase
                     ['name' => 'Porksilog', 'qty' => 1, 'price' => 150.00, 'subtotal' => 150.00],
                 ],
                 'discount_type' => 'SENIOR',
-                'discount_amount' => 256.00,
+                'discount_amount' => 139.00,
                 'gross_total' => 1280.00, // old base before 11h overstay
                 'net_total' => 1024.00,
             ]);
 
-            // 1. Verify Checkout screen calculates ₱2,710.00 gross and ₱2,454.00 final balance
+            // 1. Verify Checkout screen calculates ₱2,710.00 gross and ₱2,571.00 final balance
             $checkoutResp = $this->actingAs($this->cashier)->get(route('checkout.process', $folio->id));
             $checkoutResp->assertOk();
             $checkoutResp->assertSee('₱2,710.00');
-            $checkoutResp->assertSee('₱2,454.00');
+            $checkoutResp->assertSee('₱2,571.00');
 
-            // 2. Verify Billing Statement matches EXACT same ₱2,710.00 gross and ₱2,454.00 total amount due
+            // 2. Verify Billing Statement matches EXACT same ₱2,710.00 gross and ₱2,571.00 total amount due
             $billingResp = $this->actingAs($this->cashier)->get(route('folios.billing', $folio->id));
             $billingResp->assertOk();
             $billingResp->assertSee('₱2,710.00');
-            $billingResp->assertSee('₱2,454.00');
-            $billingResp->assertSee('-₱256.00');
+            $billingResp->assertSee('₱2,571.00');
+            $billingResp->assertSee('-₱139.00');
 
             // Detailed line items present
             $billingResp->assertSee('Stay Extension (+3h Xtend)');
@@ -218,7 +225,7 @@ class ReceiptTableFormattingTest extends TestCase
             $billingResp->assertSee('Nova Multigrain Chips (40g)');
             $billingResp->assertSee('Porksilog');
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
@@ -262,7 +269,7 @@ class ReceiptTableFormattingTest extends TestCase
      */
     public function test_cashier_can_input_deposit_and_it_reflects_on_billing_statement(): void
     {
-        \Carbon\Carbon::setTestNow('2026-10-03 12:00:00');
+        Carbon::setTestNow('2026-10-03 12:00:00');
 
         try {
             $folio = Folio::create([
@@ -280,19 +287,17 @@ class ReceiptTableFormattingTest extends TestCase
                 'security_deposit' => 0.00,
             ]);
 
-            // 1. Verify checkout process has editable deposit input
+            // Deposit held is read-only; collecting money is a separate action.
             $checkoutResp = $this->actingAs($this->cashier)->get(route('checkout.process', $folio->id));
             $checkoutResp->assertOk();
-            $checkoutResp->assertSee('name="security_deposit"', false);
+            $checkoutResp->assertSee('Record deposit received');
             $checkoutResp->assertSee('id="inpDeposit"', false);
-            $checkoutResp->assertSee('onDepositChange(this.value)', false);
+            $checkoutResp->assertDontSee('onDepositChange(this.value)', false);
 
-            // 2. Cashier inputs deposit via AJAX endpoint
-            $depositUpdateResp = $this->actingAs($this->cashier)->postJson(route('folios.deposit', $folio->id), [
-                'security_deposit' => 500.00,
+            $depositUpdateResp = $this->actingAs($this->cashier)->post(route('folios.deposit.collect', $folio->id), [
+                'operation_key' => (string) Str::uuid(), 'amount' => 500.00, 'payment_method' => 'cash',
             ]);
-            $depositUpdateResp->assertOk();
-            $depositUpdateResp->assertJson(['success' => true, 'security_deposit' => 500.00]);
+            $depositUpdateResp->assertRedirect(route('checkout.process', $folio))->assertSessionHasNoErrors();
 
             $folio->refresh();
             $this->assertEquals(500.00, (float) $folio->security_deposit);
@@ -306,14 +311,14 @@ class ReceiptTableFormattingTest extends TestCase
             $billingResp->assertSee('TOTAL AMOUNT DUE:');
             $billingResp->assertSee('₱195.00');
 
-            // 4. Billing statement with query parameter overrides/reflects live input (₱695 - ₱300 = ₱395)
+            // Query parameters cannot replace the confirmed deposit used by print previews.
             $liveBillingResp = $this->actingAs($this->cashier)->get(route('folios.billing', ['folio' => $folio->id, 'deposit' => 300.00]));
             $liveBillingResp->assertOk();
             $liveBillingResp->assertSee('Less: Security Deposit Applied:');
-            $liveBillingResp->assertSee('-₱300.00');
-            $liveBillingResp->assertSee('₱395.00');
+            $liveBillingResp->assertSee('-₱500.00');
+            $liveBillingResp->assertSee('₱195.00');
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
@@ -322,7 +327,7 @@ class ReceiptTableFormattingTest extends TestCase
      */
     public function test_settlement_split_payment_details_reflect_on_billing_statement(): void
     {
-        \Carbon\Carbon::setTestNow('2026-10-03 12:00:00');
+        Carbon::setTestNow('2026-10-03 12:00:00');
 
         try {
             $folio = Folio::create([
@@ -390,7 +395,7 @@ class ReceiptTableFormattingTest extends TestCase
             $receiptResp->assertSee('10098234821');
             $receiptResp->assertSee('₱416.00');
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
@@ -399,8 +404,8 @@ class ReceiptTableFormattingTest extends TestCase
      */
     public function test_deposit_can_be_applied_and_calculates_remaining_deposit_refund(): void
     {
-        $fixedNow = \Carbon\Carbon::parse('2026-10-02 12:00:00');
-        \Carbon\Carbon::setTestNow($fixedNow);
+        $fixedNow = Carbon::parse('2026-10-02 12:00:00');
+        Carbon::setTestNow($fixedNow);
 
         try {
             $folio = Folio::create([
@@ -458,7 +463,7 @@ class ReceiptTableFormattingTest extends TestCase
             $receiptResp->assertSee('NET AMOUNT DUE:');
             $receiptResp->assertSee('₱0.00');
 
-            // 4. Deposit Refund Slip displays deductions and net refund
+            // 4. The refund slip distinguishes the remaining liability from an actual refund.
             $refundResp = $this->actingAs($this->cashier)->get(route('folios.deposit_refund', [
                 'folio' => $folio->id,
                 'deposit' => 1000.00,
@@ -469,10 +474,12 @@ class ReceiptTableFormattingTest extends TestCase
             $refundResp->assertSee('₱1,000.00');
             $refundResp->assertSee('Deductions / Damages / POS:');
             $refundResp->assertSee('₱695.00');
-            $refundResp->assertSee('NET CASH REFUNDED:');
+            $refundResp->assertSee('TOTAL DEPOSIT REFUNDED:');
+            $refundResp->assertSee('₱0.00');
+            $refundResp->assertSee('No deposit refund has been recorded.');
             $refundResp->assertSee('₱305.00');
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
@@ -481,8 +488,8 @@ class ReceiptTableFormattingTest extends TestCase
      */
     public function test_deposit_option_not_applied_preserves_full_bill_and_full_deposit(): void
     {
-        $fixedNow = \Carbon\Carbon::parse('2026-10-02 12:00:00');
-        \Carbon\Carbon::setTestNow($fixedNow);
+        $fixedNow = Carbon::parse('2026-10-02 12:00:00');
+        Carbon::setTestNow($fixedNow);
 
         try {
             $folio = Folio::create([
@@ -540,7 +547,7 @@ class ReceiptTableFormattingTest extends TestCase
             $receiptResp->assertSee('₱695.00');
 
             // 4. Finalize Checkout with apply_deposit=0
-            $postResp = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), [
+            $postResp = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), ['operation_key' => (string) Str::uuid(),
                 'security_deposit' => 1000.00,
                 'apply_deposit' => '0',
                 'payment_method' => 'cash',
@@ -554,7 +561,7 @@ class ReceiptTableFormattingTest extends TestCase
             $this->assertEquals(695.00, (float) $folio->net_total);
             $this->assertEquals(305.00, (float) $folio->change_due); // 1000 tendered - 695 bill = 305 change
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
@@ -563,8 +570,8 @@ class ReceiptTableFormattingTest extends TestCase
      */
     public function test_cashier_can_select_discount_during_checkout_process_and_it_reflects_everywhere(): void
     {
-        $fixedNow = \Carbon\Carbon::parse('2026-10-02 12:00:00');
-        \Carbon\Carbon::setTestNow($fixedNow);
+        $fixedNow = Carbon::parse('2026-10-02 12:00:00');
+        Carbon::setTestNow($fixedNow);
 
         try {
             $folio = Folio::create([
@@ -586,7 +593,7 @@ class ReceiptTableFormattingTest extends TestCase
                 'security_deposit' => 0.00,
             ]);
 
-            $options = \App\Services\DiscountService::getOptionsForRoom($this->room->type, '3h');
+            $options = DiscountService::getOptionsForRoom($this->room->type, '3h');
             $seniorD = $options['SENIOR'];
             $pwdD = $options['PWD'];
             $dcD = $options['DC'];
@@ -599,9 +606,9 @@ class ReceiptTableFormattingTest extends TestCase
             $checkoutResp->assertOk();
             $checkoutResp->assertSee('discountTypeSelect');
             $checkoutResp->assertSee('DISCOUNT CLASSIFICATION:');
-            $checkoutResp->assertSee("Senior Citizen (-₱" . number_format($seniorD, 2) . ")");
-            $checkoutResp->assertSee("PWD Disability (-₱" . number_format($pwdD, 2) . ")");
-            $checkoutResp->assertSee("Sedona Card / DC (-₱" . number_format($dcD, 2) . ")");
+            $checkoutResp->assertSee('Senior Citizen (-₱'.number_format($seniorD, 2).')');
+            $checkoutResp->assertSee('PWD Disability (-₱'.number_format($pwdD, 2).')');
+            $checkoutResp->assertSee('Sedona Card / DC (-₱'.number_format($dcD, 2).')');
             $checkoutResp->assertSee('inpDiscountRef');
 
             // 2. Cashier selects discount and it auto-saves via AJAX draft endpoint
@@ -626,20 +633,20 @@ class ReceiptTableFormattingTest extends TestCase
             $billingResp = $this->actingAs($this->cashier)->get(route('folios.billing', $folio->id));
             $billingResp->assertOk();
             $billingResp->assertSee('Less: Senior Statutory Table (OSCA-99128):');
-            $billingResp->assertSee('-₱' . number_format($seniorD, 2));
+            $billingResp->assertSee('-₱'.number_format($seniorD, 2));
             $billingResp->assertSee('TOTAL AMOUNT DUE:');
-            $billingResp->assertSee('₱' . number_format($seniorNet, 2));
+            $billingResp->assertSee('₱'.number_format($seniorNet, 2));
 
             // 4. Receipt reflects the selected discount and adjusted net total
             $receiptResp = $this->actingAs($this->cashier)->get(route('folios.receipt', $folio->id));
             $receiptResp->assertOk();
             $receiptResp->assertSee('Less: Senior Statutory Table (OSCA-99128):');
-            $receiptResp->assertSee('-₱' . number_format($seniorD, 2));
+            $receiptResp->assertSee('-₱'.number_format($seniorD, 2));
             $receiptResp->assertSee('NET AMOUNT DUE:');
-            $receiptResp->assertSee('₱' . number_format($seniorNet, 2));
+            $receiptResp->assertSee('₱'.number_format($seniorNet, 2));
 
             // 5. Finalize Official Checkout with PWD discount instead
-            $postResp = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), [
+            $postResp = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), ['operation_key' => (string) Str::uuid(),
                 'discount_type' => 'pwd',
                 'discount_id_ref' => 'PWD-88214',
                 'payment_method' => 'cash',
@@ -655,8 +662,7 @@ class ReceiptTableFormattingTest extends TestCase
             $this->assertEquals($pwdNet, (float) $folio->net_total);
             $this->assertEquals($pwdChange, (float) $folio->change_due);
         } finally {
-            \Carbon\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 }
-

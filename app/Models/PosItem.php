@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -12,16 +13,17 @@ class PosItem extends Model
     protected $fillable = [
         'name', 'category', 'price',
         'stock_quantity', 'is_tracked', 'reorder_level',
-        'kitchen_hours_only', 'is_available', 'sort_order',
+        'kitchen_hours_only', 'is_available', 'sort_order', 'is_retired',
     ];
 
     protected $casts = [
-        'price'               => 'decimal:2',
-        'stock_quantity'      => 'integer',
-        'is_tracked'          => 'boolean',
-        'reorder_level'       => 'integer',
-        'kitchen_hours_only'  => 'boolean',
-        'is_available'        => 'boolean',
+        'price' => 'decimal:2',
+        'stock_quantity' => 'integer',
+        'is_tracked' => 'boolean',
+        'reorder_level' => 'integer',
+        'kitchen_hours_only' => 'boolean',
+        'is_available' => 'boolean',
+        'is_retired' => 'boolean',
     ];
 
     protected static ?PosItem $cachedEgg = null;
@@ -37,6 +39,7 @@ class PosItem extends Model
     public function isEggItem(): bool
     {
         $name = strtolower(trim($this->name ?? ''));
+
         return $name === 'egg (fried/boiled)'
             || $name === 'egg'
             || str_starts_with($name, 'egg (')
@@ -100,11 +103,14 @@ class PosItem extends Model
      */
     public static function getMasterEggItem(): ?self
     {
-        return static::where('name', 'Egg (Fried/Boiled)')
-            ->orWhere('name', 'like', '%Egg (Fried/Boiled)%')
-            ->orWhere(function ($q) {
-                $q->where('name', 'like', '%Egg%')->where('category', 'Kitchen Extras');
-            })
+        return static::where(function ($query) {
+            $query->where('name', 'Egg (Fried/Boiled)')
+                ->orWhere('name', 'like', '%Egg (Fried/Boiled)%')
+                ->orWhere(function ($q) {
+                    $q->where('name', 'like', '%Egg%')->where('category', 'Kitchen Extras');
+                });
+        })
+            ->orderBy('id')
             ->first();
     }
 
@@ -121,9 +127,9 @@ class PosItem extends Model
      * For egg-dependent dishes: unavailable if the dish itself is out OR eggs are exhausted.
      * Each dish has its own is_available flag independent of other dishes.
      */
-    public function getIsAvailableAttribute($value): bool
+    public function getIsAvailableAttribute(mixed $value): bool
     {
-        if (!(bool) $value) {
+        if ($this->is_retired || ! (bool) $value) {
             return false;
         }
 
@@ -132,7 +138,7 @@ class PosItem extends Model
             if ($egg && $egg->id !== $this->id) {
                 $eggStock = (int) $egg->getRawOriginal('stock_quantity', 0);
                 $eggAvailable = (bool) $egg->getRawOriginal('is_available', true);
-                if ($eggStock <= 0 || !$eggAvailable) {
+                if ($egg->is_retired || ! $eggAvailable || ($egg->is_tracked && $eggStock <= 0)) {
                     return false;
                 }
             }
@@ -146,20 +152,30 @@ class PosItem extends Model
      */
     public function isOrderable(): bool
     {
-        if (!$this->is_available) return false;
-        if (!$this->kitchen_hours_only) return true;
+        if (! $this->is_available || ($this->is_tracked && $this->stock_quantity <= 0)) {
+            return false;
+        }
+        if (! $this->kitchen_hours_only) {
+            return true;
+        }
 
         $hour = (int) now()->format('G');
+
         return $hour >= 6 && $hour < 22;
     }
 
-    public function scopeAvailable($query)
+    public function scopeAvailable(Builder $query): Builder
     {
-        return $query->where('is_available', true)->orderBy('sort_order');
+        return $query->notRetired()->where('is_available', true)->orderBy('sort_order');
     }
 
-    public function scopeByCategory($query, string $category)
+    public function scopeNotRetired(Builder $query): Builder
     {
-        return $query->where('category', $category);
+        return $query->where('is_retired', false);
+    }
+
+    public function scopeByCategory(Builder $query, string $category): Builder
+    {
+        return $query->notRetired()->where('category', $category);
     }
 }

@@ -169,6 +169,10 @@
                 <span>LESS: CASH EXPENSES PAID OUT:</span>
                 <span>-₱{{ number_format($totalExpenses, 2) }}</span>
             </div>
+            <div class="row">
+                <span>NET TRANSFERS / REPLENISHMENT:</span>
+                <span>{{ $cashMovementTotal > 0 ? '+' : '' }}₱{{ number_format($cashMovementTotal, 2) }}</span>
+            </div>
             <div class="dotted-divider"></div>
             <div class="row font-bold" style="font-size: 11px;">
                 <span>EXPECTED DRAWER CASH:</span>
@@ -226,9 +230,24 @@
 
         <div class="divider"></div>
 
-        <!-- Section III: Room Occupancy Status -->
         <div>
-            <div class="section-header">III. ROOM OCCUPANCY REPORT</div>
+            <div class="section-header">III. DRAWER CUSTODY MOVEMENTS</div>
+            @forelse($cashMovements as $movement)
+                <div class="row">
+                    <span>{{ strtoupper(str_replace('_', ' ', $movement->kind)) }} / {{ strtoupper(str_replace('_', ' ', $movement->destination)) }}</span>
+                    <span>{{ (float) $movement->amount > 0 ? '+' : '' }}₱{{ number_format($movement->amount, 2) }}</span>
+                </div>
+                <div style="font-size: 9px; margin-bottom: 4px; overflow-wrap: anywhere;">REF: {{ $movement->reference }}</div>
+            @empty
+                <div style="font-style: italic; color: #555; padding: 4px 0;">No cash transfers or replenishment during this shift.</div>
+            @endforelse
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Section IV: Room Occupancy Status -->
+        <div>
+            <div class="section-header">IV. ROOM OCCUPANCY REPORT</div>
             <div class="row">
                 <span>OCCUPIED ROOMS:</span>
                 <span class="font-bold">{{ $occupiedCount }} Rooms</span>
@@ -245,7 +264,7 @@
 
         <div class="divider"></div>
 
-        <!-- Section IV: Counter Signatures -->
+        <!-- Section V: Counter Signatures -->
         <div class="sig-block">
             <div class="sig-line">
                 Outgoing Cashier: {{ $shift->openedBy->name ?? 'Turnover Operator' }}

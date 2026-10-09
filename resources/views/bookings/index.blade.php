@@ -13,7 +13,7 @@
 <div class="px-3 pt-2 space-y-3 max-w-7xl mx-auto">
 
     <!-- Filter Bar -->
-    <div class="bg-white p-2.5 border-l-4 border-[#421A2B] shadow-sm flex flex-wrap items-center justify-between gap-2 text-xs">
+    <div class="workspace-toolbar flex flex-wrap items-center justify-between gap-2 text-xs">
         <div class="font-bold text-slate-800 uppercase tracking-wide">
             Reservation Status Filter:
         </div>
@@ -91,9 +91,16 @@
                             </td>
                             <td class="space-x-1 whitespace-nowrap text-right">
                                 @if($booking->isScheduled())
-                                    <button onclick="fastTrackCheckIn({{ $booking->id }}, {{ $booking->room_id }}, '{{ addslashes($booking->guest_name) }}', '{{ $booking->guest_contact }}', '{{ $booking->rate_tier }}', {{ $booking->headcount }})" class="btn-checkin font-bold">
-                                        Check-In
-                                    </button>
+                                    <form method="POST" action="{{ route('checkin.store') }}" class="inline-block" onsubmit="return confirm('Check in this reservation now?')">
+                                        @csrf
+                                        <input type="hidden" name="booking_id" value="{{ $booking->id }}">
+                                        <input type="hidden" name="room_id" value="{{ $booking->room_id }}">
+                                        <input type="hidden" name="guest_name" value="{{ $booking->guest_name }}">
+                                        <input type="hidden" name="guest_contact" value="{{ $booking->guest_contact }}">
+                                        <input type="hidden" name="rate_tier" value="{{ $booking->rate_tier }}">
+                                        <input type="hidden" name="headcount" value="{{ $booking->headcount }}">
+                                        <button type="submit" class="btn-checkin font-bold">Check-In</button>
+                                    </form>
                                     <form method="POST" action="{{ route('bookings.cancel', $booking->id) }}" class="inline-block" onsubmit="return confirm('Cancel this reservation?')">
                                         @csrf
                                         <button type="submit" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold rounded border border-rose-300">
@@ -151,7 +158,7 @@
                         <option value="6h">6 Hours Stay</option>
                         <option value="12h">12 Hours Stay</option>
                         <option value="24h" selected>24 Hours Stay</option>
-                        <option value="promo">Midnight Promo (8pm-6am)</option>
+                        <option value="promo">Midnight Promo (12 hours)</option>
                     </select>
                 </div>
             </div>
@@ -198,9 +205,6 @@
     }
     function closeBookingModal() {
         document.getElementById('bookingModal').classList.add('hidden');
-    }
-    function fastTrackCheckIn(bookingId, roomId, guestName, contact, tier, headcount) {
-        window.location.href = `{{ route('dashboard') }}?action=checkin&booking_id=${bookingId}&room_id=${roomId}&guest_name=${encodeURIComponent(guestName)}`;
     }
 </script>
 @endpush

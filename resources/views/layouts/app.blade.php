@@ -4,477 +4,160 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-
-    <title>@yield('title', 'Dashboard') | {{ config('app.name', 'Sedona Court Executive PMS') }}</title>
-
-    <!-- Google Fonts: Inter for clean enterprise PMS typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-
-    <!-- Tailwind / Vite -->
+    <meta name="theme-color" content="#572039">
+    <title>@yield('title', 'Dashboard') | {{ config('app.name', 'Sedona Court PMS') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-
-    <style>
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #4b5563;
-            color: #1f2937;
-            margin: 0;
-            padding: 0;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        .font-mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        /* Brand top bar: Deep Maroon/Burgundy */
-        .hms-top-nav {
-            background-color: #421A2B;
-            color: #ffffff;
-            font-size: 13px;
-            font-weight: 600;
-            border-bottom: 2px solid #341421;
-        }
-        .hms-top-nav .nav-link,
-        .hms-top-nav .nav-trigger {
-            color: #ffffff;
-            text-decoration: none;
-            padding: 9px 13px;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            transition: background 0.15s;
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-        .hms-top-nav .nav-link:hover,
-        .hms-top-nav .nav-trigger:hover,
-        .hms-top-nav .nav-link.active {
-            background-color: #341421;
-        }
-        .hms-top-nav .nav-menu a {
-            color: #ffffff;
-            text-decoration: none;
-            padding: 9px 13px;
-            display: block;
-            transition: background 0.15s;
-            white-space: nowrap;
-        }
-        .hms-top-nav .nav-menu a:hover,
-        .hms-top-nav .nav-menu a.active {
-            background-color: #341421;
-        }
-
-        /* Slim page header (replaces dark grey sub-nav) */
-        .hms-sub-nav {
-            background-color: #ffffff;
-            color: #1f2937;
-            font-size: 12px;
-            padding: 8px 16px;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        /* Container Card */
-        .hms-card {
-            background-color: #ffffff;
-            border-top: 3px solid #421A2B;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
-            margin: 10px;
-            padding: 14px;
-            border-radius: 2px;
-        }
-
-        .hms-card-header {
-            color: #421A2B;
-            font-size: 14px;
-            font-weight: 700;
-            margin-bottom: 10px;
-            letter-spacing: 0.02em;
-        }
-
-        /* High-Density PMS Tables */
-        .hms-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 11.5px;
-        }
-        .hms-table th {
-            background-color: #f3f4f6;
-            color: #111827;
-            font-weight: 700;
-            text-transform: uppercase;
-            font-size: 10.5px;
-            padding: 7px 6px;
-            border: 1px solid #d1d5db;
-            text-align: center;
-            letter-spacing: 0.03em;
-        }
-        .hms-table td {
-            padding: 5px 6px;
-            border: 1px solid #e5e7eb;
-            text-align: center;
-            vertical-align: middle;
-            color: #1f2937;
-        }
-        .hms-table tbody tr:nth-child(even) {
-            background-color: #f9fafb;
-        }
-        .hms-table tbody tr:hover {
-            background-color: #f3f4f6;
-        }
-
-        /* Action Buttons — status-aligned */
-        .btn-checkin {
-            background-color: #10B981;
-            color: #ffffff;
-            border: 1px solid #0B8A66;
-            padding: 3px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            border-radius: 3px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-checkin:hover { background-color: #0B7A55; }
-
-        .btn-occupied {
-            background-color: #EF4444;
-            color: #ffffff;
-            border: 1px solid #DC2626;
-            padding: 3px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            border-radius: 3px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-occupied:hover { background-color: #DC2626; }
-
-        .btn-xtend, .btn-discount, .btn-transfer, .btn-addon, .btn-orderslip, .btn-xorder {
-            background-color: #0284c7;
-            color: #ffffff;
-            border: 1px solid #0369a1;
-            padding: 3px 7px;
-            font-size: 11px;
-            font-weight: 600;
-            border-radius: 3px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-xtend:hover, .btn-discount:hover, .btn-transfer:hover, .btn-addon:hover, .btn-orderslip:hover, .btn-xorder:hover {
-            background-color: #0369a1;
-        }
-
-        .btn-force {
-            background-color: #4b5563;
-            color: #ffffff;
-            border: 1px solid #374151;
-            padding: 3px 7px;
-            font-size: 11px;
-            font-weight: 600;
-            border-radius: 3px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-force:hover { background-color: #1f2937; }
-
-        /* Room-type + status pills (pill-only, no card accents) */
-        .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 1px 8px;
-            border-radius: 9999px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            border: 1px solid transparent;
-            white-space: nowrap;
-        }
-        .pill-vip { background-color: #F3E8FF; color: #5B21B6; border-color: #DDD6FE; }
-        .pill-premium { background-color: #3B82F6; color: #ffffff; border-color: #2563EB; }
-        .pill-classic { background-color: #F59E0B; color: #ffffff; border-color: #D97706; }
-        .pill-occupied { background-color: #FEE2E2; color: #B91C1C; border-color: #FECACA; }
-        .pill-available { background-color: #D1FAE5; color: #065F46; border-color: #A7F3D0; }
-        .pill-dot { width: 6px; height: 6px; border-radius: 9999px; background-color: currentColor; display: inline-block; }
-
-        /* Form Controls */
-        .form-control-hms {
-            border: 1px solid #9ca3af;
-            padding: 4px 8px;
-            font-size: 12px;
-            width: 100%;
-            box-sizing: border-box;
-            background-color: #ffffff;
-            border-radius: 2px;
-            color: #111827;
-        }
-        .form-control-hms:focus {
-            border-color: #421A2B;
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(66, 26, 43, 0.15);
-        }
-        .form-control-hms[readonly] {
-            background-color: #f3f4f6;
-            text-align: right;
-            font-weight: 600;
-        }
-        .section-bar-grey {
-            background-color: #6b7280;
-            color: #ffffff;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 4px 8px;
-            margin: 8px 0 4px 0;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-
-        /* Owner tab bar (light, executive) */
-        .owner-tabs {
-            background-color: #faf8f4;
-            border-bottom: 1px solid #e8e2d6;
-        }
-        .owner-tabs .exec-tab {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 7px 14px;
-            border-radius: 10px;
-            font-size: 12.5px;
-            font-weight: 600;
-            color: #6b6257;
-            text-decoration: none;
-            border: 1px solid transparent;
-            background: transparent;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: background 0.15s;
-        }
-        .owner-tabs .exec-tab:hover {
-            background-color: #f1ece2;
-        }
-        .owner-tabs .exec-tab.active {
-            background-color: #f6e8e8;
-            color: #421A2B;
-            border-color: #e3c9c9;
-            font-weight: 700;
-        }
-        .owner-tabs .tab-menu a {
-            display: block;
-            padding: 9px 13px;
-            color: #334155;
-            text-decoration: none;
-            white-space: nowrap;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        .owner-tabs .tab-menu a:hover {
-            background-color: #f1f5f9;
-        }
-    </style>
     @stack('styles')
 </head>
-<body class="min-h-screen flex flex-col">
-
-    <!-- Brand Navigation Bar (Deep Maroon) -->
-    <header class="hms-top-nav sticky top-0 z-40 overflow-visible">
-        <div class="flex items-center justify-between px-3 gap-2">
-            <div class="flex items-center gap-1 min-w-0">
-                <a href="{{ route('dashboard') }}" class="flex items-center gap-2 pr-2 py-1.5 shrink-0" aria-label="Sedona home">
-                    <span class="inline-flex items-center justify-center w-7 h-7 rounded bg-white/10 border border-white/20 font-black text-sm">S</span>
-                    <span class="leading-tight">
-                        <span class="block font-black tracking-wide text-[13px]">SEDONA</span>
-                        <span class="block text-[9px] font-semibold text-white/70 tracking-widest uppercase">Court PMS</span>
-                    </span>
-                </a>
-
-                <button type="button" id="primaryNavToggle" onclick="togglePrimaryNav()" class="md:hidden px-2 py-2 text-white" aria-expanded="false" aria-controls="primaryNav" aria-label="Toggle navigation">
-                    ☰
-                </button>
-
-                <nav id="primaryNav" class="hidden md:flex items-center flex-wrap" aria-label="Primary">
-                    @if(auth()->check() && auth()->user()->hasRole('kitchen'))
-                        <a href="{{ route('kitchen.view') }}" class="nav-link {{ request()->routeIs('kitchen.view') ? 'active' : '' }}">
-                            Kitchen KDS
-                        </a>
-                        <a href="{{ route('kitchen.tv') }}" target="_blank" class="nav-link">
-                            Kitchen TV ↗
-                        </a>
-                    @elseif(auth()->check() && auth()->user()->hasRole('customer_display'))
-                        <a href="{{ route('kiosk.view') }}" class="nav-link {{ request()->routeIs('kiosk.view') ? 'active' : '' }}">
-                            Lobby Kiosk Display
-                        </a>
-                    @elseif(auth()->check() && auth()->user()->hasAnyRole(['cashier', 'front_desk']))
-                        {{-- Cashier: minimal 5-item flat nav, no dropdowns, no kitchen/display/reports --}}
-                        <a href="{{ route('dashboard') }}" class="nav-link {{ request()->routeIs('dashboard', 'rooms.*', 'checkout.*', 'folios.*', 'checkin.*') ? 'active' : '' }}">
-                            Front Desk
-                        </a>
-                        <a href="{{ route('bookings.index') }}" class="nav-link {{ request()->routeIs('bookings.*') ? 'active' : '' }}">
-                            Reservations
-                        </a>
-                        <a href="{{ route('pos.index') }}" class="nav-link {{ request()->routeIs('pos.*') ? 'active' : '' }}">
-                            POS
-                        </a>
-                        <a href="{{ route('shifts.index') }}" class="nav-link {{ request()->routeIs('shifts.*') ? 'active' : '' }}">
-                            Shifts &amp; Drawer
-                        </a>
-                        <a href="{{ route('inventory.index') }}" class="nav-link {{ request()->routeIs('inventory.*') ? 'active' : '' }}">
-                            Stock
-                        </a>
-                    @else
-                        {{-- Owner / admin / manager: navigate via the light executive tab bar below --}}
-                        <span class="hidden md:inline px-3 py-2 text-[11px] font-semibold uppercase tracking-widest text-white/50">Executive View</span>
+<body class="app-shell">
+    @php
+        $operator = auth()->user();
+        $isExecutive = $operator?->hasAnyRole(['owner', 'admin', 'manager']) ?? false;
+        $isAdministrator = $operator?->hasAnyRole(['owner', 'admin']) ?? false;
+        $navigation = [
+            ['label' => 'Front Desk', 'route' => 'dashboard', 'patterns' => ['dashboard', 'rooms.*', 'checkout.*', 'folios.*', 'checkin.*'], 'icon' => 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z'],
+            ['label' => 'Reservations', 'route' => 'bookings.index', 'patterns' => ['bookings.*'], 'icon' => 'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2 M8 14h2 M14 14h2 M8 18h2'],
+            ['label' => 'POS', 'route' => 'pos.index', 'patterns' => ['pos.*'], 'icon' => 'M3 3h2l3 12h11l2-9H6 M8 15l-1 3h13 M9 21h.01 M18 21h.01'],
+            ['label' => 'Shifts & Drawer', 'route' => 'shifts.index', 'patterns' => ['shifts.*'], 'icon' => 'M3 7h18v13H3z M7 7V4h10v3 M3 12h18 M10 12v3h4v-3'],
+            ['label' => 'Stock', 'route' => 'inventory.index', 'patterns' => ['inventory.*'], 'icon' => 'M12 3 3 8l9 5 9-5-9-5z M3 8v9l9 5 9-5V8 M12 13v9 M7 5.8l10 5.5'],
+        ];
+        $kitchenNavigation = [
+            ['label' => 'Kitchen KDS', 'route' => 'kitchen.view', 'patterns' => ['kitchen.view'], 'icon' => 'M4 3v7a3 3 0 0 0 6 0V3 M7 3v18 M17 3c-3 3-3 8 0 9v9 M17 3v9h3V3'],
+            ['label' => 'Kitchen TV', 'route' => 'kitchen.tv', 'patterns' => ['kitchen.tv'], 'new_tab' => true, 'icon' => 'M3 4h18v13H3z M8 21h8 M12 17v4'],
+        ];
+        if ($operator?->canAny(['record_payments', 'post_pos_sales'])) {
+            $navigation[] = ['label' => 'Approvals & Tasks', 'route' => 'approvals.index', 'patterns' => ['approvals.*'], 'icon' => 'M5 3h14v18H5z M8 8l2 2 4-4'];
+            $navigation[] = ['label' => 'Transactions & Audit', 'route' => 'transactions.index', 'patterns' => ['transactions.*'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5'];
+        }
+        $lobbyNavigation = [
+            ['label' => 'Lobby Kiosk Display', 'route' => 'kiosk.view', 'patterns' => ['kiosk.*'], 'new_tab' => true, 'icon' => 'M3 4h18v13H3z M8 21h8 M12 17v4'],
+        ];
+        if ($operator?->hasRole('kitchen')) {
+            $navigation = $kitchenNavigation;
+        } elseif ($operator?->hasRole('customer_display')) {
+            $navigation = $lobbyNavigation;
+        }
+        $financeNavigation = [
+            ['label' => 'Ledger', 'route' => 'admin.accounting.ledger', 'patterns' => ['admin.accounting.ledger'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5'],
+            ['label' => 'Daily Finance', 'route' => 'admin.finance.index', 'patterns' => ['admin.finance.*'], 'icon' => 'M3 5h18v15H3z M7 3v4 M17 3v4 M7 12h10'],
+            ['label' => 'Executive P&L', 'route' => 'admin.accounting.pnl', 'patterns' => ['admin.accounting.pnl*'], 'icon' => 'M4 20V4 M4 20h16 M8 16v-5 M13 16V7 M18 16V3'],
+            ['label' => 'Expenses & Petty Cash', 'route' => 'admin.accounting.expenses', 'patterns' => ['admin.accounting.expenses*'], 'icon' => 'M4 6h16v14H4z M4 6V4h14 M15 11h5v5h-5z M16 13h.01'],
+            ['label' => 'Shift Reconciliations', 'route' => 'admin.accounting.shifts', 'patterns' => ['admin.accounting.shifts'], 'icon' => 'M4 4h16v16H4z M8 8h8 M8 12h3 M14 12h2 M8 16h8'],
+            ['label' => 'Loss Slips', 'route' => 'admin.accounting.losses', 'patterns' => ['admin.accounting.losses'], 'icon' => 'M5 3h14v18H5z M9 8l6 6 M15 8l-6 6'],
+        ];
+        $settingsNavigation = [
+            ['label' => 'Master Pricing Editor', 'route' => 'admin.pricing.index', 'patterns' => ['admin.pricing.*'], 'icon' => 'M4 4h7l9 9-7 7-9-9V4z M8 8h.01'],
+            ['label' => 'Staff Accounts & RBAC', 'route' => 'admin.users.index', 'patterns' => ['admin.users.*'], 'icon' => 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M19 8a3 3 0 0 1 0 6 M22 21v-2a4 4 0 0 0-3-4'],
+        ];
+    @endphp
+    <a href="#main-content" class="skip-link">Skip to content</a>
+    <button type="button" id="sidebarOverlay" class="sidebar-overlay hidden" onclick="closePrimaryNav()" aria-label="Close navigation" tabindex="-1"></button>
+    <aside class="app-sidebar" id="primaryNavMobile">
+        <button type="button" class="sidebar-close" onclick="closePrimaryNav()" aria-label="Close navigation">×</button>
+        <a href="{{ route('dashboard') }}" class="app-brand" aria-label="Sedona home">
+            <span class="brand-mark">S</span>
+            <span><span class="brand-name">Sedona</span><span class="brand-caption">Court PMS</span></span>
+        </a>
+        <div class="sidebar-content">
+            <div>
+                <div class="nav-section-label">Workspace</div>
+                <nav class="sidebar-nav" id="primaryNav" aria-label="Primary">
+                    @foreach($navigation as $link)
+                        @include('layouts.navigation-link', ['link' => $link])
+                    @endforeach
+                    @if($isExecutive)
+                        @include('layouts.navigation-link', ['link' => ['label' => 'Reports & Audits', 'route' => 'reports.index', 'patterns' => ['reports.*'], 'icon' => 'M4 20V4 M4 20h16 M8 16v-5 M13 16V7 M18 16V3']])
                     @endif
                 </nav>
             </div>
-
-            <div class="flex items-center gap-2 shrink-0">
-                <div class="text-xs text-white/90 hidden lg:flex items-center space-x-3 py-1 font-mono">
-                    <button type="button" id="soundToggleBtn" onclick="if(window.sedonaAudio) window.sedonaAudio.toggleMute()" class="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-bold bg-white/10 text-white hover:bg-white/20 transition border border-white/20" title="Toggle Sound Alarms & Chimes">
-                        <span id="soundToggleIcon">🔊</span>
-                        <span id="soundToggleText">Sound ON</span>
-                    </button>
-                    <span class="text-white/40">•</span>
-                    <span id="live-hms-time">--:-- --</span>
+            @if($isAdministrator)
+                <div>
+                    <div class="nav-section-label">Finance</div>
+                    <nav class="sidebar-nav" aria-label="Financial reports">
+                        @foreach($financeNavigation as $link)
+                            @include('layouts.navigation-link', ['link' => $link])
+                        @endforeach
+                    </nav>
                 </div>
+                <div>
+                    <div class="nav-section-label">System Settings</div>
+                    <nav class="sidebar-nav" aria-label="Administration">
+                        @foreach($settingsNavigation as $link)
+                            @include('layouts.navigation-link', ['link' => $link])
+                        @endforeach
+                        @include('layouts.navigation-link', ['link' => $kitchenNavigation[0]])
+                        @include('layouts.navigation-link', ['link' => $lobbyNavigation[0]])
+                    </nav>
+                </div>
+            @endif
+        </div>
+        <div class="sidebar-footer">
+            <strong>Sedona Court</strong>
+            A clear view of every stay.
+        </div>
+    </aside>
 
-                <div class="relative shrink-0" data-dropdown>
-                    <button type="button" onclick="toggleNavDropdown(event)" aria-expanded="false" aria-haspopup="true" class="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold max-w-[180px]">
-                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white text-[#421A2B] font-black text-[11px] shrink-0">
-                            {{ mb_strtoupper(mb_substr(auth()->user()->name ?? 'C', 0, 1)) }}
-                        </span>
-                        <span class="hidden sm:block truncate">{{ auth()->user()->name ?? 'Cashier' }}</span>
-                        <span class="text-[9px] text-white/70 shrink-0">▼</span>
-                    </button>
-                    <div class="nav-menu hidden absolute top-full right-0 mt-2 w-52 bg-white shadow-2xl z-[60] text-xs border border-slate-200 rounded-md overflow-hidden" role="menu">
-                        <div class="px-3 py-2.5 border-b border-slate-100 bg-slate-50">
-                            <div class="font-bold text-slate-900 truncate leading-tight">{{ auth()->user()->name ?? 'Cashier' }}</div>
-                            <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">{{ auth()->user()->getRoleNames()->first() ?? 'cashier' }}</div>
+    <div class="app-workspace">
+        <header class="app-topbar">
+            <div class="topbar-context">
+                <button type="button" id="primaryNavToggle" onclick="togglePrimaryNav()" class="nav-toggle" aria-expanded="false" aria-controls="primaryNavMobile" aria-label="Toggle navigation">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16"/></svg>
+                </button>
+                <span>Workspace</span><span aria-hidden="true">/</span><strong>@yield('title', 'Dashboard')</strong>
+            </div>
+            <div class="topbar-actions">
+                <span class="clock-display" id="live-hms-time"></span>
+                <button type="button" id="soundToggleBtn" onclick="if(window.sedonaAudio) window.sedonaAudio.toggleMute()" class="sound-control" title="Toggle Sound Alarms & Chimes">
+                    <span id="soundToggleIcon" aria-hidden="true">🔊</span><span id="soundToggleText">Sound ON</span>
+                </button>
+                @if($isExecutive)
+                    <div class="relative" data-dropdown>
+                        <button type="button" onclick="toggleNavDropdown(event)" aria-expanded="false" aria-haspopup="true" class="sound-control" aria-label="Notifications">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4"/></svg>
+                            @if(($notifCount ?? 0) > 0)<span>{{ $notifCount }}</span>@endif
+                        </button>
+                        <div class="nav-menu hidden absolute right-0 top-full mt-2 w-72" role="menu">
+                            <div class="px-3 py-2 text-xs font-bold text-brand">Attention needed</div>
+                            @isset($notifItems)
+                                @forelse($notifItems as $notification)
+                                    <a href="{{ $notification['url'] }}" role="menuitem">{{ $notification['count'] }} {{ $notification['label'] }}</a>
+                                @empty
+                                    <div class="px-3 py-3 text-xs text-slate-500">All clear — nothing pending.</div>
+                                @endforelse
+                            @else
+                                <a href="{{ route('dashboard') }}" role="menuitem">Open Frontdesk board</a>
+                            @endisset
                         </div>
-                        <form method="POST" action="{{ route('logout') }}" class="p-1">
+                    </div>
+                @endif
+                <div class="relative" data-dropdown>
+                    <button type="button" class="account-trigger" onclick="toggleNavDropdown(event)" aria-expanded="false" aria-haspopup="true" aria-label="Account menu">
+                        <span class="account-avatar">{{ mb_strtoupper(mb_substr($operator->name ?? 'S', 0, 1)) }}</span>
+                        <span><span class="account-name">{{ $operator->name ?? 'Staff' }}</span><span class="account-role">{{ str_replace('_', ' ', $operator?->getRoleNames()->first() ?? 'staff') }}</span></span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="nav-menu hidden absolute right-0 top-full mt-2 w-56" role="menu">
+                        <div class="px-3 py-2 border-b border-slate-100">
+                            <div class="text-xs font-bold text-slate-700">{{ $operator->name ?? 'Staff' }}</div>
+                            <div class="text-[11px] text-slate-500 mt-1 break-all">{{ $operator->email ?? '' }}</div>
+                        </div>
+                        <form method="POST" action="{{ route('logout') }}">
                             @csrf
-                            <button type="submit" class="w-full text-left px-3 py-2 rounded text-slate-700 hover:bg-slate-100 text-xs font-semibold" role="menuitem">
-                                Logout
-                            </button>
+                            <button type="submit" role="menuitem">Logout</button>
                         </form>
                     </div>
                 </div>
             </div>
-        </div>
-
-        {{-- Mobile panel mirrors desktop links (CSS-only toggle, no duplicate routes) --}}
-        <nav id="primaryNavMobile" class="hidden md:hidden border-t border-white/10 px-3 pb-3" aria-label="Primary mobile">
-            @if(auth()->check() && auth()->user()->hasAnyRole(['cashier', 'front_desk']))
-                <a href="{{ route('dashboard') }}" class="block py-2 text-white font-semibold">Front Desk</a>
-                <a href="{{ route('bookings.index') }}" class="block py-2 text-white font-semibold">Reservations</a>
-                <a href="{{ route('pos.index') }}" class="block py-2 text-white font-semibold">POS</a>
-                <a href="{{ route('shifts.index') }}" class="block py-2 text-white font-semibold">Shifts &amp; Drawer</a>
-                <a href="{{ route('inventory.index') }}" class="block py-2 text-white font-semibold">Stock</a>
-            @else
-                <a href="{{ route('dashboard') }}" class="block py-2 text-white font-semibold">Frontdesk</a>
-                <a href="{{ route('bookings.index') }}" class="block py-2 text-white font-semibold">Bookings</a>
-                <a href="{{ route('pos.index') }}" class="block py-2 text-white font-semibold">POS Catalog</a>
-                <a href="{{ route('admin.accounting.ledger') }}" class="block py-2 text-white font-semibold">Ledger</a>
-                <a href="{{ route('shifts.index') }}" class="block py-2 text-white font-semibold">Shift Settlement</a>
-                <a href="{{ route('reports.index') }}" class="block py-2 text-white font-semibold">Reports &amp; Audits</a>
-                <a href="{{ route('admin.pricing.index') }}" class="block py-2 text-white font-semibold">System Settings — Pricing</a>
-                <a href="{{ route('admin.users.index') }}" class="block py-2 text-white font-semibold">System Settings — Staff</a>
-            @endif
-        </nav>
-    </header>
-
-    @if(auth()->check() && auth()->user()->hasAnyRole(['owner', 'admin', 'manager']))
-    <!-- Executive tab bar (owner/admin) -->
-    <nav class="owner-tabs sticky top-[49px] z-30 hidden md:block" aria-label="Executive">
-        <div class="flex items-center gap-1 px-3 py-2">
-            <a href="{{ route('dashboard') }}" class="exec-tab {{ request()->routeIs('dashboard', 'rooms.*', 'checkout.*', 'folios.*', 'checkin.*') ? 'active' : '' }}">
-                <span>▦</span> Frontdesk
-            </a>
-            <div class="relative" data-dropdown>
-                <button type="button" class="exec-tab" aria-expanded="false" aria-haspopup="true" onclick="toggleNavDropdown(event)">
-                    <span>🔔</span> Notifications
-                    @isset($notifCount)
-                        @if(($notifCount ?? 0) > 0)
-                            <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#EF4444] text-white text-[10px] font-black">{{ $notifCount }}</span>
-                        @endif
-                    @endisset
-                </button>
-                <div class="tab-menu nav-menu hidden absolute left-0 top-full mt-1 w-72 bg-white shadow-2xl z-[60] border border-slate-200 rounded-md overflow-hidden" role="menu">
-                    <div class="px-3 py-2 border-b border-slate-100 bg-slate-50 font-bold text-slate-700 text-xs">Attention needed</div>
-                    @isset($notifItems)
-                        @forelse($notifItems as $ni)
-                            <a href="{{ $ni['url'] }}" role="menuitem"><span class="font-black">{{ $ni['count'] }}</span> {{ $ni['label'] }}</a>
-                        @empty
-                            <div class="px-3 py-3 text-slate-400 text-xs">All clear — nothing pending.</div>
-                        @endisset
-                    @else
-                        <a href="{{ route('dashboard') }}" role="menuitem">Open Frontdesk board</a>
-                    @endisset
-                </div>
+        </header>
+        <div class="app-page-header">
+            <div>
+                <h1>@yield('title', 'Dashboard')</h1>
+                <p class="page-description">@yield('subtitle', 'Your property, at a glance.')</p>
             </div>
-            <a href="{{ route('bookings.index') }}" class="exec-tab {{ request()->routeIs('bookings.*') ? 'active' : '' }}">
-                <span>📅</span> Bookings
-            </a>
-            <a href="{{ route('pos.index') }}" class="exec-tab {{ request()->routeIs('pos.*') ? 'active' : '' }}">
-                <span>🛒</span> POS Catalog
-            </a>
-            <a href="{{ route('admin.accounting.ledger') }}" class="exec-tab {{ request()->routeIs('admin.accounting.ledger') ? 'active' : '' }}">
-                <span>📖</span> Ledger
-            </a>
-            <a href="{{ route('shifts.index') }}" class="exec-tab {{ request()->routeIs('shifts.*') ? 'active' : '' }}">
-                <span>💼</span> Shift Settlement
-            </a>
-            <div class="relative" data-dropdown>
-                <button type="button" class="exec-tab {{ request()->routeIs('reports.*', 'admin.accounting.*') ? 'active' : '' }}" aria-expanded="false" aria-haspopup="true" onclick="toggleNavDropdown(event)">
-                    <span>📊</span> Reports &amp; Audits <span class="text-[9px]">▼</span>
-                </button>
-                <div class="tab-menu nav-menu hidden absolute left-0 top-full mt-1 w-64 bg-white shadow-2xl z-[60] border border-slate-200 rounded-md overflow-hidden" role="menu">
-                    <a href="{{ route('reports.index') }}" role="menuitem">Weekly Sales &amp; Occupancy</a>
-                    <a href="{{ route('admin.accounting.pnl') }}" role="menuitem">Executive P&amp;L</a>
-                    <a href="{{ route('admin.accounting.expenses') }}" role="menuitem">Expenses &amp; Petty Cash</a>
-                    <a href="{{ route('admin.accounting.shifts') }}" role="menuitem">Shift Reconciliations</a>
-                    <a href="{{ route('admin.accounting.losses') }}" role="menuitem">Loss Slips (FCE-######)</a>
-                </div>
-            </div>
-            <div class="ml-auto relative" data-dropdown>
-                <button type="button" class="exec-tab {{ request()->routeIs('admin.pricing.*', 'admin.users.*') ? 'active' : '' }}" aria-expanded="false" aria-haspopup="true" onclick="toggleNavDropdown(event)">
-                    <span>⚙</span> System Settings
-                </button>
-                <div class="tab-menu nav-menu hidden absolute right-0 top-full mt-1 w-60 bg-white shadow-2xl z-[60] border border-slate-200 rounded-md overflow-hidden" role="menu">
-                    <a href="{{ route('admin.pricing.index') }}" role="menuitem">Master Pricing Editor</a>
-                    <a href="{{ route('admin.users.index') }}" role="menuitem">Staff Accounts &amp; RBAC</a>
-                    <a href="{{ route('kitchen.view') }}" role="menuitem">Kitchen KDS</a>
-                    <a href="{{ route('kiosk.view') }}" target="_blank" role="menuitem">Lobby Display ↗</a>
-                </div>
-            </div>
+            <div class="page-actions">@yield('top_action')</div>
         </div>
-    </nav>
-    @endif
-
-    <!-- Slim Page Header -->
-    <div class="hms-sub-nav relative z-0 flex items-center justify-between gap-3">
-        <div class="font-semibold text-xs text-slate-800 uppercase tracking-wide truncate">
-            @yield('subtitle', 'Sedona Court Executive PMS')
-        </div>
-        <div class="shrink-0">
-            @yield('top_action')
-        </div>
-    </div>
-
-    <!-- Flash Messages -->
-    <div class="px-3 pt-2">
+            <!-- Flash Messages -->
+    <div class="app-feedback">
         @if(session('success'))
             <div class="p-2 mb-2 bg-emerald-50 border border-emerald-500 text-emerald-900 text-xs rounded font-medium flex items-center justify-between">
                 <div>
@@ -513,64 +196,80 @@
         @endif
     </div>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 pb-6">
-        @yield('content')
-    </main>
 
+        <main id="main-content" class="app-content" tabindex="-1">
+            @yield('content')
+        </main>
+    </div>
     <script>
         function togglePrimaryNav() {
-            const nav = document.getElementById('primaryNavMobile');
-            const btn = document.getElementById('primaryNavToggle');
-            if (!nav) return;
-            const isHidden = nav.classList.contains('hidden');
-            nav.classList.toggle('hidden', !isHidden);
-            if (btn) btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
-            // Desktop nav stays md:flex; mobile panel is separate.
+            const sidebar = document.getElementById('primaryNavMobile');
+            const open = !sidebar.classList.contains('is-open');
+            sidebar.classList.toggle('is-open', open);
+            document.getElementById('sidebarOverlay').classList.toggle('hidden', !open);
+            document.getElementById('primaryNavToggle').setAttribute('aria-expanded', String(open));
+            document.body.classList.toggle('nav-open', open);
+            document.querySelector('.app-workspace').inert = open;
+            if (open) sidebar.querySelector('a').focus();
         }
-
+        function closePrimaryNav(restoreFocus = true) {
+            document.getElementById('primaryNavMobile').classList.remove('is-open');
+            document.getElementById('sidebarOverlay').classList.add('hidden');
+            document.getElementById('primaryNavToggle').setAttribute('aria-expanded', 'false');
+            document.body.classList.remove('nav-open');
+            document.querySelector('.app-workspace').inert = false;
+            if (restoreFocus) document.getElementById('primaryNavToggle').focus();
+        }
+        window.matchMedia('(min-width: 1024px)').addEventListener('change', event => {
+            if (event.matches) closePrimaryNav(false);
+        });
         function toggleNavDropdown(event) {
             event.stopPropagation();
             const wrapper = event.currentTarget.closest('[data-dropdown]');
-            if (!wrapper) return;
             const menu = wrapper.querySelector('.nav-menu');
-            const trigger = wrapper.querySelector('[aria-expanded]');
-            const isHidden = menu.classList.contains('hidden');
+            const open = menu.classList.contains('hidden');
             closeAllNavDropdowns(wrapper);
-            menu.classList.toggle('hidden', !isHidden);
-            if (trigger) trigger.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+            menu.classList.toggle('hidden', !open);
+            wrapper.querySelector('[aria-expanded]').setAttribute('aria-expanded', String(open));
+            if (open) menu.querySelector('a, button')?.focus();
         }
-
         function closeAllNavDropdowns(except) {
-            document.querySelectorAll('[data-dropdown] .nav-menu').forEach((menu) => {
+            document.querySelectorAll('[data-dropdown] .nav-menu').forEach(menu => {
                 const wrapper = menu.closest('[data-dropdown]');
                 if (wrapper !== except) {
                     menu.classList.add('hidden');
-                    const trigger = wrapper.querySelector('[aria-expanded]');
-                    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+                    wrapper.querySelector('[aria-expanded]').setAttribute('aria-expanded', 'false');
                 }
             });
         }
-
-        document.addEventListener('click', () => closeAllNavDropdowns(null));
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeAllNavDropdowns(null);
+        document.addEventListener('click', event => {
+            if (!event.target.closest('[data-dropdown]')) closeAllNavDropdowns(null);
         });
-
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                const trigger = document.querySelector('[data-dropdown] [aria-expanded="true"]');
+                closeAllNavDropdowns(null);
+                trigger?.focus();
+                if (document.getElementById('primaryNavMobile').classList.contains('is-open')) closePrimaryNav();
+            }
+            if (event.key === 'Tab' && document.getElementById('primaryNavMobile').classList.contains('is-open') && window.matchMedia('(max-width: 1023px)').matches) {
+                const controls = [...document.getElementById('primaryNavMobile').querySelectorAll('a, button')];
+                const first = controls[0];
+                const last = controls.at(-1);
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            }
+        });
         function updateHmsClock() {
             const now = new Date();
-            const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-            const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-            const el = document.getElementById('live-hms-time');
-            if (el) el.textContent = `${dateStr} ${timeStr}`;
+            const date = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            document.getElementById('live-hms-time').textContent = `${date} · ${time}`;
         }
         setInterval(updateHmsClock, 1000);
         updateHmsClock();
-
         document.addEventListener('DOMContentLoaded', () => {
-            if (window.sedonaAudio) {
-                window.sedonaAudio.updateAudioButtonState();
-            }
+            window.sedonaAudio?.updateAudioButtonState();
         });
     </script>
     @stack('scripts')

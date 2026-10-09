@@ -153,32 +153,26 @@
                                             </li>
                                         @endforeach
                                     </ul>
+                                    @if($ord->special_instructions)
+                                        <p class="text-xs text-amber-200">Instructions: {{ $ord->special_instructions }}</p>
+                                    @endif
+                                    <form action="{{ route('pos.order.status', $ord) }}" method="POST" class="pt-2">
+                                        @csrf
+                                        @if($ord->status === 'new')
+                                            <input type="hidden" name="status" value="preparing">
+                                            <button type="submit" class="w-full py-2.5 rounded bg-purple-700 hover:bg-purple-600 text-white font-mono font-bold text-xs uppercase tracking-wider transition">▶ Start Cooking</button>
+                                        @elseif($ord->status === 'preparing')
+                                            <input type="hidden" name="status" value="ready">
+                                            <button type="submit" class="w-full py-2.5 rounded bg-blue-700 hover:bg-blue-600 text-white font-mono font-bold text-xs uppercase tracking-wider transition">✓ Mark Ready For Dispatch</button>
+                                        @elseif($ord->status === 'ready')
+                                            <input type="hidden" name="status" value="delivered">
+                                            <button type="submit" class="w-full py-2.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-mono font-bold text-xs uppercase tracking-wider transition">★ Completed &amp; Dispatched</button>
+                                        @endif
+                                    </form>
                                 </div>
                             @endforeach
                         </div>
 
-                        <!-- Action Bar for Kitchen Staff on Touchscreen TV -->
-                        <div class="p-2.5 bg-[#171d29] border-t border-[#283347] flex items-center justify-between gap-2">
-                            <form action="{{ route('pos.order.status', $firstOrder) }}" method="POST" class="w-full flex gap-1.5">
-                                @csrf
-                                @if($overallStatus === 'new')
-                                    <input type="hidden" name="status" value="preparing">
-                                    <button type="submit" class="w-full py-2.5 rounded bg-purple-700 hover:bg-purple-600 text-white font-mono font-bold text-xs uppercase tracking-wider transition">
-                                        ▶ Start Cooking
-                                    </button>
-                                @elseif($overallStatus === 'preparing')
-                                    <input type="hidden" name="status" value="ready">
-                                    <button type="submit" class="w-full py-2.5 rounded bg-blue-700 hover:bg-blue-600 text-white font-mono font-bold text-xs uppercase tracking-wider transition">
-                                        ✓ Mark Ready For Dispatch
-                                    </button>
-                                @else
-                                    <input type="hidden" name="status" value="delivered">
-                                    <button type="submit" class="w-full py-2.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-mono font-bold text-xs uppercase tracking-wider transition">
-                                        ★ Completed &amp; Dispatched
-                                    </button>
-                                @endif
-                            </form>
-                        </div>
                     </div>
                 @endforeach
             </div>
@@ -216,12 +210,14 @@
         updateClock();
 
         // Sound Chime Trigger on New Orders
-        const prevCount = parseInt(sessionStorage.getItem('scti_pending_orders_count') || '0', 10);
-        const currentCount = {{ $pendingOrders->count() }};
-        if (currentCount > prevCount && window.sedonaAudio) {
-            window.sedonaAudio.playKitchenChime();
-        }
-        sessionStorage.setItem('scti_pending_orders_count', currentCount.toString());
+        document.addEventListener('DOMContentLoaded', () => {
+            const prevCount = parseInt(sessionStorage.getItem('scti_pending_orders_count') || '0', 10);
+            const currentCount = {{ $pendingOrders->count() }};
+            if (currentCount > prevCount && window.sedonaAudio) {
+                window.sedonaAudio.playKitchenChime();
+            }
+            sessionStorage.setItem('scti_pending_orders_count', currentCount.toString());
+        });
     </script>
 </body>
 </html>

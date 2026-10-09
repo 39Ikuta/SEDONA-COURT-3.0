@@ -91,11 +91,16 @@
 <body>
 
     <div class="no-print">
-        <button class="btn-print" onclick="window.print()">🖨️ Print Deposit Refund Slip</button>
+        <form method="POST" action="{{ route('folios.deposit_refund.print', $folio) }}" style="display: inline;">
+            @csrf
+            <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+            <button class="btn-print">🖨️ Request refund summary print / copy</button>
+        </form>
         <button class="btn-print" style="background:#4b5563; margin-left:6px;" onclick="window.close()">Close Window</button>
     </div>
 
     <div class="slip-container" id="printable-deposit-refund">
+        <div class="text-center" style="font-size: 10px; font-weight: bold;">{{ isset($receiptCopy) ? ($receiptCopy === 1 ? 'FIRST RECORDED PRINT REQUEST' : 'COPY — PRINT REQUEST #'.$receiptCopy) : 'PREVIEW — NO PRINT REQUEST RECORDED' }}</div>
         <!-- Header -->
         <div class="text-center">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
@@ -124,11 +129,11 @@
             </div>
             <div class="row">
                 <span>Date & Time:</span>
-                <span>{{ now()->format('m/d/Y h:i A') }}</span>
+                <span>{{ $folio->deposit_refunded_at?->format('m/d/Y h:i A') ?? 'Refund pending' }}</span>
             </div>
             <div class="row">
                 <span>Attending Cashier:</span>
-                <span>{{ $folio->cashier->name ?? 'Frontdesk Staff' }} // FD-01</span>
+                <span>{{ $refundOperator?->name ?? 'Refund not recorded' }}</span>
             </div>
         </div>
 
@@ -146,20 +151,26 @@
             </div>
             <div class="double-divider"></div>
             <div class="row font-bold" style="font-size: 13px;">
-                <span>NET CASH REFUNDED:</span>
+                <span>TOTAL DEPOSIT REFUNDED:</span>
                 <span>₱{{ number_format($refundAmount, 2) }}</span>
             </div>
             <div class="divider"></div>
             <div class="row">
                 <span>Resolution Status:</span>
-                <span class="font-bold uppercase">REFUNDED &amp; CLEARED</span>
+                <span class="font-bold uppercase">{{ $remainingDeposit <= 0 ? ($refundAmount > 0 ? 'REFUNDED & CLEARED' : 'NO REFUND DUE') : ($refundAmount > 0 ? 'PARTIALLY REFUNDED' : 'REFUND PENDING') }}</span>
             </div>
         </div>
 
         <div class="divider"></div>
 
         <div style="font-size: 9px; color: #333; line-height: 1.3;">
-            I hereby acknowledge receipt of the full security deposit refund stated above and confirm all room keys, remotes, and amenities were returned in good condition.
+            @if($refundAmount > 0)
+            I acknowledge receipt of the actual deposit refund recorded above.
+            @elseif($remainingDeposit > 0)
+            No deposit refund has been recorded. The remaining deposit requires an actual refund transaction.
+            @else
+            No deposit refund is due. The deposit has no remaining balance.
+            @endif
         </div>
 
         <!-- Counter Signatures -->
@@ -168,12 +179,16 @@
                 Guest Signature: {{ $folio->guest->name ?? 'Valued Guest' }}
             </div>
             <div class="sig-line" style="margin-top: 18px;">
-                Authorized Cashier: {{ $folio->cashier->name ?? 'Front Desk Staff' }} // FD-01
+                Last Refund Cashier: {{ $refundOperator?->name ?? 'Refund not recorded' }}
             </div>
         </div>
 
         <div class="divider" style="margin-top: 14px;"></div>
 
+        <div class="row">
+            <span>Deposit remaining to refund:</span>
+            <span>₱{{ number_format($remainingDeposit, 2) }}</span>
+        </div>
         <!-- Scannable Code 128 Barcode -->
         <div style="text-align: center; margin-top: 6px;">
             <div style="height: 34px; width: 85%; margin: 0 auto;">
@@ -185,9 +200,24 @@
         </div>
 
         <div style="margin-top: 10px; text-align: center; font-size: 8px; color: #555;">
-            *** OFFICIAL SETTLEMENT RECORD • SEDONA COURT PMS ***
+            {{ $refundAmount > 0 ? 'OFFICIAL DEPOSIT REFUND RECORD' : 'DEPOSIT REFUND SUMMARY' }} • SEDONA COURT PMS
         </div>
     </div>
 
+    @if(!$folio->isActive() && $remainingDeposit > 0)
+    <form method="POST" action="{{ route('folios.deposit_refund.store', $folio) }}" class="no-print" style="margin: 20px; text-align: center;" onsubmit="return confirm('Confirm the actual deposit refund to this guest?')">
+        @csrf
+        <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        @include('shifts.override-reason')
+        <p>Deposit remaining: {{ number_format($remainingDeposit, 2) }}</p>
+        <label>Actual refund amount <input name="amount" type="number" min="0.01" max="{{ $remainingDeposit }}" step="0.01" value="{{ $remainingDeposit }}" required></label>
+        <label>Refund method <select name="payment_method"><option value="cash">Cash</option><option value="gcash">GCash</option></select></label>
+        <label>GCash refund reference <input name="gcash_reference" maxlength="50"></label>
+        <button type="submit">Record actual refund</button>
+    </form>
+    @endif
 </body>
+@if($printRequested ?? false)
+<script>window.addEventListener('load', () => window.print());</script>
+@endif
 </html>

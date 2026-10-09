@@ -43,10 +43,10 @@
             </span>
         </div>
 
-        <div class="bg-white p-3 border-l-4 border-[#421A2B] shadow-sm rounded">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Stock Depletion Policy</span>
-            <div class="text-xs font-bold text-slate-800 mt-1">2-Pass Atomic Decrement</div>
-            <span class="text-[10px] text-slate-400">Auto-toggles out-of-stock when depleted</span>
+        <div class="workspace-toolbar rounded">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Stock Availability</span>
+            <div class="text-xs font-bold text-slate-800 mt-1">Updates after each sale</div>
+            <span class="text-[10px] text-slate-400">Sold items are deducted from available stock</span>
         </div>
     </div>
 
@@ -144,7 +144,7 @@
                             </td>
                             <td>
                                 <button type="button" 
-                                    onclick="openStockModal({{ $item->id }}, '{{ addslashes($item->name) }}', {{ $item->stock_quantity ?? 0 }})"
+                                    onclick="openStockModal(this.dataset.itemId, this.dataset.itemName, this.dataset.stockQuantity)" data-item-id="{{ $item->id }}" data-item-name="{{ $item->name }}" data-stock-quantity="{{ $item->stock_quantity ?? 0 }}"
                                     class="px-2.5 py-1 bg-slate-800 hover:bg-black text-white text-[10px] font-bold rounded shadow-sm">
                                     + Adjust / Restock
                                 </button>
@@ -226,6 +226,7 @@
 
         <form id="stockForm" method="POST" action="" class="p-4 space-y-3 text-xs">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
 
             <div class="p-2.5 bg-slate-50 border rounded text-slate-700">
                 Item: <strong id="stockModalItemName" class="text-slate-900"></strong><br>
@@ -277,6 +278,7 @@
 
         <form method="POST" action="{{ route('inventory.recount') }}" class="flex flex-col flex-1 overflow-hidden">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             
             <div class="p-3 bg-sky-50 border-b border-sky-100 text-sky-900 text-xs flex items-center justify-between">
                 <span>Enter counted physical inventory in the minibar & front desk pantry. Unchanged fields remain as-is.</span>

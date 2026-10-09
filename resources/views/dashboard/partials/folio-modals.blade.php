@@ -12,6 +12,7 @@
 
         <form method="POST" action="{{ route('checkin.store') }}" class="space-y-3">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             <input type="hidden" name="room_id" id="checkInRoomId">
 
             <div>
@@ -51,7 +52,7 @@
                     <option value="6h">6 Hours Stay</option>
                     <option value="12h" selected>12 Hours Stay</option>
                     <option value="24h">24 Hours Stay</option>
-                    <option value="promo">Midnight Promo (8pm-6am)</option>
+                    <option value="promo">Midnight Promo (12 hours)</option>
                 </select>
             </div>
 
@@ -62,7 +63,15 @@
 
             <div class="flex items-center space-x-2 pt-1">
                 <input type="checkbox" name="is_senior" id="isSenior" value="1" class="rounded text-red-700">
-                <label for="isSenior" class="text-xs text-slate-700 cursor-pointer font-semibold">Apply Statutory Senior / PWD Discount (20%)</label>
+                <label for="isSenior" class="text-xs text-slate-700 cursor-pointer font-semibold">Apply Senior Citizen Discount</label>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="is_pwd" id="isPwd" value="1" class="rounded text-red-700">
+                <label for="isPwd" class="text-xs text-slate-700 cursor-pointer font-semibold">Apply PWD Discount</label>
+            </div>
+            <div>
+                <label for="checkInDiscountReference" class="block text-xs font-bold text-slate-700 mb-1">Senior / PWD ID Reference</label>
+                <input type="text" name="discount_id_ref" id="checkInDiscountReference" maxlength="100" class="form-control-hms" placeholder="Required when applying a senior or PWD discount">
             </div>
 
             <div class="border-t pt-3 flex justify-end space-x-2">
@@ -85,6 +94,7 @@
 
         <form method="POST" id="xtendForm" class="space-y-3">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Select Hours to Extend (₱130.00/hr):</label>
                 <select name="hours" class="form-control-hms font-bold">
@@ -116,6 +126,7 @@
 
         <form method="POST" id="discountForm" class="space-y-3">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Discount Classification:</label>
                 <select name="discount_type" id="discountTypeSelect" onchange="updateDiscountPreview()" class="form-control-hms font-bold text-xs">
@@ -162,6 +173,7 @@
 
         <form method="POST" id="transferForm" class="space-y-3">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Select Target Available Room:</label>
                 <select name="target_room_id" required class="form-control-hms font-bold">
@@ -196,18 +208,20 @@
 
         <form method="POST" id="addOnForm" class="space-y-3">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+            <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Select Menu Item / Amenity:</label>
                 <select name="pos_item_id" class="form-control-hms font-bold">
                     @foreach($posItems as $pi)
                         @php
                             $stock = $pi->stock_quantity ?? 0;
-                            $isOut = !$pi->is_available || ($pi->is_tracked && $stock <= 0);
+                            $isOut = !$pi->isOrderable();
                             $eggNote = $pi->requiresEgg() ? " (Uses Egg)" : "";
                             $stockBadge = $pi->is_tracked ? " [Stock: {$stock}{$eggNote}]" : "";
                         @endphp
                         <option value="{{ $pi->id }}" {{ $isOut ? 'disabled class=text-slate-400' : '' }}>
-                            {{ $pi->category }}: {{ $pi->name }} (₱{{ number_format($pi->price, 2) }}){{ $stockBadge }}{{ $isOut ? ' - OUT OF STOCK' : '' }}
+                            {{ $pi->category }}: {{ $pi->name }} (₱{{ number_format($pi->price, 2) }}){{ $stockBadge }}{{ $isOut ? ' - UNAVAILABLE' : '' }}
                         </option>
                     @endforeach
                 </select>
@@ -237,6 +251,7 @@
 
         <form method="POST" id="forceForm" class="space-y-3">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Select Incident Reason:</label>
                 <select name="force_reason" class="form-control-hms font-bold">
@@ -263,28 +278,26 @@
 
     function syncCheckInLiveTime() {
         const now = new Date();
-        const pad = (n) => String(n).padStart(2, '0');
-        const localIso = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
         const dtInput = document.getElementById('checkInDateTime');
-        if (dtInput) dtInput.value = localIso;
+        if (dtInput) dtInput.value = now.toISOString();
 
         const displayEl = document.getElementById('checkInDateTimeDisplay');
         if (displayEl) {
-            const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-            const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+            const timeStr = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: '2-digit', day: '2-digit', year: 'numeric' });
             displayEl.value = `${dateStr} ${timeStr}`;
         }
     }
 
-    function openCheckInModal(roomId, roomNumber, roomType, r3, r12, r24, rpromo) {
-        document.getElementById('checkInRoomId').value = roomId;
-        document.getElementById('checkInModalTitle').textContent = `Check In Room ${roomNumber} (${roomType})`;
+    function openCheckInModal(room) {
+        document.getElementById('checkInRoomId').value = room.roomId;
+        document.getElementById('checkInModalTitle').textContent = `Check In Room ${room.roomNumber} (${room.roomType})`;
         
         syncCheckInLiveTime();
         if (checkInClockInterval) clearInterval(checkInClockInterval);
         checkInClockInterval = setInterval(syncCheckInLiveTime, 1000);
 
-        currentRoomRates = { '3h': r3, '6h': r3 * 2, '12h': r12, '24h': r24, 'promo': rpromo };
+        currentRoomRates = { '3h': Number(room['rate-3h']), '6h': Number(room['rate-6h']), '12h': Number(room['rate-12h']), '24h': Number(room['rate-24h']), 'promo': Number(room.ratePromo) };
         updateCheckInRatePreview();
         document.getElementById('checkInModal').classList.remove('hidden');
     }

@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ApprovalRequest;
 use App\Models\Booking;
 use App\Models\Folio;
 use App\Models\Order;
+use App\Models\PaymentEntry;
 use App\Models\PosItem;
 use App\Models\Room;
 use App\Models\Shift;
@@ -39,7 +41,7 @@ class DashboardController extends Controller
 
         // Ensure Staff Quarters (Room 12) has an initialized staff folio for F&B add-ons
         $staffRoom = Room::where('is_staff_quarters', true)->first();
-        if ($staffRoom && !$staffRoom->activeFolio) {
+        if ($staffRoom && ! $staffRoom->activeFolio) {
             $staffRoom->getOrCreateStaffFolio();
         }
 
@@ -64,7 +66,7 @@ class DashboardController extends Controller
 
         // Pending force checkout requests
         $pendingForceCheckouts = Folio::with(['room', 'guest', 'cashier'])
-            ->where('force_checkout', true)
+            ->whereIn('id', ApprovalRequest::where('kind', 'write_off')->where('source_type', Folio::class)->whereIn('status', ['pending', 'approved'])->select('source_id'))
             ->where('status', 'active')
             ->get();
 
@@ -136,7 +138,7 @@ class DashboardController extends Controller
         // Notification items for the executive tab bar dropdown.
         $lowStockCount = PosItem::where('is_tracked', true)->whereColumn('stock_quantity', '<=', 'reorder_level')->count();
         $notifItems = array_values(array_filter([
-            count($pendingForceCheckouts) > 0 ? ['count' => count($pendingForceCheckouts), 'label' => 'pending force checkout approval(s)', 'url' => route('dashboard')] : null,
+            count($pendingForceCheckouts) > 0 && $request->user()->can('review-financial') ? ['count' => count($pendingForceCheckouts), 'label' => 'pending force checkout approval(s)', 'url' => route('approvals.index')] : null,
             $boardLate > 0 ? ['count' => $boardLate, 'label' => 'late checkout(s) on the board', 'url' => route('dashboard', ['bstatus' => 'late'])] : null,
             $lowStockCount > 0 ? ['count' => $lowStockCount, 'label' => 'item(s) at or below reorder level', 'url' => route('inventory.index')] : null,
         ]));
@@ -151,18 +153,24 @@ class DashboardController extends Controller
 
         if (auth()->check() && auth()->user()->hasAnyRole(['cashier', 'front_desk'])) {
             $myId = auth()->id();
-            $myShiftStart = $activeShift?->opened_at ?? today()->startOfDay();
-            $myShiftLabel = $activeShift
-                ? ucfirst($activeShift->shift_type ?? 'shift') . ' · opened ' . $activeShift->opened_at->format('m/d h:i A')
+            $ownsDrawer = $activeShift && $activeShift->opened_by === $myId;
+            $myShiftStart = $ownsDrawer ? $activeShift->opened_at : today()->startOfDay();
+            $myShiftLabel = $ownsDrawer
+                ? ucfirst($activeShift->shift_type ?? 'shift').' · opened '.$activeShift->opened_at->format('m/d h:i A')
                 : 'Today';
 
             $myCheckIns = Folio::where('user_id', $myId)
                 ->where('checked_in_at', '>=', $myShiftStart)
                 ->count();
 
-            $myFolioRevenue = (float) Folio::where('user_id', $myId)
-                ->where('checked_in_at', '>=', $myShiftStart)
-                ->sum('net_total');
+            $myFolioRevenue = (float) Folio::where(function ($query) use ($myId): void {
+                $query->where('checked_out_by', $myId)->orWhere(function ($legacy) use ($myId): void {
+                    $legacy->whereNull('checked_out_by')->where('user_id', $myId);
+                });
+            })
+                ->where('status', 'checked_out')->where('force_checkout', false)
+                ->whereBetween('checked_out_at', [$myShiftStart, now()])
+                ->get()->sum(fn (Folio $folio): float => (float) $folio->gross_total - (float) $folio->discount_amount);
 
             $myPosRevenue = (float) Order::where('user_id', $myId)
                 ->where('type', 'walkin_pos')
@@ -173,7 +181,10 @@ class DashboardController extends Controller
                 ->where('created_at', '>=', $myShiftStart)
                 ->count();
 
-            $myShiftRevenue = $myFolioRevenue + $myPosRevenue;
+            $myRecordedReturns = -(float) PaymentEntry::where('user_id', $myId)->where('kind', 'pos_refund')
+                ->whereBetween('posted_at', [$myShiftStart, now()])->get()
+                ->sum(fn (PaymentEntry $entry): float => (float) $entry->cash_amount + (float) $entry->gcash_amount);
+            $myShiftRevenue = round($myFolioRevenue + $myPosRevenue - $myRecordedReturns, 2);
         }
 
         // Owner/admin/manager get the apartment board; cashiers keep the tables.
@@ -247,4 +258,3 @@ class DashboardController extends Controller
         ));
     }
 }
-

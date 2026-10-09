@@ -7,6 +7,7 @@ use App\Models\Room;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -27,6 +28,7 @@ class DatabaseSeeder extends Seeder
             'manage_folios', 'manage_pos', 'manage_shifts', 'view_reports',
             'manage_users', 'force_checkout', 'apply_discounts', 'view_kds',
             'view_kiosk', 'manage_pricing', 'view_audit_logs',
+            'record_payments', 'post_pos_sales', 'update_kitchen_status', 'view_all_shifts', 'manage_any_shifts',
         ];
 
         foreach ($permissions as $permission) {
@@ -44,11 +46,12 @@ class DatabaseSeeder extends Seeder
         $cashierRole->syncPermissions([
             'view_dashboard', 'manage_rooms', 'manage_guests', 'manage_folios',
             'manage_pos', 'manage_shifts', 'apply_discounts', 'manage_bookings',
+            'record_payments', 'post_pos_sales', 'update_kitchen_status',
         ]);
 
         $kitchenRole = Role::findOrCreate('kitchen', 'web');
         $kitchenRole->syncPermissions([
-            'view_kds', 'manage_pos',
+            'view_kds', 'update_kitchen_status',
         ]);
 
         $kioskRole = Role::findOrCreate('customer_display', 'web');
@@ -58,7 +61,7 @@ class DatabaseSeeder extends Seeder
 
         // Legacy role aliases for backward compatibility
         $managerRole = Role::findOrCreate('manager', 'web');
-        $managerRole->syncPermissions(Permission::all());
+        $managerRole->syncPermissions(Permission::whereNotIn('name', ['view_all_shifts', 'manage_any_shifts'])->get());
 
         $frontDeskRole = Role::findOrCreate('front_desk', 'web');
         $frontDeskRole->syncPermissions($cashierRole->permissions);
@@ -130,22 +133,21 @@ class DatabaseSeeder extends Seeder
 
         $usersByEmail = [];
         foreach ($accounts as $acc) {
-            $user = User::updateOrCreate(
+            $user = User::firstOrCreate(
                 ['email' => $acc['email']],
                 [
                     'name' => $acc['name'],
-                    'password' => Hash::make('password'),
+                    'password' => Hash::make(app()->environment('testing') ? 'password' : (config('sedona.seed_password') ?: Str::random(32))),
                     'email_verified_at' => now(),
                 ]
             );
-            $user->syncRoles([$acc['role']]);
+            if ($user->wasRecentlyCreated) {
+                $user->syncRoles([$acc['role']]);
+            }
             $usersByEmail[$acc['email']] = $user;
         }
 
         // ── 4. Seed Exact Physical Room Inventory (32 Rooms) ──────────
-        // Clean legacy cleaning states
-        Room::where('status', 'cleaning')->update(['status' => 'available']);
-
         $roomsData = [
             // FLOOR 1 (11 Rooms)
             // Rooms 1 - 5: VIP Suite
@@ -195,7 +197,7 @@ class DatabaseSeeder extends Seeder
         Room::whereIn('number', ['12 A', '12 B'])->delete();
 
         foreach ($roomsData as $r) {
-            Room::updateOrCreate(['number' => $r['number']], $r);
+            Room::firstOrCreate(['number' => $r['number']], $r);
         }
 
         // ── 5. Seed Complete Food, Beverage, Misc & Services Master Catalog ──
@@ -285,7 +287,7 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($catalog as $item) {
-            PosItem::updateOrCreate(['name' => $item['name']], $item);
+            PosItem::firstOrCreate(['name' => $item['name']], $item);
         }
     }
 }

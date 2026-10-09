@@ -79,7 +79,7 @@
             <div class="hms-card">
                 <div class="hms-card-header border-b pb-2 mb-3 flex items-center justify-between">
                     <span>OPERATING EXPENSES & NET PROFIT</span>
-                    <span class="text-xs text-slate-500 font-mono">Standard Weekly</span>
+                    <span class="text-xs text-slate-500 font-mono">Recorded This Week</span>
                 </div>
 
                 <div class="overflow-x-auto mb-3">
@@ -148,7 +148,7 @@
                 <tbody>
                     @forelse($pastShifts as $sh)
                         @php
-                            $variance = $sh->cash_total - $sh->gross_revenue;
+                            $variance = (float) $sh->cash_variance;
                         @endphp
                         <tr>
                             <td class="font-mono">{{ $sh->shift_date->format('m/d/Y') }}</td>

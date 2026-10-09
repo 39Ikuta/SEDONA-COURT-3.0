@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\InventoryEvent;
 use App\Models\PosItem;
+use App\Services\ApprovalService;
+use App\Services\FinancialPostingService;
 use App\Services\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class InventoryController extends Controller
@@ -25,7 +27,7 @@ class InventoryController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PosItem::query()->orderBy('category')->orderBy('sort_order');
+        $query = PosItem::notRetired()->orderBy('category')->orderBy('sort_order');
 
         if ($category = $request->input('category')) {
             $query->where('category', $category);
@@ -36,16 +38,16 @@ class InventoryController extends Controller
         }
 
         if ($request->boolean('low_stock')) {
-            $query->whereColumn('stock_quantity', '<=', 'reorder_level');
+            $query->where('is_tracked', true)->whereColumn('stock_quantity', '<=', 'reorder_level');
         }
 
         $items = $query->get();
 
-        $categories = PosItem::select('category')->distinct()->pluck('category');
+        $categories = PosItem::notRetired()->select('category')->distinct()->pluck('category');
 
-        $lowStockCount = PosItem::whereColumn('stock_quantity', '<=', 'reorder_level')->count();
-        $totalItems = PosItem::count();
-        $totalUnits = PosItem::where('is_tracked', true)->sum('stock_quantity');
+        $lowStockCount = PosItem::notRetired()->where('is_tracked', true)->whereColumn('stock_quantity', '<=', 'reorder_level')->count();
+        $totalItems = PosItem::notRetired()->count();
+        $totalUnits = PosItem::notRetired()->where('is_tracked', true)->sum('stock_quantity');
 
         $recentEvents = InventoryEvent::with('posItem')
             ->latest()
@@ -69,19 +71,17 @@ class InventoryController extends Controller
     {
         $validated = $request->validate([
             'stock_quantity' => 'required|integer|min:0|max:100000',
-            'reason'         => 'required|string|in:restock,adjustment,damage_spoilage,return',
-            'notes'          => 'nullable|string|max:255',
+            'reason' => 'required|string|in:restock,adjustment,damage_spoilage,return',
+            'notes' => 'nullable|string|max:255',
         ]);
 
-        $this->inventoryService->setStockCount(
-            $item->id,
-            (int) $validated['stock_quantity'],
-            $validated['reason'],
-            $validated['notes'],
-            Auth::id()
-        );
+        app(FinancialPostingService::class)->execute($request, 'approval.stock', $item->id, $validated, function () use ($request, $item, $validated): array {
+            $approval = app(ApprovalService::class)->request($request, 'stock_adjustment', $item->id, $validated, $validated['notes'] ?? $validated['reason']);
 
-        return back()->with('success', "Stock for {$item->name} updated to {$validated['stock_quantity']} units.");
+            return ['approval_id' => $approval->id];
+        });
+
+        return redirect()->route('approvals.index')->with('success', 'Stock change awaits independent review.');
     }
 
     /**
@@ -92,16 +92,20 @@ class InventoryController extends Controller
         $validated = $request->validate([
             'counts' => 'required|array',
             'counts.*' => 'nullable|integer|min:0|max:100000',
-            'notes'  => 'nullable|string|max:255',
+            'notes' => 'nullable|string|max:255',
         ]);
 
-        $updatedCount = $this->inventoryService->batchRecount(
-            $validated['counts'],
-            Auth::id(),
-            $validated['notes'] ?? 'Cashier Shift Recount'
-        );
+        $ids = array_keys(array_filter($validated['counts'], fn ($count): bool => $count !== null));
+        if ($ids === []) {
+            throw ValidationException::withMessages(['counts' => 'Enter at least one count.']);
+        }
+        app(FinancialPostingService::class)->execute($request, 'approval.recount', (int) $ids[0], $validated, function () use ($request, $validated, $ids): array {
+            $approval = app(ApprovalService::class)->request($request, 'stock_recount', (int) $ids[0], $validated, $validated['notes'] ?? 'Cashier shift recount');
 
-        return back()->with('success', "Batch recount completed: {$updatedCount} items audited and updated.");
+            return ['approval_id' => $approval->id];
+        });
+
+        return redirect()->route('approvals.index')->with('success', 'Recount awaits independent review.');
     }
 
     /**
@@ -110,10 +114,10 @@ class InventoryController extends Controller
     public function exportCsv(): Response
     {
         $csv = $this->inventoryService->generateMovementCsv();
-        $filename = 'sedona_inventory_ledger_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'sedona_inventory_ledger_'.now()->format('Ymd_His').'.csv';
 
         return response($csv, 200, [
-            'Content-Type'        => 'text/csv',
+            'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }

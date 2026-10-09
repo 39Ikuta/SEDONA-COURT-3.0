@@ -7,7 +7,11 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PosItem;
 use App\Models\Room;
-use App\Models\Shift;
+use App\Services\AuditService;
+use App\Services\BillingService;
+use App\Services\FinancialPostingService;
+use App\Services\InventoryService;
+use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,13 +20,15 @@ use Illuminate\View\View;
 
 class PosController extends Controller
 {
+    public function __construct(private FinancialPostingService $posting, private AuditService $audit) {}
+
     public function index(Request $request): View
     {
         $selectedCategory = $request->query('category', 'all');
 
-        $categories = PosItem::select('category')->distinct()->pluck('category');
+        $categories = PosItem::notRetired()->select('category')->distinct()->pluck('category');
 
-        $query = PosItem::where('is_available', true)->orderBy('sort_order');
+        $query = PosItem::available();
         if ($selectedCategory !== 'all') {
             $query->where('category', $selectedCategory);
         }
@@ -31,13 +37,13 @@ class PosController extends Controller
         $occupiedRooms = Room::with('activeFolio.guest')
             ->where(function ($q) {
                 $q->where('status', 'occupied')
-                  ->orWhere('is_staff_quarters', true);
+                    ->orWhere('is_staff_quarters', true);
             })
             ->orderBy('number')
             ->get();
 
         foreach ($occupiedRooms as $occ) {
-            if ($occ->is_staff_quarters && !$occ->activeFolio) {
+            if ($occ->is_staff_quarters && ! $occ->activeFolio) {
                 $occ->getOrCreateStaffFolio();
                 $occ->load('activeFolio.guest');
             }
@@ -58,71 +64,61 @@ class PosController extends Controller
     {
         $validated = $request->validate([
             'pos_item_id' => 'required|exists:pos_items,id',
-            'quantity' => 'required|integer|min:1',
+            'quantity' => 'required|integer|min:1|max:65535',
         ]);
 
-        $posItem = PosItem::findOrFail($validated['pos_item_id']);
         $qty = (int) $validated['quantity'];
+        try {
+            $result = $this->posting->execute($request, 'pos.addon', $folio->id, $validated, function () use ($folio, $validated, $qty, $request): array {
+                $room = Room::whereKey($folio->room_id)->lockForUpdate()->firstOrFail();
+                $lockedFolio = Folio::whereKey($folio->id)->lockForUpdate()->firstOrFail();
+                if (! $lockedFolio->isActive() || $lockedFolio->room_id !== $room->id) {
+                    throw new DomainException('Add-ons require an active folio in the selected room. Refresh the dashboard.');
+                }
+                if (! $room->is_staff_quarters && ! $room->isOccupied()) {
+                    throw new DomainException('Add-ons require an occupied guest room.');
+                }
+                $posItem = app(InventoryService::class)->consumeStockForOrder(
+                    [(int) $validated['pos_item_id'] => $qty],
+                    'quick_addon',
+                    'FOLIO-'.$lockedFolio->id,
+                    Auth::id(),
+                    "Room {$room->number} Folio Add-On"
+                )->first();
+                $subtotal = $posItem->price * $qty;
+                $order = Order::create([
+                    'user_id' => Auth::id(),
+                    'folio_id' => $lockedFolio->id,
+                    'room_id' => $room->id,
+                    'transaction_id' => 'ORD-'.strtoupper(uniqid()),
+                    'type' => 'room_charge',
+                    'status' => 'delivered',
+                    'payment_method' => 'charge_to_room',
+                    'total' => $subtotal,
+                    'dispatched_at' => now(),
+                ]);
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'pos_item_id' => $posItem->id,
+                    'item_name' => $posItem->name,
+                    'unit_price' => $posItem->price,
+                    'quantity' => $qty,
+                    'subtotal' => $subtotal,
+                ]);
+                $items = $lockedFolio->pos_items ?? [];
+                $items[] = ['name' => $posItem->name, 'qty' => $qty, 'price' => (float) $posItem->price, 'subtotal' => (float) $subtotal];
+                $lockedFolio->pos_items = $items;
+                $lockedFolio->recalculate();
+                $this->audit->record($request, 'pos.room_charge', $order, ['folio_id' => $lockedFolio->id, 'total' => $subtotal, 'operation_key' => $request->input('operation_key')]);
 
-        if ($posItem->is_tracked && $posItem->stock_quantity < $qty) {
-            return back()->with('error', "Insufficient stock for {$posItem->name} (Only {$posItem->stock_quantity} available).");
+                return ['order_id' => $order->id, 'name' => $posItem->name, 'room_number' => $room->number];
+            });
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
         }
-
-        if ($posItem->requiresEgg()) {
-            $egg = PosItem::getMasterEggItem();
-            $eggStock = $egg ? (int) $egg->stock_quantity : 0;
-            $requiredEggs = $posItem->getEggRequirementQty() * $qty;
-            if ($egg && $egg->is_tracked && $eggStock < $requiredEggs) {
-                return back()->with('error', "Insufficient egg stock in pantry (Dish requires {$requiredEggs} eggs, but only {$eggStock} available).");
-            }
-        }
-
-        $subtotal = $posItem->price * $qty;
-
-        $items = $folio->pos_items ?? [];
-        $items[] = [
-            'name' => $posItem->name,
-            'qty' => $qty,
-            'price' => (float) $posItem->price,
-            'subtotal' => (float) $subtotal,
-        ];
-
-        $folio->pos_items = $items;
-        $folio->recalculate();
-
-        // Create Order record for tracking
-        $order = Order::create([
-            'user_id' => Auth::id() ?? 1,
-            'folio_id' => $folio->id,
-            'room_id' => $folio->room_id,
-            'transaction_id' => 'ORD-' . strtoupper(uniqid()),
-            'type' => 'room_charge',
-            'status' => 'delivered',
-            'payment_method' => 'charge_to_room',
-            'total' => $subtotal,
-            'dispatched_at' => now(),
-        ]);
-
-        OrderItem::create([
-            'order_id' => $order->id,
-            'pos_item_id' => $posItem->id,
-            'item_name' => $posItem->name,
-            'unit_price' => $posItem->price,
-            'quantity' => $qty,
-            'subtotal' => $subtotal,
-        ]);
-
-        app(\App\Services\InventoryService::class)->atomicDecrementStock(
-            $posItem->id,
-            $qty,
-            'quick_addon',
-            'FOLIO-' . $folio->id,
-            Auth::id(),
-            "Room {$folio->room->number} Folio Add-On"
-        );
 
         return redirect()->route('dashboard')
-            ->with('success', "Added {$qty}x {$posItem->name} to Room {$folio->room->number} Folio.");
+            ->with('success', "Added {$qty}x {$result['name']} to Room {$result['room_number']} Folio.");
     }
 
     /**
@@ -142,114 +138,139 @@ class PosController extends Controller
             'room_id' => 'required_if:order_type,room_charge|nullable|exists:rooms,id',
             'items' => 'required|array|min:1',
             'items.*.id' => 'required|exists:pos_items,id',
-            'items.*.qty' => 'required|integer|min:1',
+            'items.*.qty' => 'required|integer|min:1|max:65535',
             'payment_method' => 'nullable|in:cash,gcash',
+            'cash_tendered' => 'nullable|numeric|min:0|max:1000000',
+            'gcash_amount' => 'nullable|numeric|min:0|max:1000000',
+            'gcash_reference' => 'nullable|string|max:50',
+            'special_instructions' => 'nullable|string|max:1000',
+            'shift_override_reason' => 'nullable|string|max:500',
         ]);
 
-        DB::beginTransaction();
+        $quantities = [];
+        foreach ($validated['items'] as $item) {
+            $id = (int) $item['id'];
+            $quantities[$id] = ($quantities[$id] ?? 0) + (int) $item['qty'];
+        }
         try {
-            $folio = null;
-            $room = null;
+            $result = $this->posting->execute($request, 'pos.order', null, $validated, function () use ($validated, $quantities, $request): array {
+                $folio = null;
+                $room = null;
 
-            if ($validated['order_type'] === 'room_charge') {
-                $room = Room::findOrFail($validated['room_id']);
-                $folio = $room->is_staff_quarters ? $room->getOrCreateStaffFolio() : $room->activeFolio;
-            }
-
-            // Pre-validation pass: Check individual item stocks and aggregate egg requirements
-            $eggItem = PosItem::getMasterEggItem();
-            $availableEggs = ($eggItem && $eggItem->is_tracked) ? (int) $eggItem->stock_quantity : PHP_INT_MAX;
-            $requiredEggs = 0;
-
-            foreach ($validated['items'] as $itemData) {
-                if (($itemData['qty'] ?? 0) <= 0) continue;
-                $checkItem = PosItem::findOrFail($itemData['id']);
-                $checkQty = (int) $itemData['qty'];
-
-                if ($checkItem->is_tracked && $checkItem->stock_quantity < $checkQty) {
-                    throw new \Exception("Insufficient stock for {$checkItem->name} (Only {$checkItem->stock_quantity} available, ordered {$checkQty}).");
+                if ($validated['order_type'] === 'room_charge') {
+                    $room = Room::whereKey($validated['room_id'])->lockForUpdate()->firstOrFail();
+                    if ($room->is_staff_quarters) {
+                        $room->getOrCreateStaffFolio();
+                    } elseif (! $room->isOccupied()) {
+                        throw new DomainException('Room charges require an occupied room with an active folio.');
+                    }
+                    $folio = Folio::where('room_id', $room->id)->where('status', 'active')->latest('id')->lockForUpdate()->first();
+                    if (! $folio) {
+                        throw new DomainException('Room charges require an active folio. Refresh the room selection.');
+                    }
                 }
-
-                if ($checkItem->isEggItem()) {
-                    $requiredEggs += $checkQty;
-                } elseif ($checkItem->requiresEgg()) {
-                    $requiredEggs += $checkItem->getEggRequirementQty() * $checkQty;
-                }
-            }
-
-            if ($eggItem && $eggItem->is_tracked && $requiredEggs > $availableEggs) {
-                throw new \Exception("Insufficient egg stock in kitchen pantry (Order requires {$requiredEggs} eggs, but only {$availableEggs} available).");
-            }
-
-            $orderNumber = 'ORD-' . strtoupper(uniqid());
-
-            $order = Order::create([
-                'user_id' => Auth::id() ?? 1,
-                'folio_id' => $folio?->id,
-                'room_id' => $room?->id,
-                'transaction_id' => $orderNumber,
-                'type' => $validated['order_type'],
-                'status' => 'new',
-                'payment_method' => $validated['order_type'] === 'room_charge' ? 'charge_to_room' : ($validated['payment_method'] ?? 'cash'),
-                'total' => 0,
-            ]);
-
-            $totalOrderAmount = 0;
-            $folioItemsPayload = $folio ? ($folio->pos_items ?? []) : [];
-            $inventoryService = app(\App\Services\InventoryService::class);
-
-            foreach ($validated['items'] as $itemData) {
-                if (($itemData['qty'] ?? 0) <= 0) continue;
-
-                $posItem = PosItem::findOrFail($itemData['id']);
-                $qty = (int) $itemData['qty'];
-                $subtotal = $posItem->price * $qty;
-                $totalOrderAmount += $subtotal;
-
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'pos_item_id' => $posItem->id,
-                    'item_name' => $posItem->name,
-                    'unit_price' => $posItem->price,
-                    'quantity' => $qty,
-                    'subtotal' => $subtotal,
-                ]);
-
-                $inventoryService->atomicDecrementStock(
-                    $posItem->id,
-                    $qty,
-                    $validated['order_type'] === 'room_charge' ? 'room_charge' : 'walkin_pos',
+                $orderNumber = 'ORD-'.strtoupper(uniqid());
+                $items = app(InventoryService::class)->consumeStockForOrder(
+                    $quantities,
+                    $validated['order_type'],
                     $orderNumber,
                     Auth::id(),
-                    $folio ? "Charged to Room {$room->number}" : "Walk-in POS Order"
+                    $folio ? "Charged to Room {$room->number}" : 'Walk-in POS Order'
                 );
+                $totalOrderAmount = (float) $items->sum(fn (PosItem $item) => $item->price * $quantities[$item->id]);
+                $settlement = $this->resolveSettlement($validated, $totalOrderAmount);
+                $order = Order::create([
+                    'user_id' => Auth::id(),
+                    'folio_id' => $folio?->id,
+                    'room_id' => $room?->id,
+                    'transaction_id' => $orderNumber,
+                    'type' => $validated['order_type'],
+                    'status' => 'new',
+                    ...$settlement,
+                    'special_instructions' => $validated['special_instructions'] ?? null,
+                    'total' => $totalOrderAmount,
+                ]);
+
+                $folioItemsPayload = $folio ? ($folio->pos_items ?? []) : [];
+                foreach ($items as $posItem) {
+                    $qty = $quantities[$posItem->id];
+                    $subtotal = $posItem->price * $qty;
+
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'pos_item_id' => $posItem->id,
+                        'item_name' => $posItem->name,
+                        'unit_price' => $posItem->price,
+                        'quantity' => $qty,
+                        'subtotal' => $subtotal,
+                    ]);
+
+                    if ($folio) {
+                        $folioItemsPayload[] = [
+                            'name' => $posItem->name,
+                            'qty' => $qty,
+                            'price' => (float) $posItem->price,
+                            'subtotal' => (float) $subtotal,
+                        ];
+                    }
+                }
 
                 if ($folio) {
-                    $folioItemsPayload[] = [
-                        'name' => $posItem->name,
-                        'qty' => $qty,
-                        'price' => (float) $posItem->price,
-                        'subtotal' => (float) $subtotal,
-                    ];
+                    $folio->pos_items = $folioItemsPayload;
+                    $folio->recalculate();
+                    $this->audit->record($request, 'pos.room_charge', $order, ['folio_id' => $folio->id, 'total' => $order->total, 'operation_key' => $request->input('operation_key')]);
+                } else {
+                    $entry = $this->posting->post($request, $order, 'pos_sale', BillingService::cents($order->cash_tendered) - BillingService::cents($order->change_due), BillingService::cents($order->gcash_amount), $order->gcash_reference);
+                    $order->update(['shift_id' => $entry->shift_id]);
                 }
-            }
 
-            $order->total = $totalOrderAmount;
-            $order->save();
-
-            if ($folio) {
-                $folio->pos_items = $folioItemsPayload;
-                $folio->recalculate();
-            }
-
-            DB::commit();
+                return ['order_id' => $order->id, 'total' => $totalOrderAmount];
+            });
 
             return redirect()->route('pos.index')
-                ->with('success', "Order placed successfully! (Total: ₱" . number_format($totalOrderAmount, 2) . ")");
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Order failed: ' . $e->getMessage());
+                ->with('success', 'Order placed successfully! (Total: ₱'.number_format($result['total'], 2).')');
+        } catch (DomainException $e) {
+            return back()->with('error', 'Order failed: '.$e->getMessage());
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{payment_method: string, cash_tendered?: float, gcash_amount?: float, gcash_reference?: string, change_due?: float}
+     */
+    private function resolveSettlement(array $validated, float $total): array
+    {
+        if ($validated['order_type'] === 'room_charge') {
+            return ['payment_method' => 'charge_to_room'];
+        }
+
+        $method = $validated['payment_method'] ?? null;
+        $totalCents = (int) round($total * 100);
+        if ($method === 'cash') {
+            if (! isset($validated['cash_tendered'])) {
+                throw new DomainException('Enter the actual cash tendered for this walk-in sale.');
+            }
+            $cashCents = (int) round((float) $validated['cash_tendered'] * 100);
+            if ($cashCents < $totalCents) {
+                throw new DomainException('Cash tendered must cover the order total.');
+            }
+
+            return ['payment_method' => 'cash', 'cash_tendered' => $cashCents / 100, 'change_due' => ($cashCents - $totalCents) / 100];
+        }
+
+        if ($method === 'gcash') {
+            if (! isset($validated['gcash_amount']) || (int) round((float) $validated['gcash_amount'] * 100) !== $totalCents) {
+                throw new DomainException('GCash amount must equal the order total.');
+            }
+            $reference = trim($validated['gcash_reference'] ?? '');
+            if ($reference === '') {
+                throw new DomainException('Enter the GCash transaction reference.');
+            }
+
+            return ['payment_method' => 'gcash', 'gcash_amount' => $totalCents / 100, 'gcash_reference' => $reference, 'change_due' => 0.0];
+        }
+
+        throw new DomainException('Choose a payment method for the walk-in sale.');
     }
 
     public function updateStatus(Request $request, Order $order): RedirectResponse
@@ -258,13 +279,27 @@ class PosController extends Controller
             'status' => 'required|in:new,preparing,ready,delivered',
         ]);
 
-        $order->status = $validated['status'];
-        if ($validated['status'] === 'delivered') {
-            $order->dispatched_at = now();
+        try {
+            DB::transaction(function () use ($order, $validated) {
+                $lockedOrder = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+                if ($lockedOrder->status === $validated['status']) {
+                    return;
+                }
+                $nextStatus = ['new' => 'preparing', 'preparing' => 'ready', 'ready' => 'delivered'];
+                if (($nextStatus[$lockedOrder->status] ?? null) !== $validated['status']) {
+                    throw new DomainException('Order status must advance through preparing, ready, and delivered.');
+                }
+                $lockedOrder->status = $validated['status'];
+                if ($lockedOrder->status === 'delivered') {
+                    $lockedOrder->dispatched_at = now();
+                }
+                $lockedOrder->save();
+            });
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
         }
-        $order->save();
 
-        return back()->with('success', "Order status updated to " . strtoupper($order->status) . ".");
+        return back()->with('success', 'Order status updated to '.strtoupper($validated['status']).'.');
     }
 
     /**
@@ -298,11 +333,11 @@ class PosController extends Controller
             ->get();
 
         $groupedByRoom = $pendingOrders->groupBy(function ($order) {
-            return $order->room ? 'Room ' . $order->room->number : 'Walk-In';
+            return $order->room ? 'Room '.$order->room->number : 'Walk-In';
         });
 
         $totalRoomsInQueue = $groupedByRoom->count();
-        $totalItemsPending = $pendingOrders->sum(fn($o) => $o->items->sum('quantity'));
+        $totalItemsPending = $pendingOrders->sum(fn ($o) => $o->items->sum('quantity'));
         $newCount = $pendingOrders->where('status', 'new')->count();
         $prepCount = $pendingOrders->where('status', 'preparing')->count();
         $readyCount = $pendingOrders->where('status', 'ready')->count();
@@ -310,4 +345,3 @@ class PosController extends Controller
         return view('kitchen.tv', compact('pendingOrders', 'groupedByRoom', 'totalRoomsInQueue', 'totalItemsPending', 'newCount', 'prepCount', 'readyCount'));
     }
 }
-

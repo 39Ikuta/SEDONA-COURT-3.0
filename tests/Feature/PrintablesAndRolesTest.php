@@ -4,9 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Folio;
 use App\Models\Guest;
-use App\Models\Order;
-use App\Models\OrderItem;
-use App\Models\PosItem;
 use App\Models\Room;
 use App\Models\Shift;
 use App\Models\User;
@@ -89,7 +86,7 @@ class PrintablesAndRolesTest extends TestCase
         $response = $this->actingAs($cashier)->get(route('folios.deposit_refund', $folio));
         $response->assertStatus(200);
         $response->assertSee('SECURITY DEPOSIT REFUND / RESOLUTION');
-        $response->assertSee('NET CASH REFUNDED');
+        $response->assertSee('TOTAL DEPOSIT REFUNDED');
         $response->assertSee('500.00');
     }
 

@@ -8,6 +8,8 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class BookingController extends Controller
@@ -46,31 +48,36 @@ class BookingController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
-        $room = Room::findOrFail($validated['room_id']);
-        $arrival = Carbon::parse($validated['arrival_at']);
-        $hours = $room->getTierHours($validated['rate_tier']);
-        $departure = (clone $arrival)->addHours($hours);
+        DB::transaction(function () use ($validated): void {
+            $room = Room::whereKey($validated['room_id'])->lockForUpdate()->firstOrFail();
+            if ($room->is_staff_quarters || $room->status === 'maintenance') {
+                throw ValidationException::withMessages(['room_id' => 'This room cannot be reserved.']);
+            }
+            $arrival = Carbon::parse($validated['arrival_at']);
+            $hours = $room->getTierHours($validated['rate_tier']);
+            $departure = (clone $arrival)->addHours($hours);
 
-        // Check for conflicting reservations on same room
-        if (Booking::hasConflict($room->id, $arrival->toDateTimeString(), $departure->toDateTimeString())) {
-            return back()->with('error', "Room {$room->number} is already reserved for the selected date/time.")->withInput();
-        }
+            // Check for conflicting reservations on same room
+            if (Booking::hasConflict($room->id, $arrival->toDateTimeString(), $departure->toDateTimeString())) {
+                throw ValidationException::withMessages(['arrival_at' => 'This room is already reserved for the selected date/time.']);
+            }
 
-        Booking::create([
-            'room_id' => $room->id,
-            'user_id' => Auth::id() ?? 1,
-            'guest_name' => $validated['guest_name'],
-            'guest_contact' => $validated['guest_contact'] ?? null,
-            'headcount' => $validated['headcount'],
-            'rate_tier' => $validated['rate_tier'],
-            'arrival_at' => $arrival,
-            'departure_at' => $departure,
-            'status' => 'scheduled',
-            'notes' => $validated['notes'] ?? null,
-        ]);
+            Booking::create([
+                'room_id' => $room->id,
+                'user_id' => Auth::id() ?? 1,
+                'guest_name' => $validated['guest_name'],
+                'guest_contact' => $validated['guest_contact'] ?? null,
+                'headcount' => $validated['headcount'],
+                'rate_tier' => $validated['rate_tier'],
+                'arrival_at' => $arrival,
+                'departure_at' => $departure,
+                'status' => 'scheduled',
+                'notes' => $validated['notes'] ?? null,
+            ]);
+        });
 
         return redirect()->route('bookings.index')
-            ->with('success', "Reservation created for {$validated['guest_name']} in Room {$room->number} ({$arrival->format('M d, Y h:i A')}).");
+            ->with('success', 'Reservation created.');
     }
 
     /**
@@ -78,7 +85,14 @@ class BookingController extends Controller
      */
     public function cancel(Booking $booking): RedirectResponse
     {
-        $booking->update(['status' => 'cancelled']);
+        DB::transaction(function () use ($booking): void {
+            Room::whereKey($booking->room_id)->lockForUpdate()->firstOrFail();
+            $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'scheduled') {
+                throw ValidationException::withMessages(['booking' => 'Only a scheduled reservation can be cancelled.']);
+            }
+            $locked->update(['status' => 'cancelled']);
+        });
 
         return back()->with('info', "Booking #{$booking->id} for {$booking->guest_name} has been cancelled.");
     }

@@ -85,13 +85,16 @@
                             </td>
                             <td class="font-mono text-slate-600 text-[11px]">{{ $exp->receipt_reference ?? '—' }}</td>
                             <td>{{ $exp->user->name ?? 'Admin' }}</td>
-                            <td class="font-mono font-bold text-rose-700 text-right pr-3">₱{{ number_format($exp->amount, 2) }}</td>
+                            <td class="font-mono font-bold text-rose-700 text-right pr-3">₱{{ number_format($exp->amount, 2) }}<div class="text-xs font-normal">{{ str_replace('_', ' ', $exp->status) }}@if($exp->reversal_of_id) · reverses #{{ $exp->reversal_of_id }}@endif</div></td>
                             <td>
-                                <form method="POST" action="{{ route('admin.accounting.expenses.delete', $exp->id) }}" onsubmit="return confirm('Void and delete this expense record?')">
+                                <form method="POST" action="{{ route('admin.accounting.expenses.delete', $exp->id) }}" >
                                     @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
                                     @method('DELETE')
+                                    <input name="reason" required maxlength="1000" placeholder="Reason for cash return" class="form-control-hms">
+                                    <input name="evidence_reference" required maxlength="255" placeholder="Return evidence reference" class="form-control-hms">
                                     <button type="submit" class="px-2 py-0.5 bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-[10px] rounded border border-rose-300">
-                                        Void
+                                        Request cash return
                                     </button>
                                 </form>
                             </td>
@@ -123,11 +126,13 @@
 
         <form method="POST" action="{{ route('admin.accounting.expenses.store') }}" class="space-y-3 text-xs">
             @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+            @include('shifts.override-reason')
 
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block font-bold text-slate-700 mb-1">Expense Date:</label>
-                    <input type="date" name="expense_date" required value="{{ date('Y-m-d') }}" class="form-control-hms font-mono">
+                    <input type="date" name="expense_date" required value="{{ app(\App\Services\BusinessDayService::class)->date() }}" class="form-control-hms font-mono">
                 </div>
                 <div>
                     <label class="block font-bold text-slate-700 mb-1">Payment Source:</label>

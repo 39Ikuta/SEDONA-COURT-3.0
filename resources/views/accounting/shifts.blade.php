@@ -41,6 +41,7 @@
                         <th>KITCHEN REVENUE</th>
                         <th>SYSTEM GROSS</th>
                         <th>COUNTED CASH</th>
+                        <th>EXPECTED CASH</th>
                         <th>VARIANCE STATUS</th>
                         <th>HANDOFF / AUDIT NOTES</th>
                     </tr>
@@ -48,7 +49,7 @@
                 <tbody>
                     @forelse($shifts as $sh)
                         @php
-                            $variance = $sh->cash_total - $sh->gross_revenue;
+                            $variance = (float) $sh->cash_variance;
                         @endphp
                         <tr>
                             <td class="font-mono">{{ $sh->shift_date->format('m/d/Y') }}</td>
@@ -58,9 +59,12 @@
                             <td class="font-mono">₱{{ number_format($sh->room_revenue, 2) }}</td>
                             <td class="font-mono">₱{{ number_format($sh->kitchen_revenue, 2) }}</td>
                             <td class="font-mono font-bold">₱{{ number_format($sh->gross_revenue, 2) }}</td>
-                            <td class="font-mono font-bold text-slate-900">₱{{ number_format($sh->cash_total, 2) }}</td>
+                            <td class="font-mono font-bold text-slate-900">{{ $sh->closed_at ? '₱'.number_format($sh->cash_total, 2) : 'Pending count' }}</td>
+                            <td class="font-mono">{{ $sh->closed_at ? '₱'.number_format($sh->expected_cash, 2) : 'Pending close' }}</td>
                             <td>
-                                @if($variance > 0)
+                                @if(!$sh->closed_at)
+                                    <span class="text-slate-500">In progress</span>
+                                @elseif($variance > 0)
                                     <span class="px-2 py-0.5 bg-blue-100 text-blue-900 font-bold text-[10px] font-mono rounded">
                                         +₱{{ number_format($variance, 2) }} (Over)
                                     </span>
@@ -80,7 +84,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="py-8 text-center text-slate-400">No shift turnover logs recorded.</td>
+                            <td colspan="11" class="py-8 text-center text-slate-400">No shift turnover logs recorded.</td>
                         </tr>
                     @endforelse
                 </tbody>
