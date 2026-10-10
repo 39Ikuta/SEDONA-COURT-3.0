@@ -1,3 +1,9 @@
+## Sedona Court operator tutorial
+
+Start with the [cashier and owner user guide](USER_GUIDE_CASHIER_OWNER.md), or download the [printable PDF](USER_GUIDE_CASHIER_OWNER.pdf). It includes daily workflows, payment examples, drawer handovers, owner reviews, troubleshooting, and desk checklists.
+
+Cashiers can start at Lesson 3. Owners can start at Lesson 16. Use the practice walkthrough on a separate training installation.
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
