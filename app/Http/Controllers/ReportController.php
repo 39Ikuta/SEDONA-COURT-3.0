@@ -34,7 +34,7 @@ class ReportController extends Controller
         $pastShifts = $custody->visibleShifts($request->user())->whereNotNull('closed_at')->with(['openedBy', 'closedBy'])->latest('created_at')->take(10)->get();
         $rooms = Room::withCount(['folios' => function ($query) use ($weekStart): void {
             $query->whereBetween('checked_in_at', [$weekStart, now()]);
-        }])->orderBy('number')->get();
+        }])->orderByNumber()->get();
 
         return view('reports.index', compact('todayRevenue', 'weekRevenue', 'totalDiscountsGiven',
             'totalFoliosThisWeek', 'roomRevenueWeek', 'overtimeRevenueWeek', 'posRevenueWeek',

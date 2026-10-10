@@ -10,6 +10,7 @@ use App\Models\PaymentEntry;
 use App\Models\PosItem;
 use App\Models\Room;
 use App\Models\Shift;
+use App\Services\DiscountService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -45,7 +46,7 @@ class DashboardController extends Controller
             $staffRoom->getOrCreateStaffFolio();
         }
 
-        $rooms = $query->orderBy('number')->get();
+        $rooms = $query->orderByNumber()->get();
 
         // Overall stats (3-state room lifecycle: available, occupied, maintenance)
         $allRooms = Room::all();
@@ -61,7 +62,7 @@ class DashboardController extends Controller
         // Available rooms for fast transfer modal
         $availableRoomsList = Room::where('status', 'available')
             ->where('is_staff_quarters', false)
-            ->orderBy('number')
+            ->orderByNumber()
             ->get();
 
         // Pending force checkout requests
@@ -73,8 +74,7 @@ class DashboardController extends Controller
         // Active folios
         $activeFolios = Folio::with(['room', 'guest', 'orders'])
             ->where('status', 'active')
-            ->orderBy('expected_checkout_at')
-            ->get();
+            ->get()->sortBy(fn (Folio $folio): int => (int) $folio->room->number)->values();
 
         // Upcoming bookings for today/tomorrow
         $upcomingBookings = Booking::with('room')
@@ -91,7 +91,7 @@ class DashboardController extends Controller
         // ── Executive apartment board (owner/admin/manager) ──────────
         // Full room collection with folio relations; counts always computed
         // from the unfiltered set so sidebar numbers stay truthful.
-        $boardAll = Room::with(['activeFolio.guest'])->orderBy('number')->get();
+        $boardAll = Room::with(['activeFolio.guest'])->orderByNumber()->get();
         $boardTotal = $boardAll->count();
         $boardOcc = $boardAll->where('status', 'occupied')->count();
         $boardAvail = $boardAll->where('status', 'available')->where('is_staff_quarters', false)->count();
@@ -189,9 +189,11 @@ class DashboardController extends Controller
 
         // Owner/admin/manager get the apartment board; cashiers keep the tables.
         $boardView = auth()->check() && auth()->user()->hasAnyRole(['owner', 'admin', 'manager']);
+        $folioDiscountOptions = $activeFolios->mapWithKeys(fn (Folio $folio): array => [$folio->id => DiscountService::getOptionsForFolio($folio)])->all();
 
         return view($boardView ? 'dashboard.board' : 'dashboard.index', compact(
             'rooms',
+            'folioDiscountOptions',
             'totalRooms',
             'availableRooms',
             'occupiedRooms',
@@ -243,7 +245,7 @@ class DashboardController extends Controller
      */
     public function kioskView(): View
     {
-        $rooms = Room::orderBy('number')->get();
+        $rooms = Room::orderByNumber()->get();
         $totalRooms = $rooms->count();
         $availableRooms = $rooms->where('status', 'available')->count();
         $occupiedRooms = $rooms->where('status', 'occupied')->count();

@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\CheckInController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FinanceControlController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LoginHistoryController;
@@ -129,6 +130,8 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
     // ═══════════════════════════════════════════════════════════════════════
     Route::middleware(['role:admin|owner'])->prefix('admin')->name('admin.')->group(function () {
         Route::get('/login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
+        Route::get('/discounts', [DiscountController::class, 'index'])->name('discounts.index');
+        Route::post('/discounts', [DiscountController::class, 'update'])->name('discounts.update');
 
         Route::prefix('finance')->name('finance.')->group(function () {
             Route::get('/', [FinanceControlController::class, 'index'])->name('index');

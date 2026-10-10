@@ -35,6 +35,9 @@ class ApprovalService
             'statement_void' => $request->user()->can('review-financial'),
             default => $request->user()->can('manage_folios'),
         }, 403);
+        if ($kind === 'folio_override' && isset($data['discount_override_amount'])) {
+            abort_unless($request->user()->hasAnyRole(['admin', 'owner']), 403, 'Only an admin or owner can request a custom discount amount.');
+        }
 
         return DB::transaction(function () use ($request, $kind, $sourceId, $data, $reason, $evidence): ApprovalRequest {
             $source = $this->source($kind, $sourceId);
@@ -101,7 +104,11 @@ class ApprovalService
                     $source->expected_checkout_at = $source->checked_in_at->copy()->addHours($source->room->getTierHours($source->rate_tier) + $source->extra_hours);
                 }
                 if (isset($data['discount_type'])) {
-                    $source->senior_pwd_discount = false;
+                    $source->senior_pwd_discount = in_array($data['discount_type'], ['SENIOR', 'PWD'], true);
+                    $source->discount_override_amount = $data['discount_override_amount'] ?? null;
+                    if ($data['discount_type'] === 'NONE') {
+                        $source->discount_id_ref = null;
+                    }
                 }
                 $source->recalculate();
             } elseif ($approval->kind === 'deposit_refund') {
@@ -157,7 +164,9 @@ class ApprovalService
         $money = ['amount' => 'required|numeric|min:0.01|max:500000|decimal:0,2', 'payment_method' => 'required|in:cash,gcash', 'gcash_reference' => 'required_if:payment_method,gcash|nullable|string|max:50'];
         $rules = match ($kind) {
             'deposit_refund', 'pos_refund' => $money,
-            'folio_override' => ['room_charge' => 'sometimes|numeric|min:0|max:500000|decimal:0,2', 'checked_in_at' => 'sometimes|date|before_or_equal:now', 'discount_type' => 'sometimes|in:DC,NONE'],
+            'folio_override' => ['room_charge' => 'sometimes|numeric|min:0|max:500000|decimal:0,2', 'checked_in_at' => 'sometimes|date|before_or_equal:now',
+                'discount_type' => 'sometimes|in:DC,NONE,SENIOR,PWD', 'discount_id_ref' => 'sometimes|string|max:100',
+                'discount_override_amount' => 'sometimes|numeric|min:0|max:500000|decimal:0,2'],
             'stock_adjustment' => ['stock_quantity' => 'required|integer|min:0|max:100000', 'reason' => 'required|in:restock,adjustment,damage_spoilage,return'],
             'stock_recount' => ['counts' => 'required|array|min:1', 'counts.*' => 'nullable|integer|min:0|max:100000'],
             'cash_drop', 'float_addition', 'bank_deposit' => ['amount' => 'required|numeric|min:0.01|max:500000|decimal:0,2', 'destination' => $kind === 'bank_deposit' ? 'required|in:bank' : 'required|in:safe,owner_funds', 'reference' => 'required|string|max:100'],
@@ -208,6 +217,19 @@ class ApprovalService
                 }
             } else {
                 abort_unless($source->isActive(), 409, 'Settled folios cannot be changed.');
+                if ($kind === 'folio_override') {
+                    $discountType = DiscountService::normalizeDiscountType($data['discount_type'] ?? $source->discount_type);
+                    if (! $discountType && ! isset($data['discount_type']) && $source->senior_pwd_discount) {
+                        $discountType = 'SENIOR';
+                    }
+                    if (in_array($discountType, ['SENIOR', 'PWD'], true) && trim($data['discount_id_ref'] ?? $source->discount_id_ref ?? '') === '') {
+                        throw ValidationException::withMessages(['discount_id_ref' => 'Record the statutory discount ID reference.']);
+                    }
+                    if (isset($data['discount_override_amount']) && (! $discountType
+                        || BillingService::cents($data['discount_override_amount']) > BillingService::cents($data['room_charge'] ?? $source->room_charge))) {
+                        throw ValidationException::withMessages(['discount_override_amount' => 'Choose a discount type and an amount no greater than the room charge.']);
+                    }
+                }
             }
         }
         if ($kind === 'statement_void') {
@@ -294,7 +316,7 @@ class ApprovalService
             return hash('sha256', json_encode($source->only(['status', 'gross_total', 'discount_amount', 'discount_type', 'checked_out_at']), JSON_THROW_ON_ERROR));
         }
         $state = match (true) {
-            $source instanceof Folio => $source->only(['room_id', 'status', 'room_charge', 'checked_in_at', 'discount_type', 'security_deposit', 'deposit_refunded_amount', 'deposit_status', 'pos_total', 'extra_hours', 'surcharge_total']),
+            $source instanceof Folio => $source->only(['room_id', 'status', 'room_charge', 'checked_in_at', 'discount_type', 'discount_id_ref', 'discount_schedule', 'discount_override_amount', 'security_deposit', 'deposit_refunded_amount', 'deposit_status', 'pos_total', 'extra_hours', 'surcharge_total']),
             $source instanceof Expense => $source->only(['amount', 'status', 'payment_source', 'reversal_of_id']),
             $source instanceof Shift => $source->only(['closed_at', 'is_frozen', 'opened_by', 'handover_status', 'accepted_cash', 'incoming_user_id', 'cash_total', 'cash_variance']),
             $source instanceof PaymentEntry => $source->toArray(),

@@ -76,7 +76,7 @@ class RoomController extends Controller
     {
         abort_unless(auth()->user()->hasAnyRole(['admin', 'owner']), 403, 'Unauthorized. Master Pricing Editor is restricted to Administrators and Owners only.');
 
-        $rooms = Room::orderBy('floor')->orderBy('number')->get();
+        $rooms = Room::orderBy('floor')->orderByNumber()->get();
         $posItems = PosItem::where('is_retired', false)->orderBy('category')->orderBy('sort_order')->get();
 
         return view('admin.pricing', compact('rooms', 'posItems'));

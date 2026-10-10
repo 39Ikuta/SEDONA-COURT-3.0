@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Shift;
 use App\Models\User;
 use App\Services\AuthenticationAuditService;
+use App\Services\DiscountService;
 use App\Services\ShiftAccessService;
 use Illuminate\Auth\Events\CurrentDeviceLogout;
 use Illuminate\Auth\Events\Failed;
@@ -24,7 +25,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->scoped(DiscountService::class);
     }
 
     /**

@@ -61,6 +61,7 @@ class CheckInController extends Controller
                 'checked_in_at' => $checkedInAt, 'expected_checkout_at' => $checkedInAt->copy()->addHours($room->getTierHours($tier)),
                 'status' => 'active', 'room_charge' => $room->getRateForTier($tier), 'pos_items' => [],
                 'discount_type' => $guest->is_pwd ? 'PWD' : ($guest->is_senior ? 'SENIOR' : 'NONE'),
+                'discount_schedule' => DiscountService::rates(),
                 'discount_id_ref' => $guest->isEligibleForDiscount() ? trim($data['discount_id_ref']) : null,
                 'senior_pwd_discount' => $guest->isEligibleForDiscount(), 'payment_method' => 'cash',
             ]);
@@ -396,7 +397,7 @@ class CheckInController extends Controller
         }
         if (isset($data['discount_type']) && strtoupper($data['discount_type']) !== strtoupper($folio->discount_type ?? 'NONE')) {
             $type = strtoupper($data['discount_type']);
-            if ($type === 'DC' || strtoupper($folio->discount_type ?? '') === 'DC') {
+            if ($type === 'DC' || strtoupper($folio->discount_type ?? '') === 'DC' || $folio->discount_override_amount !== null) {
                 throw ValidationException::withMessages(['discount_type' => 'Discretionary discount changes require independent approval.']);
             }
         }
@@ -465,7 +466,7 @@ class CheckInController extends Controller
 
         return $bill + [
             'folio' => $preview, 'room' => $preview->room, 'guest' => $preview->guest,
-            'discountOptions' => DiscountService::getOptionsForRoom($preview->room->type, $preview->rate_tier),
+            'discountOptions' => DiscountService::getOptionsForFolio($preview),
             'paymentMethod' => $preview->payment_method, 'cashTendered' => (float) $preview->cash_tendered,
             'gcashAmount' => (float) $preview->gcash_amount, 'gcashRef' => $preview->gcash_reference, 'changeDue' => $change,
         ];

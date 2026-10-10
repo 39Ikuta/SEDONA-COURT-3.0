@@ -20,6 +20,7 @@ class Folio extends Model
         'security_deposit', 'deposit_payment_method', 'deposit_status',
         'deposit_collected_at', 'deposit_refunded_at', 'deposit_refunded_amount',
         'gross_total', 'discount_amount', 'discount_type', 'discount_id_ref', 'senior_pwd_discount', 'net_total',
+        'discount_schedule', 'discount_override_amount',
         'payment_method', 'cash_tendered', 'gcash_amount',
         'gcash_reference', 'change_due',
         'force_requested_by', 'force_checkout', 'force_reason', 'force_by', 'checked_out_by', 'overtime_hours', 'loss_slip_reference',
@@ -27,6 +28,8 @@ class Folio extends Model
 
     protected $casts = [
         'pos_items' => 'array',
+        'discount_schedule' => 'array',
+        'discount_override_amount' => 'decimal:2',
         'checked_in_at' => 'datetime',
         'expected_checkout_at' => 'datetime',
         'checked_out_at' => 'datetime',

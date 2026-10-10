@@ -5,7 +5,7 @@
 <div class="space-y-5">
     <div class="hms-card"><p class="text-sm text-slate-600">A different admin or owner reviews each request. Approved actions apply once to the recorded details. Monetary refunds do not return food or stock automatically.</p></div>
     <div class="grid gap-4 lg:grid-cols-2">
-    @foreach(['folio_override' => 'Rate, time or discretionary discount', 'invoice_tax_treatment' => 'Statutory invoice tax basis', 'deposit_refund' => 'Return remaining guest deposit', 'pos_refund' => 'Refund a walk-in sale', 'statement_void' => 'Exclude an incorrect statement import', 'cash_drop' => 'Drop drawer cash to safe', 'float_addition' => 'Add drawer float', 'bank_deposit' => 'Deposit drawer cash to bank'] as $kind => $label)
+    @foreach(['folio_override' => 'Rate, time or guest discount', 'invoice_tax_treatment' => 'Statutory invoice tax basis', 'deposit_refund' => 'Return remaining guest deposit', 'pos_refund' => 'Refund a walk-in sale', 'statement_void' => 'Exclude an incorrect statement import', 'cash_drop' => 'Drop drawer cash to safe', 'float_addition' => 'Add drawer float', 'bank_deposit' => 'Deposit drawer cash to bank'] as $kind => $label)
         @continue($kind === 'statement_void' && !auth()->user()->can('review-financial'))
         @continue(in_array($kind, ['cash_drop', 'float_addition', 'bank_deposit']) && !$shift)
         <details class="hms-card"><summary class="cursor-pointer font-semibold">{{ $label }}</summary>
@@ -21,10 +21,14 @@
                     <input type="hidden" name="source_id" value="{{ $shift->id }}"><p class="text-sm">Drawer #{{ $shift->id }}</p>
                 @endif
                 @if($kind === 'folio_override')
-                    <p class="text-sm text-slate-500">Leave unchanged fields empty. Statutory discounts use the checkout ID-reference fields.</p>
+                    <p class="text-sm text-slate-500">Leave unchanged fields empty. Choosing a discount type with no custom amount restores that guest's recorded default. Senior and PWD discounts require an ID reference.</p>
                     <label>New room charge<input name="payload[room_charge]" type="number" step="0.01" min="0" class="form-control-hms"></label>
                     <label>Corrected check-in time<input name="payload[checked_in_at]" type="datetime-local" class="form-control-hms"></label>
-                    <label>Discretionary discount<select name="payload[discount_type]" class="form-control-hms"><option value="">Unchanged</option><option value="DC">Sedona Card / DC</option><option value="NONE">Remove discount</option></select></label>
+                    <label>Guest discount<select name="payload[discount_type]" class="form-control-hms"><option value="">Unchanged</option><option value="DC">Sedona Card / DC</option><option value="SENIOR">Senior Citizen</option><option value="PWD">PWD</option><option value="NONE">Remove discount</option></select></label>
+                    <label>Discount ID reference<input name="payload[discount_id_ref]" maxlength="100" class="form-control-hms"></label>
+                    @if(auth()->user()->hasAnyRole(['admin', 'owner']))
+                        <label>Custom discount amount (₱, optional)<input name="payload[discount_override_amount]" type="number" step="0.01" min="0" max="500000" class="form-control-hms"></label>
+                    @endif
                 @elseif($kind === 'statement_void')
                     <p class="text-sm text-slate-500">The original import is retained. Matching or excluding an already matched row is blocked.</p>
                 @elseif($kind === 'invoice_tax_treatment')

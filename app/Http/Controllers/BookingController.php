@@ -28,7 +28,7 @@ class BookingController extends Controller
         }
 
         $bookings = $query->paginate(15);
-        $availableRooms = Room::where('is_staff_quarters', false)->orderBy('number')->get();
+        $availableRooms = Room::where('is_staff_quarters', false)->orderByNumber()->get();
 
         return view('bookings.index', compact('bookings', 'availableRooms', 'status'));
     }

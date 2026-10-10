@@ -39,7 +39,7 @@ class PosController extends Controller
                 $q->where('status', 'occupied')
                     ->orWhere('is_staff_quarters', true);
             })
-            ->orderBy('number')
+            ->orderByNumber()
             ->get();
 
         foreach ($occupiedRooms as $occ) {

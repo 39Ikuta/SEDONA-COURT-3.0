@@ -25,7 +25,7 @@
         </label>
         <label class="text-sm">From<input name="from" type="date" class="form-control-hms block" value="{{ $filters['from'] ?? '' }}"></label>
         <label class="text-sm">To<input name="to" type="date" class="form-control-hms block" value="{{ $filters['to'] ?? '' }}"></label>
-        <button class="btn-hms-primary">Filter</button>
+        <button class="btn-occupied !px-4 !py-2 !text-sm !whitespace-normal">Filter</button>
         <a href="{{ route('admin.login-history.index') }}" class="text-sm font-semibold text-slate-600 px-2 py-2">Clear</a>
     </form>
     <table class="block md:table w-full text-sm text-left table-fixed">

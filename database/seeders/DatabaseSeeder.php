@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(DiscountRateSeeder::class);
         // Reset cached roles and permissions
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 

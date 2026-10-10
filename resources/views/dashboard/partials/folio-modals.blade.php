@@ -324,24 +324,13 @@
     }
 
     let currentDiscountContext = { roomType: 'Classic Room', rateTier: '3h' };
-    const DISCOUNT_RATES = {
-        'DC': {
-            'CLASSIC': { '3h': 40, '6h': 0, '12h': 55, '24h': 95 },
-            'PREMIUM': { '3h': 50, '6h': 0, '12h': 60, '24h': 105 },
-            'VIP':     { '3h': 65, '6h': 0, '12h': 70, '24h': 115 }
-        },
-        'SENIOR': {
-            'CLASSIC': { '3h': 79,  '6h': 158, '12h': 195, '24h': 340 },
-            'PREMIUM': { '3h': 99,  '6h': 178, '12h': 215, '24h': 375 },
-            'VIP':     { '3h': 139, '6h': 218, '12h': 255, '24h': 460 }
-        }
-    };
+    const FOLIO_DISCOUNT_OPTIONS = {{ \Illuminate\Support\Js::from($folioDiscountOptions) }};
 
     function openDiscountModal(folioId, roomNumber, roomType, rateTier, currentDiscountType, currentDiscountRef) {
         document.getElementById('discountForm').action = `/folios/${folioId}/discount`;
         document.getElementById('discountModalTitle').textContent = `Apply Fixed Discount - Room ${roomNumber} (${roomType})`;
         
-        currentDiscountContext = { roomType: roomType || 'Classic Room', rateTier: (rateTier || '3h').toLowerCase() };
+        currentDiscountContext = { folioId, roomType: roomType || 'Classic Room', rateTier: (rateTier || '3h').toLowerCase() };
         
         const dt = (currentDiscountType || 'none').toLowerCase();
         document.getElementById('discountTypeSelect').value = (dt === 'senior' || dt === 'pwd' || dt === 'dc') ? dt : 'none';
@@ -365,8 +354,7 @@
         }
 
         document.getElementById('discountRefGroup').style.opacity = '1';
-        const lookupCat = (type === 'PWD') ? 'SENIOR' : type;
-        const amount = (DISCOUNT_RATES[lookupCat] && DISCOUNT_RATES[lookupCat][tier]) ? (DISCOUNT_RATES[lookupCat][tier][dur] || 0) : 0;
+        const amount = Number(FOLIO_DISCOUNT_OPTIONS[currentDiscountContext.folioId]?.[type] || 0);
         document.getElementById('discountAmountPreview').textContent = `-₱${amount.toFixed(2)}`;
     }
 

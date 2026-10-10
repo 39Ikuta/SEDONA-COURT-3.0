@@ -46,7 +46,8 @@ class BillingService
         if (! $discountType && $folio->senior_pwd_discount) {
             $discountType = 'SENIOR';
         }
-        $discountCents = $discountType ? min($roomCents, self::cents(DiscountService::getDiscountAmount($discountType, $folio->room?->type ?? 'Classic Room', $folio->rate_tier))) : 0;
+        $discountCents = $discountType ? min($roomCents, self::cents($folio->discount_override_amount
+            ?? DiscountService::getDiscountAmount($discountType, $folio->room?->type ?? 'Classic Room', $folio->rate_tier, $folio->discount_schedule))) : 0;
         if ($settled) {
             $grossCents = self::cents($folio->gross_total);
             $surchargeCents = self::cents($folio->surcharge_total);

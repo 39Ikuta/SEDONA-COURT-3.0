@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -89,6 +90,14 @@ class Room extends Model
     }
 
     // ── Scopes ──────────────────────────────────────────────────────
+
+    public function scopeOrderByNumber(Builder $query): Builder
+    {
+        $column = $query->getQuery()->getGrammar()->wrap($this->qualifyColumn('number'));
+        $castType = in_array($query->getConnection()->getDriverName(), ['mysql', 'mariadb'], true) ? 'UNSIGNED' : 'INTEGER';
+
+        return $query->orderByRaw("CAST({$column} AS {$castType})")->orderBy('number');
+    }
 
     public function scopeAvailable($query)
     {
