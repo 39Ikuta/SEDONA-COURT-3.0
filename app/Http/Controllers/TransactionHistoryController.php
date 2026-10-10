@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\AuthenticationAuditService;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -55,6 +56,7 @@ class TransactionHistoryController extends Controller
         $query = DB::table('audit_logs as a')->leftJoin('users as u', 'u.id', '=', 'a.user_id')->select('a.*', 'u.name as actor');
         if (! $propertyAccess) {
             $query->where('a.user_id', $request->user()->id);
+            $query->whereNotIn('a.event', AuthenticationAuditService::EVENTS);
         }
         $this->applyFilters($query, $filters, 'a.created_at');
         if (! empty($filters['q'])) {

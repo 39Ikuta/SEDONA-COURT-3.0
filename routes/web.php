@@ -9,6 +9,7 @@ use App\Http\Controllers\CheckInController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceControlController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\LoginHistoryController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoomController;
@@ -127,6 +128,8 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
     // Admin & Owner Subsystems (Strictly Role-Gated: 403 for Cashier & Kitchen)
     // ═══════════════════════════════════════════════════════════════════════
     Route::middleware(['role:admin|owner'])->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
+
         Route::prefix('finance')->name('finance.')->group(function () {
             Route::get('/', [FinanceControlController::class, 'index'])->name('index');
             Route::get('/statement-template', [FinanceControlController::class, 'template'])->name('template');
