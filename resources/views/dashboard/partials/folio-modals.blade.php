@@ -128,7 +128,7 @@
             @csrf
             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Discount Classification:</label>
+                <label for="discountTypeSelect" class="block text-xs font-bold text-slate-700 mb-1">Discount Classification:</label>
                 <select name="discount_type" id="discountTypeSelect" onchange="updateDiscountPreview()" class="form-control-hms font-bold text-xs">
                     <option value="none">No Discount / Clear Existing</option>
                     <option value="senior">Senior Citizen (Statutory BIR Table)</option>
@@ -137,10 +137,20 @@
                 </select>
             </div>
 
+            <input type="hidden" name="kind" value="folio_override" id="discountApprovalKind" disabled>
+            <input type="hidden" name="source_id" id="discountApprovalSource" disabled>
+            <input type="hidden" name="payload[discount_type]" id="discountApprovalType" disabled>
+            <input type="hidden" name="payload[discount_id_ref]" id="discountApprovalReference" disabled>
+            <div id="discountApprovalGroup" class="hidden space-y-2">
+                <p class="text-xs text-amber-800">This change needs owner/admin approval. The bill changes only after the request is approved and executed in Approvals &amp; Tasks.</p>
+                <label for="discountApprovalReason" class="block text-xs font-bold text-slate-700">Reason for discount change</label>
+                <input name="reason" id="discountApprovalReason" maxlength="1000" disabled class="form-control-hms text-xs">
+            </div>
+
             <div id="discountRefGroup">
-                <label class="block text-xs font-bold text-slate-700 mb-1">Card / ID Reference #:</label>
-                <input type="text" name="discount_id_ref" id="discountIdRef" placeholder="e.g. OSCA-2024-9912 or DC-4091" class="form-control-hms font-mono text-xs font-bold">
-                <span class="text-[10px] text-slate-500">Required for official tax audit and 80mm receipt itemization.</span>
+                <label for="discountIdRef" class="block text-xs font-bold text-slate-700 mb-1">Card / ID Reference #:</label>
+                <input type="text" name="discount_id_ref" id="discountIdRef" maxlength="100" placeholder="e.g. OSCA-2024-9912 or DC-4091" class="form-control-hms font-mono text-xs font-bold">
+                <span class="text-[10px] text-slate-500">Enter the ID reference before applying a Senior or PWD discount.</span>
             </div>
 
             <div class="p-2.5 bg-slate-100 border border-slate-300 rounded flex items-center justify-between text-xs">
@@ -152,10 +162,11 @@
                     -₱0.00
                 </div>
             </div>
+            <p id="discountZeroNotice" class="hidden text-xs text-amber-800">The recorded discount table has no deduction for this package. Applying it will not reduce the bill.</p>
 
             <div class="border-t pt-3 flex justify-end space-x-2">
                 <button type="button" onclick="closeDiscountModal()" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded">Cancel</button>
-                <button type="submit" class="px-4 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-bold rounded">Apply Fixed Discount</button>
+                <button type="submit" id="discountSubmitButton" class="px-4 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-bold rounded">Apply Fixed Discount</button>
             </div>
         </form>
     </div>
@@ -325,12 +336,15 @@
 
     let currentDiscountContext = { roomType: 'Classic Room', rateTier: '3h' };
     const FOLIO_DISCOUNT_OPTIONS = {{ \Illuminate\Support\Js::from($folioDiscountOptions) }};
+    const FOLIO_CUSTOM_DISCOUNTS = {{ \Illuminate\Support\Js::from($activeFolios->pluck('discount_override_amount', 'id')) }};
+    const DISCOUNT_APPROVAL_URL = {{ \Illuminate\Support\Js::from(route('approvals.store')) }};
 
     function openDiscountModal(folioId, roomNumber, roomType, rateTier, currentDiscountType, currentDiscountRef) {
         document.getElementById('discountForm').action = `/folios/${folioId}/discount`;
         document.getElementById('discountModalTitle').textContent = `Apply Fixed Discount - Room ${roomNumber} (${roomType})`;
         
-        currentDiscountContext = { folioId, roomType: roomType || 'Classic Room', rateTier: (rateTier || '3h').toLowerCase() };
+        currentDiscountContext = { folioId, currentType: (currentDiscountType || 'none').toUpperCase(), roomType: roomType || 'Classic Room', rateTier: (rateTier || '3h').toLowerCase() };
+        document.getElementById('discountApprovalReason').value = '';
         
         const dt = (currentDiscountType || 'none').toLowerCase();
         document.getElementById('discountTypeSelect').value = (dt === 'senior' || dt === 'pwd' || dt === 'dc') ? dt : 'none';
@@ -342,6 +356,21 @@
 
     function updateDiscountPreview() {
         const type = document.getElementById('discountTypeSelect').value.toUpperCase();
+        document.getElementById('discountIdRef').required = ['SENIOR', 'PWD'].includes(type);
+        document.getElementById('discountIdRef').disabled = type === 'NONE';
+        const requiresApproval = type !== currentDiscountContext.currentType && (
+            type === 'DC' || currentDiscountContext.currentType === 'DC' || FOLIO_CUSTOM_DISCOUNTS[currentDiscountContext.folioId] != null
+        );
+        document.getElementById('discountForm').action = requiresApproval ? DISCOUNT_APPROVAL_URL : `/folios/${currentDiscountContext.folioId}/discount`;
+        document.getElementById('discountApprovalGroup').classList.toggle('hidden', !requiresApproval);
+        document.getElementById('discountSubmitButton').textContent = requiresApproval ? 'Request discount approval' : 'Apply Fixed Discount';
+        for (const id of ['discountApprovalKind', 'discountApprovalSource', 'discountApprovalType', 'discountApprovalReference', 'discountApprovalReason']) {
+            document.getElementById(id).disabled = !requiresApproval;
+        }
+        document.getElementById('discountApprovalReason').required = requiresApproval;
+        document.getElementById('discountApprovalSource').value = currentDiscountContext.folioId;
+        document.getElementById('discountApprovalType').value = type;
+        document.getElementById('discountZeroNotice').classList.add('hidden');
         const tier = currentDiscountContext.roomType.toUpperCase().includes('VIP') ? 'VIP' : (currentDiscountContext.roomType.toUpperCase().includes('PREMIUM') ? 'PREMIUM' : 'CLASSIC');
         const dur = currentDiscountContext.rateTier.startsWith('6') ? '6h' : (currentDiscountContext.rateTier.startsWith('12') ? '12h' : (currentDiscountContext.rateTier.startsWith('24') ? '24h' : '3h'));
 
@@ -356,11 +385,18 @@
         document.getElementById('discountRefGroup').style.opacity = '1';
         const amount = Number(FOLIO_DISCOUNT_OPTIONS[currentDiscountContext.folioId]?.[type] || 0);
         document.getElementById('discountAmountPreview').textContent = `-₱${amount.toFixed(2)}`;
+        document.getElementById('discountZeroNotice').classList.toggle('hidden', amount !== 0);
     }
 
     function closeDiscountModal() {
         document.getElementById('discountModal').classList.add('hidden');
     }
+    document.getElementById('discountForm').addEventListener('submit', function () {
+        document.getElementById('discountApprovalReference').value = document.getElementById('discountIdRef').value.trim();
+        if (document.getElementById('discountApprovalType').value === 'NONE') {
+            document.getElementById('discountApprovalReference').disabled = true;
+        }
+    });
 
     function openTransferModal(folioId, roomNumber) {
         document.getElementById('transferForm').action = `/folios/${folioId}/transfer`;

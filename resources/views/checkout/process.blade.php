@@ -10,7 +10,7 @@
 @endsection
 
 @section('content')
-<div class="hms-card mb-4 text-sm"><a href="{{ route('approvals.index') }}" class="underline font-semibold">Request rate, time or guest discount changes</a>. Execute the approved request, then reload checkout. @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
+<div class="hms-card mb-4 text-sm"><a href="{{ route('approvals.index', ['folio_id' => $folio->id]) }}" class="underline font-semibold">Request rate, check-in time or guest discount changes for Room {{ $folio->room->number }}</a>. Execute the approved request, then reload checkout. @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
     <div class="rounded-xl border p-5 mx-2 mb-4 text-sm {{ $drawerStatus['state'] === 'ready' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50' }}" role="status" id="checkoutDrawerStatus">
         <h2 class="font-bold text-brand">{{ $drawerStatus['title'] }}</h2>
         <p class="mt-1 text-slate-700">{{ $drawerStatus['message'] }}</p>
@@ -313,12 +313,15 @@
                         <div class="border border-slate-300 bg-white p-2.5 rounded space-y-2 shadow-sm">
                             <div class="flex items-center justify-between">
                                 <label for="discountTypeSelect" class="font-bold text-slate-800 text-[11px]">DISCOUNT CLASSIFICATION:</label>
-                                <select name="discount_type" id="discountTypeSelect" onchange="onDiscountChange()" class="form-control-hms !w-44 font-bold text-xs bg-amber-50/40 border-amber-300 focus:border-amber-600">
+                                <select name="discount_type" id="discountTypeSelect" @disabled($folio->discount_override_amount !== null || strtoupper($folio->discount_type ?? '') === 'DC') onchange="onDiscountChange()" class="form-control-hms !w-44 font-bold text-xs bg-amber-50/40 border-amber-300 focus:border-amber-600">
                                     <option value="none" {{ strtolower($folio->discount_type ?? 'none') === 'none' ? 'selected' : '' }}>None (₱0.00)</option>
                                     <option value="senior" {{ strtolower($folio->discount_type ?? '') === 'senior' ? 'selected' : '' }}>Senior Citizen (-₱{{ number_format($discountOptions['SENIOR'] ?? 79, 2) }})</option>
                                     <option value="pwd" {{ strtolower($folio->discount_type ?? '') === 'pwd' ? 'selected' : '' }}>PWD Disability (-₱{{ number_format($discountOptions['PWD'] ?? 79, 2) }})</option>
                                     <option value="dc" @disabled(strtolower($folio->discount_type ?? '') !== 'dc') {{ strtolower($folio->discount_type ?? '') === 'dc' ? 'selected' : '' }}>Sedona Card / DC (-₱{{ number_format($discountOptions['DC'] ?? 40, 2) }})</option>
                                 </select>
+                                @if($folio->discount_override_amount !== null || strtoupper($folio->discount_type ?? '') === 'DC')
+                                    <input type="hidden" name="discount_type" value="{{ strtolower($folio->discount_type ?? 'none') }}">
+                                @endif
                             </div>
 
                             <div class="flex items-center justify-between" id="rowDiscountRef" style="{{ strtolower($folio->discount_type ?? 'none') === 'none' ? 'display: none;' : '' }}">
@@ -326,8 +329,13 @@
                                     <label for="inpDiscountRef" class="font-bold text-slate-700 text-[11px] block">CARD / ID REFERENCE #:</label>
                                     <span class="text-[9px] text-slate-400">Required for official tax audit</span>
                                 </div>
-                                <input type="text" name="discount_id_ref" id="inpDiscountRef" value="{{ $folio->discount_id_ref ?? '' }}" placeholder="e.g. OSCA-2024-9912 or DC-4091" oninput="updateDiscountBadgeRef(); syncBillingStatementUrl()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44 font-bold text-xs">
+                                <input type="text" name="discount_id_ref" id="inpDiscountRef" maxlength="100" @required(in_array(strtoupper($folio->discount_type ?? ''), ['SENIOR', 'PWD'])) value="{{ $folio->discount_id_ref ?? '' }}" placeholder="e.g. OSCA-2024-9912 or DC-4091" oninput="updateDiscountBadgeRef(); syncBillingStatementUrl()" onblur="saveSettlementDraftToServer()" class="form-control-hms font-mono !w-44 font-bold text-xs">
                             </div>
+
+                            <p class="text-xs text-slate-600">For Senior or PWD, select the discount and enter the ID reference, then save.</p>
+                            <p class="text-xs text-slate-600">DC and approved custom discount changes need owner/admin approval. <a href="{{ route('approvals.index', ['folio_id' => $folio->id, 'discount_type' => strtoupper($folio->discount_type ?? 'NONE') === 'NONE' ? 'DC' : strtoupper($folio->discount_type)]) }}" class="underline font-semibold">Request a discount change for Room {{ $folio->room->number }}</a>, then execute the approved request and reload this bill.</p>
+                            <button type="button" onclick="saveSettlementDraftToServer()" class="btn-occupied !px-3 !py-2 !text-xs">Save discount</button>
+                            <p id="settlementSaveStatus" role="status" aria-live="polite" class="text-xs text-slate-700">Showing the saved guest bill.</p>
 
                             <div class="flex items-center justify-between pt-1 border-t border-slate-100">
                                 <div>
@@ -468,6 +476,7 @@
     function onDiscountChange() {
         const sel = document.getElementById('discountTypeSelect');
         currentDiscountType = (sel ? sel.value : 'none').toLowerCase();
+        document.getElementById('inpDiscountRef').required = ['senior', 'pwd'].includes(currentDiscountType);
         const rowRef = document.getElementById('rowDiscountRef');
         const badge = document.getElementById('badgeDiscountType');
         const refVal = document.getElementById('inpDiscountRef')?.value?.trim();
@@ -755,15 +764,23 @@
 
     let initializingSettlement = true;
     let draftSaveQueue = Promise.resolve();
+    let draftSaveRevision = 0;
     let settlementSubmitting = false;
     function saveSettlementDraftToServer() {
         if (initializingSettlement || settlementSubmitting) return draftSaveQueue;
+        const revision = ++draftSaveRevision;
+        const status = document.getElementById('settlementSaveStatus');
         const csrfToken = document.querySelector('input[name="_token"]')?.value || '{{ csrf_token() }}';
         const method = document.getElementById('paymentMethodSelect')?.value || 'cash';
         const cashTendered = parseFloat(document.getElementById('inpCashTendered')?.value) || 0;
         const gcashAmount = parseFloat(document.getElementById('inpGcashAmount')?.value) || 0;
         const gcashRef = document.getElementById('inpGcashRef')?.value?.trim() || '';
         const discountRef = document.getElementById('inpDiscountRef')?.value?.trim() || '';
+        if (['senior', 'pwd'].includes(currentDiscountType) && !discountRef) {
+            status.textContent = 'Enter the Senior / PWD ID reference, then click Save discount. This selection has not been saved.';
+            return draftSaveQueue;
+        }
+        status.textContent = 'Saving changes…';
 
         let change = 0;
         if (method === 'cash') {
@@ -796,11 +813,18 @@
             },
             body: draftBody
         }))
-        .then(res => {
-            if (!res.ok) throw new Error('Settlement draft could not be saved.');
-            return res.json();
+        .then(async res => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const messages = Object.values(data.errors || {}).flat();
+                throw new Error(messages.join(' ') || 'Changes could not be saved. Reload the page and try again.');
+            }
+            if (revision === draftSaveRevision) status.textContent = 'Saved to this guest’s bill.';
+            return data;
         })
-        .catch(err => console.error('Error auto-saving settlement draft:', err));
+        .catch(err => {
+            if (revision === draftSaveRevision) status.textContent = 'Not saved: ' + err.message;
+        });
         return draftSaveQueue;
     }
 

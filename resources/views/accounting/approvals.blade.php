@@ -3,16 +3,22 @@
 @section('subtitle', 'Recorded requests, independent review, and approved execution')
 @section('content')
 <div class="space-y-5">
+    @if($errors->any())
+        <div role="alert" class="hms-card border border-rose-300 bg-rose-50 text-rose-800">
+            <p class="font-bold">The request could not be saved.</p>
+            <ul class="mt-1 list-disc pl-5">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
+        </div>
+    @endif
     <div class="hms-card"><p class="text-sm text-slate-600">A different admin or owner reviews each request. Approved actions apply once to the recorded details. Monetary refunds do not return food or stock automatically.</p></div>
     <div class="grid gap-4 lg:grid-cols-2">
     @foreach(['folio_override' => 'Rate, time or guest discount', 'invoice_tax_treatment' => 'Statutory invoice tax basis', 'deposit_refund' => 'Return remaining guest deposit', 'pos_refund' => 'Refund a walk-in sale', 'statement_void' => 'Exclude an incorrect statement import', 'cash_drop' => 'Drop drawer cash to safe', 'float_addition' => 'Add drawer float', 'bank_deposit' => 'Deposit drawer cash to bank'] as $kind => $label)
         @continue($kind === 'statement_void' && !auth()->user()->can('review-financial'))
         @continue(in_array($kind, ['cash_drop', 'float_addition', 'bank_deposit']) && !$shift)
-        <details class="hms-card"><summary class="cursor-pointer font-semibold">{{ $label }}</summary>
+        <details class="hms-card" @if($kind === 'folio_override' && $selectedFolio) open @endif><summary class="cursor-pointer font-semibold">{{ $label }}</summary>
             <form method="POST" action="{{ route('approvals.store') }}" class="mt-4 grid gap-3">
                 @csrf<input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}"><input type="hidden" name="kind" value="{{ $kind }}">
                 @if(in_array($kind, ['folio_override', 'deposit_refund', 'invoice_tax_treatment']))
-                    <label>Guest folio<select name="source_id" required class="form-control-hms">@foreach($folios as $folio)<option value="{{ $folio->id }}">#{{ $folio->id }} — {{ $folio->guest?->name }} — {{ $folio->status }}</option>@endforeach</select></label>
+                    <label>Guest folio<select name="source_id" required class="form-control-hms">@foreach($folios as $folio)<option value="{{ $folio->id }}" @selected($kind === 'folio_override' && $selectedFolio?->id === $folio->id)>Room {{ $folio->room?->number }} — #{{ $folio->id }} — {{ $folio->guest?->name }} — {{ $folio->status }}</option>@endforeach</select></label>
                 @elseif($kind === 'pos_refund')
                     <label>Original sale payment<select name="source_id" required class="form-control-hms">@foreach($payments as $payment)<option value="{{ $payment->id }}">Payment #{{ $payment->id }} — order #{{ $payment->order_id }} — ₱{{ number_format($payment->cash_amount + $payment->gcash_amount, 2) }}</option>@endforeach</select></label>
                 @elseif($kind === 'statement_void')
@@ -24,7 +30,7 @@
                     <p class="text-sm text-slate-500">Leave unchanged fields empty. Choosing a discount type with no custom amount restores that guest's recorded default. Senior and PWD discounts require an ID reference.</p>
                     <label>New room charge<input name="payload[room_charge]" type="number" step="0.01" min="0" class="form-control-hms"></label>
                     <label>Corrected check-in time<input name="payload[checked_in_at]" type="datetime-local" class="form-control-hms"></label>
-                    <label>Guest discount<select name="payload[discount_type]" class="form-control-hms"><option value="">Unchanged</option><option value="DC">Sedona Card / DC</option><option value="SENIOR">Senior Citizen</option><option value="PWD">PWD</option><option value="NONE">Remove discount</option></select></label>
+                    <label>Guest discount<select name="payload[discount_type]" class="form-control-hms"><option value="">Unchanged</option>@foreach(['DC' => 'Sedona Card / DC', 'SENIOR' => 'Senior Citizen', 'PWD' => 'PWD', 'NONE' => 'Remove discount'] as $type => $discountLabel)<option value="{{ $type }}" @selected($selectedDiscountType === $type)>{{ $discountLabel }}</option>@endforeach</select></label>
                     <label>Discount ID reference<input name="payload[discount_id_ref]" maxlength="100" class="form-control-hms"></label>
                     @if(auth()->user()->hasAnyRole(['admin', 'owner']))
                         <label>Custom discount amount (₱, optional)<input name="payload[discount_override_amount]" type="number" step="0.01" min="0" max="500000" class="form-control-hms"></label>

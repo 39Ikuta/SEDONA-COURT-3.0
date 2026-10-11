@@ -25,9 +25,20 @@ class ApprovalController extends Controller
             $query->where('requested_by', $request->user()->id);
         }
 
+        $folios = Folio::with(['guest', 'room'])->latest()->limit(100)->get();
+        $selectedFolio = $folios->firstWhere('id', $request->integer('folio_id'));
+        if ($selectedFolio && (! $selectedFolio->isActive() || $selectedFolio->room->is_staff_quarters)) {
+            $selectedFolio = null;
+        }
+        $discountType = $request->query('discount_type');
+        $selectedDiscountType = is_string($discountType) && in_array(strtoupper($discountType), ['DC', 'SENIOR', 'PWD', 'NONE'], true)
+            ? strtoupper($discountType) : null;
+
         return view('accounting.approvals', [
             'requests' => $query->latest()->paginate(20),
-            'folios' => Folio::with('guest')->latest()->limit(100)->get(),
+            'folios' => $folios,
+            'selectedFolio' => $selectedFolio,
+            'selectedDiscountType' => $selectedFolio ? $selectedDiscountType : null,
             'payments' => PaymentEntry::where('kind', 'pos_sale')->when(! $request->user()->can('review-financial'), fn ($q) => $q->where('user_id', $request->user()->id))->latest()->limit(100)->get(),
             'statements' => $request->user()->can('review-financial') ? StatementLine::latest()->limit(100)->get() : collect(),
             'items' => PosItem::notRetired()->orderBy('name')->get(),

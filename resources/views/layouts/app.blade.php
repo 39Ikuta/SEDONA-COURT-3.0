@@ -160,6 +160,16 @@
         </div>
             <!-- Flash Messages -->
     <div class="app-feedback">
+        @if(request()->routeIs('dashboard') && $errors->any())
+            <div role="alert" class="p-3 mb-3 bg-rose-50 border border-rose-500 text-rose-900 text-sm rounded">
+                <p class="font-bold">The change could not be saved.</p>
+                <ul class="list-disc pl-5 mt-1">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
         @if(session('success'))
             <div class="p-2 mb-2 bg-emerald-50 border border-emerald-500 text-emerald-900 text-xs rounded font-medium flex items-center justify-between">
                 <div>
