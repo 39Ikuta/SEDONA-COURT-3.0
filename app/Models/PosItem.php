@@ -148,20 +148,11 @@ class PosItem extends Model
     }
 
     /**
-     * Check if this item can be ordered right now based on kitchen hours.
+     * Kitchen dishes are orderable around the clock when stock and ingredients are available.
      */
     public function isOrderable(): bool
     {
-        if (! $this->is_available || ($this->is_tracked && $this->stock_quantity <= 0)) {
-            return false;
-        }
-        if (! $this->kitchen_hours_only) {
-            return true;
-        }
-
-        $hour = (int) now()->format('G');
-
-        return $hour >= 6 && $hour < 22;
+        return $this->is_available && (! $this->is_tracked || $this->stock_quantity > 0);
     }
 
     public function scopeAvailable(Builder $query): Builder

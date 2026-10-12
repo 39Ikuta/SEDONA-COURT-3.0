@@ -217,17 +217,14 @@ class PosInventoryIntegrityTest extends TestCase
 
     #[TestWith(['unavailable'])]
     #[TestWith(['retired'])]
-    #[TestWith(['outside_hours'])]
     public function test_order_rejects_non_orderable_items_without_mutating_stock(string $condition): void
     {
         $item = $this->item([
             'is_available' => $condition !== 'unavailable',
             'is_retired' => $condition === 'retired',
-            'kitchen_hours_only' => $condition === 'outside_hours',
+            'kitchen_hours_only' => true,
         ]);
-        if ($condition === 'outside_hours') {
-            $this->travelTo(now()->setTime(23, 0));
-        }
+        $this->travelTo(now()->setTime(23, 0));
 
         $this->actingAs($this->cashier())->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
             'order_type' => 'walkin_pos', 'payment_method' => 'cash', 'cash_tendered' => 10000, 'items' => [['id' => $item->id, 'qty' => 1]],
@@ -236,6 +233,25 @@ class PosInventoryIntegrityTest extends TestCase
         $this->assertSame(10, $item->fresh()->stock_quantity);
         $this->assertDatabaseCount('orders', 0);
         $this->assertDatabaseCount('inventory_events', 0);
+    }
+
+    #[TestWith([1, 'Breakfast', 'Tapsilog'])]
+    #[TestWith([23, 'Favorites', 'Lechon Kawali'])]
+    public function test_stocked_kitchen_dishes_can_be_ordered_at_any_hour(int $hour, string $category, string $name): void
+    {
+        $this->travelTo(now()->setTime($hour, 31));
+        $egg = $this->egg(50);
+        $dish = $this->item(['name' => $name, 'category' => $category, 'stock_quantity' => 50, 'kitchen_hours_only' => true]);
+        $cashier = $this->cashier();
+
+        $this->actingAs($cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'walkin_pos', 'payment_method' => 'cash', 'cash_tendered' => 10000,
+            'items' => [['id' => $dish->id, 'qty' => 1]],
+        ])->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $this->assertSame(49, $dish->fresh()->stock_quantity);
+        $this->assertSame($category === 'Breakfast' ? 49 : 50, $egg->fresh()->stock_quantity);
+        $this->assertDatabaseCount('orders', 1);
     }
 
     public function test_an_exhausted_stock_service_call_cannot_create_phantom_movements(): void

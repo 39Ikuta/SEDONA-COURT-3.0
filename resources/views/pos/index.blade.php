@@ -45,7 +45,8 @@
                         @php
                             $stock = $item->stock_quantity ?? 0;
                             $isOut = !$item->isOrderable();
-                            $isLow = $item->is_tracked && ($stock <= ($item->reorder_level ?? 5)) && !$isOut;
+                            $isStockOut = $item->is_tracked && $stock <= 0;
+                            $isLow = $item->is_tracked && ($stock <= ($item->reorder_level ?? 5)) && !$isStockOut;
                         @endphp
                         <div class="pos-catalog-item flex flex-col justify-between {{ $isOut ? 'opacity-60' : '' }}">
                             <div>
@@ -55,7 +56,7 @@
                                     </span>
                                     <div class="flex items-center space-x-1">
                                         @if($item->is_tracked)
-                                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold {{ $isOut ? 'bg-rose-100 text-rose-800 border border-rose-300' : ($isLow ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300') }}" title="{{ $item->isBreakfastItem() ? 'Dish stock + egg dependency' : 'Stock on hand' }}">
+                                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold {{ $isStockOut ? 'bg-rose-100 text-rose-800 border border-rose-300' : ($isLow ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300') }}" title="Stock on hand">
                                                 Stock: {{ $stock }}
                                             </span>
                                         @endif

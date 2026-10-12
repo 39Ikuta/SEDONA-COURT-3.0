@@ -54,9 +54,6 @@ class InventoryService
                 if ($item->is_retired || ! (bool) $item->getRawOriginal('is_available')) {
                     throw new DomainException("{$item->name} is not available for ordering.");
                 }
-                if ($item->kitchen_hours_only && ((int) now()->format('G') < 6 || (int) now()->format('G') >= 22)) {
-                    throw new DomainException("{$item->name} is available only during kitchen hours (6AM–10PM).");
-                }
                 if ($item->requiresEgg() && $eggId !== null) {
                     $eggQty = $item->getEggRequirementQty() * $quantities[$item->id];
                     $demand[$eggId] = ($demand[$eggId] ?? 0) + $eggQty;

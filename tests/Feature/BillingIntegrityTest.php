@@ -11,8 +11,10 @@ use App\Models\Room;
 use App\Models\Shift;
 use App\Models\User;
 use App\Services\BillingService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\TestWith;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -95,9 +97,66 @@ class BillingIntegrityTest extends TestCase
         ]);
     }
 
-    public function test_overtime_rounds_immediately_and_receipt_freezes_at_checkout(): void
+    #[TestWith(['2026-10-12 23:43:00', 0])]
+    #[TestWith(['2026-10-12 23:43:01', 1])]
+    #[TestWith(['2026-10-13 00:43:00', 1])]
+    #[TestWith(['2026-10-13 00:43:01', 2])]
+    #[TestWith(['2026-10-13 01:31:00', 2])]
+    #[TestWith(['2026-10-13 01:43:00', 2])]
+    #[TestWith(['2026-10-13 01:43:01', 3])]
+    public function test_overstay_billing_respects_fifteen_minutes_of_grace(string $checkout, int $excessHours): void
     {
-        $folio = $this->folio(['checked_in_at' => now()->subHours(4)->subSecond(), 'extra_hours' => 1]);
+        $folio = $this->folio([
+            'checked_in_at' => '2026-10-12 20:28:00',
+            'expected_checkout_at' => '2026-10-12 23:28:00',
+        ]);
+
+        $bill = app(BillingService::class)->calculate($folio, Carbon::parse($checkout));
+
+        $this->assertSame($excessHours, $bill['excessHours']);
+        $this->assertSame($excessHours * 130, $bill['excessRate']);
+    }
+
+    public function test_reported_checkout_collects_two_excess_hours_and_freezes_the_receipt(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-13 01:31:00'));
+        $folio = $this->folio([
+            'checked_in_at' => '2026-10-12 20:28:00',
+            'expected_checkout_at' => '2026-10-12 23:28:00',
+        ]);
+
+        $this->post(route('checkout.submit', $folio), ['operation_key' => (string) Str::uuid(), 'cash_tendered' => 655])
+            ->assertSessionHasNoErrors()->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'overtime_hours' => 2, 'surcharge_total' => 260, 'net_total' => 655]);
+        $this->assertDatabaseHas('payment_entries', ['folio_id' => $folio->id, 'kind' => 'settlement', 'cash_amount' => 655]);
+        $this->travel(2)->days();
+        $this->get(route('folios.receipt', $folio))->assertViewHas('excessHours', 2)->assertViewHas('finalBalanceToPay', 655);
+    }
+
+    #[TestWith(['Premium Room', 495])]
+    #[TestWith(['VIP Suite Room', 695])]
+    #[TestWith(['Premium Room', 1295, '12h'])]
+    public function test_room_transfer_uses_the_destination_rate(string $type, int $rate, string $tier = '3h'): void
+    {
+        $folio = $this->folio(['rate_tier' => $tier]);
+        $target = Room::create([
+            'number' => '13', 'floor' => 2, 'name' => 'Destination', 'type' => $type,
+            'status' => 'available', 'is_staff_quarters' => false,
+            'base_rate_3h' => $type === 'VIP Suite Room' ? 695 : 495, 'base_rate_12h' => 1295,
+        ]);
+
+        $this->post(route('folios.transfer', $folio), ['target_room_id' => $target->id])
+            ->assertSessionHasNoErrors()->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'room_id' => $target->id, 'room_charge' => $rate, 'net_total' => $rate]);
+        $this->assertDatabaseHas('rooms', ['id' => $this->room->id, 'status' => 'available']);
+        $this->assertDatabaseHas('rooms', ['id' => $target->id, 'status' => 'occupied']);
+    }
+
+    public function test_overtime_is_charged_after_grace_and_receipt_freezes_at_checkout(): void
+    {
+        $folio = $this->folio(['checked_in_at' => now()->subHours(4)->subMinutes(15)->subSecond(), 'extra_hours' => 1]);
         $this->post(route('checkout.submit', $folio), ['operation_key' => (string) Str::uuid(), 'cash_tendered' => 1000])->assertSessionHasNoErrors();
         $folio->refresh();
         $this->assertEquals(1, $folio->overtime_hours);
@@ -255,6 +314,8 @@ class BillingIntegrityTest extends TestCase
         $folio = $this->folio(['rate_tier' => 'promo', 'room_charge' => 995, 'checked_in_at' => now()->subHours(12)]);
         $this->assertEquals(0, app(BillingService::class)->calculate($folio)['excessHours']);
         $this->travel(1)->seconds();
+        $this->assertEquals(0, app(BillingService::class)->calculate($folio)['excessHours']);
+        $this->travel(15)->minutes();
         $this->assertEquals(1, app(BillingService::class)->calculate($folio)['excessHours']);
         $senior = $this->folio(['senior_pwd_discount' => true]);
         $senior->recalculate();

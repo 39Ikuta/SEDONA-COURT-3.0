@@ -446,6 +446,7 @@
     let tierHours = {{ (int)$tierHours }};
     let xtendHours = {{ (int)$xtendHours }};
     let totalBookedHours = {{ (int)$totalBookedHours }};
+    const overstayGraceMs = {{ max(0, (int) config('sedona.overstay_grace_minutes', 15)) }} * 60 * 1000;
     let checkOutTimestamp = new Date("{{ $checkOutTime->toIso8601String() }}").getTime();
     let addOnsTotal = {{ (float)$addOnsTotal }};
     let addHourUnitPrice = 130;
@@ -539,7 +540,8 @@
 
         const diffMs = Math.max(0, checkOutTimestamp - cInDate.getTime());
         const actualHoursDiff = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
-        const excessHours = Math.max(0, actualHoursDiff - totalBookedHours);
+        const billableOverstayMs = Math.max(0, diffMs - totalBookedHours * 60 * 60 * 1000 - overstayGraceMs);
+        const excessHours = Math.ceil(billableOverstayMs / (60 * 60 * 1000));
         addHoursRate = (xtendHours + excessHours) * addHourUnitPrice;
 
         const inpActualStayDiff = document.getElementById('inpActualStayDiff');

@@ -227,6 +227,7 @@ class CheckInController extends Controller
             $this->requireAvailable($target);
             $oldRoom = $rooms[$locked->room_id];
             $locked->room_id = $target->id;
+            $locked->room_charge = $target->getRateForTier($locked->rate_tier);
             $locked->setRelation('room', $target);
             $locked->recalculate();
             $locked->orders()->update(['room_id' => $target->id]);

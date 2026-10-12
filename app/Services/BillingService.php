@@ -20,8 +20,11 @@ class BillingService
         $tierHours = $folio->room?->getTierHours($folio->rate_tier) ?: 3;
         $xtendHours = (int) $folio->extra_hours;
         $totalBookedHours = $tierHours + $xtendHours;
-        $actualHoursDiff = max(1, (int) ceil(max(0, $folio->checked_in_at->diffInSeconds($checkOutTime, false)) / 3600));
-        $excessHours = $settled ? (int) $folio->overtime_hours : ($includeOvertime ? max(0, $actualHoursDiff - $totalBookedHours) : 0);
+        $elapsedSeconds = max(0, $folio->checked_in_at->diffInSeconds($checkOutTime, false));
+        $actualHoursDiff = max(1, (int) ceil($elapsedSeconds / 3600));
+        $graceSeconds = max(0, (int) config('sedona.overstay_grace_minutes', 15)) * 60;
+        $billableOverstaySeconds = max(0, $elapsedSeconds - ($totalBookedHours * 3600) - $graceSeconds);
+        $excessHours = $settled ? (int) $folio->overtime_hours : ($includeOvertime ? (int) ceil($billableOverstaySeconds / 3600) : 0);
         $roomCents = self::cents($folio->room_charge);
         $posCents = 0;
         $extraCents = 0;

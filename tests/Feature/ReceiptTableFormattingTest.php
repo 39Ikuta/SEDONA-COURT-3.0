@@ -113,16 +113,16 @@ class ReceiptTableFormattingTest extends TestCase
             'user_id' => $this->cashier->id,
             'transaction_id' => 'SCTI-BILL-TEST',
             'rate_tier' => '3h',
-            'checked_in_at' => now()->subHours(6),
-            'expected_checkout_at' => now()->subHours(3),
+            'checked_in_at' => now()->subHours(6)->subMinutes(16),
+            'expected_checkout_at' => now()->subMinutes(16),
             'status' => 'active',
             'room_charge' => 695.00,
             'extra_hours' => 3,
             'pos_items' => [
                 ['name' => 'Porksilog', 'qty' => 1, 'price' => 150.00, 'subtotal' => 150.00],
             ],
-            'gross_total' => 1235.00,
-            'net_total' => 1235.00,
+            'gross_total' => 1365.00,
+            'net_total' => 1365.00,
         ]);
 
         $response = $this->actingAs($this->cashier)->get(route('folios.billing', $folio->id));

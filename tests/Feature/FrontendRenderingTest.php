@@ -89,13 +89,13 @@ class FrontendRenderingTest extends TestCase
         $this->assertSame('delivered', $xpath->query('.//input[@name="status"]', $secondForm)->item(0)->getAttribute('value'));
     }
 
-    public function test_pos_menu_escapes_names_and_disables_dishes_outside_kitchen_hours(): void
+    public function test_pos_menu_escapes_names_and_allows_stocked_kitchen_dishes_at_night(): void
     {
         $this->travelTo(now()->setTime(23, 0));
         $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
         $name = "Guest's <img src=x onerror=alert(1)>";
         $safeItem = PosItem::create(['name' => $name, 'category' => 'Drinks', 'price' => 50, 'is_available' => true, 'is_tracked' => false, 'kitchen_hours_only' => false]);
-        $closedItem = PosItem::create(['name' => 'Night Closed Dish', 'category' => 'Drinks', 'price' => 100, 'is_available' => true, 'is_tracked' => false, 'kitchen_hours_only' => true]);
+        $kitchenItem = PosItem::create(['name' => 'Night Kitchen Dish', 'category' => 'Favorites', 'price' => 100, 'is_available' => true, 'is_tracked' => true, 'stock_quantity' => 50, 'kitchen_hours_only' => true]);
 
         $response = $this->actingAs($cashier)->get(route('pos.index'))->assertOk();
         $xpath = $this->htmlXPath($response->getContent());
@@ -106,7 +106,9 @@ class FrontendRenderingTest extends TestCase
         $this->assertSame($name, $button->getAttribute('data-item-name'));
         $this->assertStringNotContainsString($name, $button->getAttribute('onclick'));
         $this->assertSame(0, $xpath->query('//img[@onerror]')->length);
-        $this->assertSame(0, $xpath->query('//button[@data-item-id="'.$closedItem->id.'"]')->length);
+        $this->assertSame(1, $xpath->query('//button[@data-item-id="'.$kitchenItem->id.'"]')->length);
+        $stockBadge = $xpath->query('//div[contains(@class,"pos-catalog-item")][.//h3[text()="Night Kitchen Dish"]]//span[contains(text(),"Stock:")]')->item(0);
+        $this->assertStringContainsString('bg-emerald-100', $stockBadge->getAttribute('class'));
     }
 
     public function test_pricing_form_keeps_manual_availability_separate_from_ingredient_stock(): void

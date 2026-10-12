@@ -11,6 +11,7 @@ return [
     'extra_bedding_rate' => env('SEDONA_EXTRA_BEDDING_RATE', 100),
     'extra_towel_rate' => env('SEDONA_EXTRA_TOWEL_RATE', 100),
     'extra_hour_rate' => env('SEDONA_EXTRA_HOUR_RATE', 130),
+    'overstay_grace_minutes' => env('SEDONA_OVERSTAY_GRACE_MINUTES', 15),
     'senior_pwd_discount_percent' => env('SEDONA_DISCOUNT_PERCENT', 20),
     'currency_symbol' => '₱',
 ];

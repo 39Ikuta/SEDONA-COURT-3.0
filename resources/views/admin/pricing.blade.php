@@ -268,7 +268,7 @@
                     <input type="checkbox" name="kitchen_hours_only" value="1"
                         {{ old('kitchen_hours_only') ? 'checked' : '' }}
                         class="rounded border-slate-300 text-[#421A2B]">
-                    <span class="text-[11px] font-bold text-slate-700">Kitchen Hours Only (6AM - 10PM)</span>
+                    <span class="text-[11px] font-bold text-slate-700">Prepared in Kitchen (Available 24/7)</span>
                 </label>
             </div>
 
