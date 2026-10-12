@@ -138,10 +138,11 @@ class CheckInController extends Controller
     public function extendStay(Request $request, Folio $folio): RedirectResponse
     {
         $data = $request->validate(['hours' => 'required|integer|min:1|max:8760']);
-        DB::transaction(function () use ($folio, $data): void {
+        $extraHours = (int) $data['hours'];
+        DB::transaction(function () use ($folio, $extraHours): void {
             [$locked] = $this->lockActive($folio);
-            $locked->extra_hours += $data['hours'];
-            $locked->expected_checkout_at = $locked->expected_checkout_at->copy()->addHours($data['hours']);
+            $locked->extra_hours += $extraHours;
+            $locked->expected_checkout_at = $locked->expected_checkout_at->copy()->addHours($extraHours);
             $locked->recalculate();
         });
 

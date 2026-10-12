@@ -58,6 +58,43 @@ class BillingIntegrityTest extends TestCase
         $this->assertDatabaseHas('payment_entries', ['folio_id' => $folio->id, 'kind' => 'settlement', 'cash_amount' => 985]);
     }
 
+    public function test_stay_extension_accepts_hours_from_an_html_form(): void
+    {
+        $folio = $this->folio();
+        $folio->recalculate();
+
+        $this->post(route('folios.extend', $folio), ['hours' => '3'])
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Stay extended.');
+
+        $this->assertDatabaseHas('folios', [
+            'id' => $folio->id,
+            'extra_hours' => 3,
+            'expected_checkout_at' => today()->format('Y-m-d').' 17:00:00',
+            'surcharge_total' => 390,
+            'net_total' => 785,
+        ]);
+        $this->assertDatabaseHas('rooms', ['id' => $this->room->id, 'status' => 'occupied']);
+    }
+
+    public function test_stay_extension_rejects_fractional_hours_without_changing_the_folio(): void
+    {
+        $folio = $this->folio();
+        $folio->recalculate();
+
+        $this->post(route('folios.extend', $folio), ['hours' => '1.5'])
+            ->assertSessionHasErrors('hours');
+
+        $this->assertDatabaseHas('folios', [
+            'id' => $folio->id,
+            'extra_hours' => 0,
+            'expected_checkout_at' => today()->format('Y-m-d').' 14:00:00',
+            'surcharge_total' => 0,
+            'net_total' => 395,
+        ]);
+    }
+
     public function test_overtime_rounds_immediately_and_receipt_freezes_at_checkout(): void
     {
         $folio = $this->folio(['checked_in_at' => now()->subHours(4)->subSecond(), 'extra_hours' => 1]);
