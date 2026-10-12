@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Shift Drawer Audits & Handover Reconciliations')
+@section('title', config('sedona.shift_handover_enabled') ? 'Shift Drawer Audits & Handover Reconciliations' : 'Shift Drawer Audits & Reconciliations')
 @section('subtitle', 'Accounting & Financial Hub | Cashier Float Reconciliations & Drawer Discrepancy Audits')
 
 @section('top_action')

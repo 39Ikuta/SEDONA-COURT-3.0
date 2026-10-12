@@ -115,6 +115,7 @@ class FinanceControlController extends Controller
 
     public function handover(Request $request, Shift $shift, FinancialPostingService $posting, ApprovalService $approvals): RedirectResponse
     {
+        abort_unless(config('sedona.shift_handover_enabled'), 404);
         $data = $request->validate(['accepted_cash' => 'required|numeric|min:0|max:50000000|decimal:0,2', 'notes' => 'required|string|max:1000']);
         $result = $posting->execute($request, 'shift.accept', $shift->id, $data, function () use ($request, $shift, $data, $approvals): array {
             $shift = Shift::whereKey($shift->id)->lockForUpdate()->firstOrFail();

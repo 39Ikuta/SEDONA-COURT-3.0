@@ -241,6 +241,7 @@ class ApprovalAndCustodyTest extends TestCase
 
     public function test_handover_acceptance_opens_incoming_drawer_once_and_retains_outgoing_count(): void
     {
+        config(['sedona.shift_handover_enabled' => true]);
         $this->post(route('shifts.close', $this->shift), ['denominations' => [100 => 1]])->assertRedirect()->assertSessionHasNoErrors();
         $this->post(route('shifts.open'), $this->key(['opening_float' => 100]))->assertSessionHasErrors('shift');
         $this->post(route('shifts.accept', $this->shift), $this->key(['accepted_cash' => 100, 'notes' => 'Own count']))->assertForbidden();
@@ -256,6 +257,7 @@ class ApprovalAndCustodyTest extends TestCase
 
     public function test_disputed_handover_requires_independent_review_of_incoming_count(): void
     {
+        config(['sedona.shift_handover_enabled' => true]);
         $this->post(route('shifts.close', $this->shift), ['denominations' => [100 => 1]])->assertRedirect()->assertSessionHasNoErrors();
         $incoming = User::where('email', 'raquel@sedonapms.com')->firstOrFail();
         $this->actingAs($incoming)->post(route('shifts.accept', $this->shift), $this->key(['accepted_cash' => 90, 'notes' => 'Ten pesos short']))->assertRedirect()->assertSessionHasNoErrors();

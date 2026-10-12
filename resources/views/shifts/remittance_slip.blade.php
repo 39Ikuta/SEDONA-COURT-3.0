@@ -102,7 +102,7 @@
         <div class="text-center">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
             <div style="font-size: 9px; margin-top: 2px;">TRAVELLER'S INN &bull; STATION FD-01</div>
-            <div style="font-size: 8px; color: #555;">SHIFT TERMINAL HANDOVER REPORT</div>
+            <div style="font-size: 8px; color: #555;">{{ config('sedona.shift_handover_enabled') ? 'SHIFT TERMINAL HANDOVER REPORT' : 'SHIFT DRAWER RECONCILIATION REPORT' }}</div>
         </div>
 
         <div class="double-divider"></div>
@@ -117,10 +117,12 @@
                 <span>OUTGOING OP:</span>
                 <span class="font-bold">{{ $shift->openedBy->name ?? 'Frontdesk Cashier' }}</span>
             </div>
-            <div class="row">
-                <span>INCOMING OP:</span>
-                <span class="font-bold">{{ $incomingCashier ?? 'Next Shift Operator' }}</span>
-            </div>
+            @if(config('sedona.shift_handover_enabled') || $shift->accepted_by)
+                <div class="row">
+                    <span>INCOMING OP:</span>
+                    <span class="font-bold">{{ $incomingCashier ?? 'Next Shift Operator' }}</span>
+                </div>
+            @endif
             <div class="row">
                 <span>SHIFT BASIS:</span>
                 <span class="font-bold">12-HOUR ROTATIONAL</span>
@@ -269,9 +271,11 @@
             <div class="sig-line">
                 Outgoing Cashier: {{ $shift->openedBy->name ?? 'Turnover Operator' }}
             </div>
-            <div class="sig-line" style="margin-top: 20px;">
-                Incoming Cashier: {{ $incomingCashier ?? 'Receiving Operator' }}
-            </div>
+            @if(config('sedona.shift_handover_enabled') || $shift->accepted_by)
+                <div class="sig-line" style="margin-top: 20px;">
+                    Incoming Cashier: {{ $incomingCashier ?? 'Receiving Operator' }}
+                </div>
+            @endif
             <div class="sig-line" style="margin-top: 20px;">
                 Audited &amp; Verified by Duty Manager
             </div>

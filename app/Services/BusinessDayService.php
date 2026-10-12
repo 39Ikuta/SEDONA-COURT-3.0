@@ -66,10 +66,10 @@ class BusinessDayService
         $statements = StatementLine::whereDate('business_date', $date)->whereNotIn('id', DB::table('statement_exclusions')->select('statement_line_id'))->orderBy('id')->get();
         $shifts = Shift::where('opened_at', '<', $end)->where(fn ($query) => $query->whereNull('closed_at')->orWhere('closed_at', '>', $start))->orderBy('id')->get();
         $exceptions = [];
-        if ($shifts->whereNull('closed_at')->isNotEmpty()) {
+        if (! config('sedona.continuous_shift_enabled') && $shifts->whereNull('closed_at')->isNotEmpty()) {
             $exceptions[] = 'An intersecting drawer is still open.';
         }
-        if ($shifts->contains(fn (Shift $shift): bool => in_array($shift->handover_status, ['pending', 'disputed'], true))) {
+        if (config('sedona.shift_handover_enabled') && $shifts->contains(fn (Shift $shift): bool => in_array($shift->handover_status, ['pending', 'disputed'], true))) {
             $exceptions[] = 'Drawer handover requires acceptance or variance review.';
         }
         if ($shifts->contains(fn (Shift $shift): bool => BillingService::cents($shift->cash_variance) !== 0 && ! app(ApprovalService::class)->hasCurrentVarianceReview($shift))) {
@@ -78,7 +78,7 @@ class BusinessDayService
         if ($expenses->contains(fn (Expense $expense): bool => $expense->status !== 'approved')) {
             $exceptions[] = 'Paid expenses need independent review; rejected payments need correction.';
         }
-        if (ApprovalRequest::whereIn('status', ['pending', 'approved'])->where('created_at', '<', $end)->exists()) {
+        if (ApprovalRequest::whereIn('status', ['pending', 'approved'])->when(! config('sedona.shift_handover_enabled'), fn ($query) => $query->where('kind', '!=', 'handover_variance'))->where('created_at', '<', $end)->exists()) {
             $exceptions[] = 'An approval request is unresolved.';
         }
         foreach ($payments as $entry) {
@@ -105,6 +105,8 @@ class BusinessDayService
 
         return [
             'business_date' => $date, 'starts_at' => $start->toIso8601String(), 'ends_at' => $end->toIso8601String(),
+            'shift_handover_enabled' => (bool) config('sedona.shift_handover_enabled'),
+            'continuous_shift_enabled' => (bool) config('sedona.continuous_shift_enabled'),
             'cash_cents' => BillingService::cents($payments->sum('cash_amount')), 'gcash_cents' => BillingService::cents($payments->sum('gcash_amount')),
             'opening_deposit_cents' => $openingKnown, 'closing_deposit_cents' => $closingKnown, 'opening_legacy_deposit_cents' => $openingLegacy, 'closing_legacy_deposit_cents' => $closingLegacy,
             'payments' => $payments->map(fn (PaymentEntry $entry): array => $entry->toArray() + ['refund_tax_cents' => InvoiceService::refundTaxCents($entry)])->all(), 'folios' => $folios->map(fn (Folio $f): array => $f->toArray() + ['deposit_applied' => app(BillingService::class)->calculate($f)['depositApplied']])->all(), 'orders' => $orders->toArray(),

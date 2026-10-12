@@ -28,6 +28,7 @@ class CashierShiftGuidanceTest extends TestCase
 
     public function test_closed_shift_explains_pending_handover_and_keeps_checkout_unsettled(): void
     {
+        config(['sedona.shift_handover_enabled' => true]);
         $cashier = $this->cashier();
         $folio = $this->folio($cashier);
         $this->shift($cashier, ['closed_at' => now(), 'closed_by' => $cashier->id, 'handover_status' => 'pending']);

@@ -55,7 +55,7 @@ class ShiftController extends Controller
                     ->orWhere('incoming_user_id', $request->user()->id)->orWhereNull('incoming_user_id');
             });
         }
-        $pendingHandovers = $pendingHandovers->orderBy('id')->get();
+        $pendingHandovers = config('sedona.shift_handover_enabled') ? $pendingHandovers->orderBy('id')->get() : collect();
         $drawerStatus = $this->shiftAccess->paymentStatus($request->user());
 
         return view('shifts.index', compact('activeShift', 'pastShifts', 'shiftExpenses', 'openingFloat', 'cashRevenue', 'gcashCollections', 'totalExpenses', 'expectedCash', 'canOperateActiveShift', 'pendingHandovers', 'drawerStatus'));
@@ -77,7 +77,7 @@ class ShiftController extends Controller
         try {
             app(FinancialPostingService::class)->execute($request, 'shift.open', null, $validated, function () use ($validated, $request, $audit): array {
                 app(BusinessDayService::class)->assertWritable();
-                if (Shift::whereIn('handover_status', ['pending', 'disputed', 'variance_approved'])->lockForUpdate()->exists()) {
+                if (config('sedona.shift_handover_enabled') && Shift::whereIn('handover_status', ['pending', 'disputed', 'variance_approved'])->lockForUpdate()->exists()) {
                     throw ValidationException::withMessages(['shift' => 'Accept the preceding drawer handover before opening another shift.']);
                 }
                 if (Shift::whereNull('closed_at')->lockForUpdate()->exists()) {
@@ -137,6 +137,7 @@ class ShiftController extends Controller
 
     public function closeShift(Request $request, Shift $shift, AuditService $audit): RedirectResponse
     {
+        abort_if(config('sedona.continuous_shift_enabled'), 409, 'The continuous cashier shift stays open. Sign out when you finish; the next cashier uses the same drawer.');
         Gate::authorize('operate-shift', $shift);
         $validated = $request->validate([
             'denominations' => 'required|array:1000,500,200,100,50,20,coins',
@@ -148,7 +149,7 @@ class ShiftController extends Controller
             'denominations.20' => 'nullable|integer|min:0|max:1000000',
             'denominations.coins' => 'nullable|numeric|min:0|max:1000000|decimal:0,2',
             'handoff_notes' => 'nullable|string|max:1000',
-            'incoming_user_id' => 'nullable|integer|exists:users,id',
+            'incoming_user_id' => config('sedona.shift_handover_enabled') ? 'nullable|integer|exists:users,id' : 'exclude',
             'shift_override_reason' => 'nullable|string|max:500',
         ]);
         DB::transaction(function () use ($validated, $shift, $request, $audit): void {
@@ -176,7 +177,8 @@ class ShiftController extends Controller
                 'cash_variance' => round($countedCash - $summary['expectedCash'], 2),
                 'gcash_total' => $summary['gcashSales'], 'room_revenue' => $summary['roomRevenue'] + $summary['overtimeRevenue'] + $summary['surchargesRevenue'],
                 'kitchen_revenue' => $summary['diningRevenue'], 'gross_revenue' => $summary['grossRevenue'],
-                'handoff_notes' => $validated['handoff_notes'] ?? null, 'incoming_user_id' => $validated['incoming_user_id'] ?? null, 'handover_status' => 'pending',
+                'handoff_notes' => $validated['handoff_notes'] ?? null, 'incoming_user_id' => $validated['incoming_user_id'] ?? null,
+                'handover_status' => config('sedona.shift_handover_enabled') ? 'pending' : null,
             ]);
             if (BillingService::cents($shift->cash_variance) !== 0) {
                 app(ApprovalService::class)->request($request, 'shift_variance', $shift->id, [], 'Review outgoing drawer variance', $validated['handoff_notes'] ?? null);
@@ -207,7 +209,8 @@ class ShiftController extends Controller
         $occupiedCount = $rooms->where('status', 'occupied')->count();
         $availableCount = $rooms->where('status', 'available')->count();
         $maintenanceCount = $rooms->where('status', 'maintenance')->count();
-        $incomingCashier = $shift->accepted_by ? User::find($shift->accepted_by)?->name : 'Acceptance pending';
+        $incomingCashier = $shift->accepted_by ? User::find($shift->accepted_by)?->name
+            : (config('sedona.shift_handover_enabled') ? 'Acceptance pending' : 'Not required');
 
         return view('shifts.remittance_slip', compact('shift', 'cashSales', 'gcashSales', 'totalRevenue',
             'shiftExpenses', 'totalExpenses', 'cashMovements', 'cashMovementTotal', 'openingFloat', 'expectedCash', 'actualCash', 'variance',

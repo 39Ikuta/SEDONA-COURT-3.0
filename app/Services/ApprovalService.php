@@ -261,6 +261,7 @@ class ApprovalService
             abort_unless($source->isOpen() && ! $source->is_frozen, 409);
         }
         if ($kind === 'handover_variance') {
+            abort_unless(config('sedona.shift_handover_enabled'), 409, 'Shift handover is temporarily disabled.');
             abort_unless($source->handover_status === 'disputed', 409);
         }
         if ($kind === 'shift_variance') {

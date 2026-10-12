@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('title', 'Cashier Shifts & Cash Drawer Management')
-@section('subtitle', 'Front Desk Shift Turnover & Cash Drawer Reconciliation')
+@section('subtitle', config('sedona.continuous_shift_enabled') ? 'One shared cash drawer for all cashier accounts' : 'Start and close cashier shifts with cash drawer reconciliation')
 
 @section('top_action')
     <a href="{{ route('dashboard') }}" class="bg-[#333333] hover:bg-[#222222] text-white text-[11px] font-bold px-3 py-1 rounded shadow-sm border border-[#666666]">
@@ -15,8 +15,16 @@
     <!-- Header -->
     <div class="workspace-toolbar flex flex-wrap items-center justify-between gap-3 text-xs">
         <div>
-            <h1 class="font-bold text-slate-900 text-sm uppercase tracking-wide">Cashier Shift Management & Cash Drawer Turnover</h1>
-            <p class="text-slate-500">Start your shift before taking payments. Keep it open while working; count and close the drawer when handing it to the next cashier.</p>
+            <h1 class="font-bold text-slate-900 text-sm uppercase tracking-wide">Cashier Shift Management & Cash Drawer Reconciliation</h1>
+            @if(config('sedona.continuous_shift_enabled'))
+                <p class="text-slate-500">One continuous shift is shared by all cashiers. Sign out when you finish; the next cashier signs in and uses the same drawer. Each payment records the cashier who handled it.</p>
+                @unless($activeShift)<p class="text-slate-500">Start the drawer once with the actual opening cash. It stays open after that.</p>@endunless
+            @else
+                <p class="text-slate-500">Start your shift before taking payments. Keep it open while working; count and close the drawer when your shift ends.</p>
+            @endif
+            @if(!config('sedona.shift_handover_enabled') && !config('sedona.continuous_shift_enabled'))
+                <p class="text-slate-500">The next cashier starts a new shift with the actual opening cash. Handover acceptance is temporarily disabled.</p>
+            @endif
         </div>
 
         @if(!$activeShift && $drawerStatus['state'] === 'no_shift')
@@ -68,7 +76,7 @@
             @endif
         </div>
     @endforeach
-    <div class="text-sm"><a href="{{ route('approvals.index') }}" class="underline">Request cash drops, replenishment or bank deposits; review pending tasks</a>. Close and hand over your drawer before signing out.</div>
+    <div class="text-sm"><a href="{{ route('approvals.index') }}" class="underline">Request cash drops, replenishment or bank deposits; review pending tasks</a>. {{ config('sedona.continuous_shift_enabled') ? 'Sign out when you finish. The shared drawer stays open.' : 'Count and close your drawer before signing out.' }}</div>
 
     <!-- Active Shift Box (if open) -->
     @if($activeShift && !$canOperateActiveShift)
@@ -171,6 +179,7 @@
             </div>
 
             <!-- Counted Shift Closeout Form -->
+            @unless(config('sedona.continuous_shift_enabled'))
             <form method="POST" action="{{ route('shifts.close', $activeShift->id) }}" class="space-y-3 pt-3 border-t border-slate-200">
                 @csrf
             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
@@ -231,7 +240,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Handoff Notes / Special Incidents for Incoming Shift Cashier:</label>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Shift Closing Notes / Special Incidents:</label>
                     <textarea name="handoff_notes" rows="2" placeholder="e.g. Room 13 currently extended by 3 hours. Key issued for Room 7. Cash float balanced." class="form-control-hms">{{ $activeShift->handoff_notes }}</textarea>
                 </div>
 
@@ -242,6 +251,7 @@
                     </button>
                 </div>
             </form>
+            @endunless
         </div>
     @endif
 
