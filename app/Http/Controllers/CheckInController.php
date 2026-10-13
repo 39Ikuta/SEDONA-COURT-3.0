@@ -179,8 +179,13 @@ class CheckInController extends Controller
         $data = $request->validate(['discount_type' => 'required|in:senior,pwd,dc,none', 'discount_id_ref' => 'nullable|string|max:100']);
         DB::transaction(function () use ($request, $folio, $data): void {
             [$locked] = $this->lockActive($folio);
+            $before = $locked->only(['discount_type', 'discount_id_ref', 'discount_amount', 'senior_pwd_discount', 'net_total']);
             $this->applyDraft($locked, $request, $data);
             $locked->recalculate();
+            $after = $locked->only(array_keys($before));
+            if ($before != $after) {
+                $this->audit->record($request, 'folio.discount_applied', $locked, ['before' => $before, 'after' => $after]);
+            }
         });
 
         return redirect()->route('dashboard')->with('success', 'Discount applied.');
@@ -422,9 +427,8 @@ class CheckInController extends Controller
             }
         }
         if (isset($data['discount_type']) && strtoupper($data['discount_type']) !== strtoupper($folio->discount_type ?? 'NONE')) {
-            $type = strtoupper($data['discount_type']);
-            if ($type === 'DC' || strtoupper($folio->discount_type ?? '') === 'DC' || $folio->discount_override_amount !== null) {
-                throw ValidationException::withMessages(['discount_type' => 'Discretionary discount changes require independent approval.']);
+            if ($folio->discount_override_amount !== null) {
+                throw ValidationException::withMessages(['discount_type' => 'Custom discount changes require independent approval.']);
             }
         }
         $discountType = DiscountService::normalizeDiscountType($data['discount_type'] ?? $folio->discount_type);

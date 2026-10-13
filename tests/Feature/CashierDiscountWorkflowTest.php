@@ -7,6 +7,7 @@ use App\Models\Room;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
@@ -26,21 +27,49 @@ class CashierDiscountWorkflowTest extends TestCase
         $this->assertSame('0.00', $folio->fresh()->discount_amount);
     }
 
-    #[TestWith(['senior', 'OSCA-ROOM-29'])]
-    #[TestWith(['pwd', 'PWD-ROOM-29'])]
-    public function test_cashier_can_save_a_documented_fixed_discount_from_checkout(string $type, string $reference): void
+    #[TestWith(['senior', 'OSCA-ROOM-29', '79.00', '316.00'])]
+    #[TestWith(['pwd', 'PWD-ROOM-29', '79.00', '316.00'])]
+    #[TestWith(['dc', 'DC-ROOM-29', '40.00', '355.00'])]
+    public function test_cashier_can_save_a_documented_fixed_discount_from_checkout(string $type, string $reference, string $discount, string $total): void
     {
         $folio = $this->checkInRoom29();
 
         $this->postJson(route('folios.deposit', $folio), [
             'discount_type' => $type, 'discount_id_ref' => $reference,
-        ])->assertOk()->assertJsonPath('discount_amount', '79.00')->assertJsonPath('net_total', '316.00');
+        ])->assertOk()->assertJsonPath('discount_amount', $discount)->assertJsonPath('net_total', $total);
 
         $this->assertDatabaseHas('folios', [
             'id' => $folio->id, 'discount_type' => strtoupper($type),
-            'discount_id_ref' => $reference, 'discount_amount' => 79,
+            'discount_id_ref' => $reference, 'discount_amount' => (float) $discount,
         ]);
         $this->get(route('checkout.process', $folio))->assertSee($reference);
+    }
+
+    public function test_cashier_can_apply_switch_and_clear_fixed_dc_without_an_approval(): void
+    {
+        $folio = $this->checkInRoom29();
+        $cashier = auth()->user();
+        $url = route('folios.discount', $folio);
+        $payload = ['discount_type' => 'dc', 'discount_id_ref' => 'DC-CARD-29'];
+
+        $this->post($url, $payload)->assertSessionHasNoErrors()->assertRedirect(route('dashboard'));
+        $this->post($url, $payload)->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'discount_type' => 'DC', 'discount_amount' => 40, 'net_total' => 355, 'discount_id_ref' => 'DC-CARD-29']);
+        $this->assertDatabaseCount('approval_requests', 0);
+        $audit = DB::table('audit_logs')->where('event', 'folio.discount_applied')->sole();
+        $details = json_decode($audit->new_values, true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame($cashier->id, $audit->user_id);
+        $this->assertSame('NONE', $details['before']['discount_type']);
+        $this->assertSame('DC', $details['after']['discount_type']);
+        $this->assertSame('40.00', $details['after']['discount_amount']);
+
+        $this->post($url, ['discount_type' => 'senior', 'discount_id_ref' => 'OSCA-29'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'discount_type' => 'SENIOR', 'discount_amount' => 79, 'net_total' => 316]);
+        $this->post($url, ['discount_type' => 'dc', 'discount_id_ref' => 'DC-CARD-29'])->assertSessionHasNoErrors();
+        $this->post($url, ['discount_type' => 'none'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'discount_type' => 'NONE', 'discount_amount' => 0, 'net_total' => 395, 'discount_id_ref' => null]);
+        $this->assertDatabaseCount('approval_requests', 0);
     }
 
     public function test_checkout_discount_without_an_id_returns_an_actionable_error_and_keeps_the_bill(): void

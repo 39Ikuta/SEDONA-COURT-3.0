@@ -142,7 +142,7 @@
             <input type="hidden" name="payload[discount_type]" id="discountApprovalType" disabled>
             <input type="hidden" name="payload[discount_id_ref]" id="discountApprovalReference" disabled>
             <div id="discountApprovalGroup" class="hidden space-y-2">
-                <p class="text-xs text-amber-800">This change needs owner/admin approval. The bill changes only after the request is approved and executed in Approvals &amp; Tasks.</p>
+                <p class="text-xs text-amber-800">Replacing a custom discount needs owner/admin approval. The bill changes only after the request is approved and executed in Approvals &amp; Tasks.</p>
                 <label for="discountApprovalReason" class="block text-xs font-bold text-slate-700">Reason for discount change</label>
                 <input name="reason" id="discountApprovalReason" maxlength="1000" disabled class="form-control-hms text-xs">
             </div>
@@ -321,9 +321,7 @@
         const type = document.getElementById('discountTypeSelect').value.toUpperCase();
         document.getElementById('discountIdRef').required = ['SENIOR', 'PWD'].includes(type);
         document.getElementById('discountIdRef').disabled = type === 'NONE';
-        const requiresApproval = type !== currentDiscountContext.currentType && (
-            type === 'DC' || currentDiscountContext.currentType === 'DC' || FOLIO_CUSTOM_DISCOUNTS[currentDiscountContext.folioId] != null
-        );
+        const requiresApproval = type !== currentDiscountContext.currentType && FOLIO_CUSTOM_DISCOUNTS[currentDiscountContext.folioId] != null;
         document.getElementById('discountForm').action = requiresApproval ? DISCOUNT_APPROVAL_URL : `/folios/${currentDiscountContext.folioId}/discount`;
         document.getElementById('discountApprovalGroup').classList.toggle('hidden', !requiresApproval);
         document.getElementById('discountSubmitButton').textContent = requiresApproval ? 'Request discount approval' : 'Apply Fixed Discount';

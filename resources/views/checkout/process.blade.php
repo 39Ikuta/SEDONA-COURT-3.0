@@ -14,7 +14,7 @@
 @endsection
 
 @section('content')
-<div class="hms-card mb-4 text-sm"><a href="{{ route('approvals.index', ['folio_id' => $folio->id]) }}" class="underline font-semibold">Request rate or guest discount changes for Room {{ $folio->room->number }}</a>. Execute the approved request, then reload checkout. Check-in time corrections are handled by RA (admin). @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
+<div class="hms-card mb-4 text-sm">Cashiers can save fixed Senior, PWD and DC discounts directly. <a href="{{ route('approvals.index', ['folio_id' => $folio->id]) }}" class="underline font-semibold">Request rate or custom discount overrides for Room {{ $folio->room->number }}</a>. Execute approved overrides, then reload checkout. Check-in time corrections are handled by RA (admin). @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
     <div class="rounded-xl border p-5 mx-2 mb-4 text-sm {{ $drawerStatus['state'] === 'ready' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50' }}" role="status" id="checkoutDrawerStatus">
         <h2 class="font-bold text-brand">{{ $drawerStatus['title'] }}</h2>
         <p class="mt-1 text-slate-700">{{ $drawerStatus['message'] }}</p>
