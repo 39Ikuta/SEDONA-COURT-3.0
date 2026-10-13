@@ -119,7 +119,7 @@
 
     <div class="container">
         <div class="header">
-            <div class="brand">SEDONA COURT TRAVELLER'S INN</div>
+            <div class="brand">{{ config('sedona.hotel_name') }}</div>
             <div style="font-size: 11px; color: #444;">Executive Accounting & Loss Control Audit Journal</div>
             <div class="title">FORCE CHECKOUT WRITE-OFF LOSS SLIP</div>
         </div>

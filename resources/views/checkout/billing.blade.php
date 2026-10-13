@@ -131,8 +131,8 @@
     <div class="thermal-container" id="printable-billing">
         <!-- Header -->
         <div class="text-center">
-            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
-            <div style="font-size: 9px;">TRAVELLER'S INN & LODGING</div>
+            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
+            <div style="font-size: 9px;">LODGING</div>
             <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
             <div style="font-size: 9px;">TEL: +63 (0939) 905-2816 &bull; TIN: 402-881-294-000</div>
         </div>
@@ -364,7 +364,7 @@
             <div>Please review charges before checkout.</div>
             <div>Settle your balance at Frontdesk Reception.</div>
             <div style="margin-top: 4px; font-size: 8px; color: #666;">
-                "Interim Billing Folio &bull; Sedona Court PMS"
+                "Interim Billing Folio &bull; {{ config('sedona.hotel_name') }}"
             </div>
         </div>
     </div>

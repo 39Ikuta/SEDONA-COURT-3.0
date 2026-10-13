@@ -199,7 +199,9 @@ class ApprovalAndCustodyTest extends TestCase
     {
         $folio = $this->folio();
         $this->postJson(route('folios.deposit', $folio), ['room_charge' => 1])->assertUnprocessable();
-        $this->postJson(route('folios.deposit', $folio), ['discount_type' => 'dc'])->assertUnprocessable();
+        $this->postJson(route('folios.deposit', $folio), ['discount_type' => 'dc'])->assertOk();
+        $this->postJson(route('folios.deposit', $folio), ['discount_override_amount' => 200])->assertOk();
+        $this->assertNull($folio->fresh()->discount_override_amount);
         $this->postJson(route('folios.deposit', $folio), ['discount_type' => 'senior'])->assertUnprocessable();
         $approval = $this->requestApproval('folio_override', $folio->id, ['room_charge' => 300, 'discount_type' => 'DC']);
         $this->approve($approval);

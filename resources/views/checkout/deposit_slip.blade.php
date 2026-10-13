@@ -103,8 +103,8 @@
         <div class="text-center" style="font-size: 10px; font-weight: bold;">{{ isset($receiptCopy) ? ($receiptCopy === 1 ? 'FIRST RECORDED PRINT REQUEST' : 'COPY — PRINT REQUEST #'.$receiptCopy) : 'PREVIEW — NO PRINT REQUEST RECORDED' }}</div>
         <!-- Header -->
         <div class="text-center">
-            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
-            <div style="font-size: 9px;">TRAVELLER'S INN &amp; LODGING</div>
+            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
+            <div style="font-size: 9px;">LODGING</div>
             <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
             <div style="font-size: 9px;">TEL: +63 (0939) 905-2816</div>
         </div>
@@ -183,7 +183,7 @@
         </div>
 
         <div class="text-center" style="font-size: 8px; margin-top: 8px; color: #555;">
-            *** OFFICIAL SECURITY DEPOSIT LEDGER SLIP • SEDONA COURT PMS ***
+            *** OFFICIAL SECURITY DEPOSIT LEDGER SLIP • {{ config('sedona.hotel_name') }} ***
         </div>
     </div>
 

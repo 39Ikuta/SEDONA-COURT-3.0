@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="theme-color" content="#572039">
-    <title>@yield('title', 'Dashboard') | {{ config('app.name', 'Sedona Court PMS') }}</title>
+    <title>@yield('title', 'Dashboard') | {{ config('sedona.hotel_name') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
 </head>
@@ -59,9 +59,9 @@
     <button type="button" id="sidebarOverlay" class="sidebar-overlay hidden" onclick="closePrimaryNav()" aria-label="Close navigation" tabindex="-1"></button>
     <aside class="app-sidebar" id="primaryNavMobile">
         <button type="button" class="sidebar-close" onclick="closePrimaryNav()" aria-label="Close navigation">×</button>
-        <a href="{{ route('dashboard') }}" class="app-brand" aria-label="Sedona home">
+        <a href="{{ route('dashboard') }}" class="app-brand" aria-label="{{ config('sedona.hotel_name') }} home">
             <span class="brand-mark">S</span>
-            <span><span class="brand-name">Sedona</span><span class="brand-caption">Court PMS</span></span>
+            <span><span class="brand-name">SEDONA COURT</span><span class="brand-caption">TRAVELLERS INN</span></span>
         </a>
         <div class="sidebar-content">
             <div>
@@ -97,7 +97,7 @@
             @endif
         </div>
         <div class="sidebar-footer">
-            <strong>Sedona Court</strong>
+            <strong>{{ config('sedona.hotel_name') }}</strong>
             A clear view of every stay.
         </div>
     </aside>

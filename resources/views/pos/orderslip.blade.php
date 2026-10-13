@@ -117,7 +117,7 @@
 
     <div class="thermal-container" id="printable-order-slip">
         <div class="text-center">
-            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
+            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
             <div style="font-size: 9px;">KITCHEN, BAR &amp; AMENITY SALES</div>
             <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
             <div style="font-size: 9px;">TEL: +63 (0939) 905-2816</div>
@@ -204,7 +204,7 @@
         </div>
 
         <div class="text-center" style="font-size: 9px; margin-top: 10px; color: #444;">
-            <div>Thank you for dining with Sedona Court!</div>
+            <div>Thank you for dining with {{ config('sedona.hotel_name') }}!</div>
             <div>Order charged to Room {{ $folio->room->number ?? 'N/A' }} Folio.</div>
         </div>
     </div>

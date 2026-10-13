@@ -226,7 +226,7 @@ class ReconciliationAndPeriodTest extends TestCase
 
     private function payment(float $amount, string $reference, ?User $actor = null): PaymentEntry
     {
-        $order = Order::create(['transaction_id' => (string) Str::uuid(), 'type' => 'walkin_pos', 'user_id' => ($actor ?? $this->cashier)->id, 'total' => $amount, 'payment_method' => 'gcash', 'gcash_amount' => $amount, 'gcash_reference' => $reference, 'status' => 'completed']);
+        $order = Order::create(['transaction_id' => (string) Str::uuid(), 'type' => 'walkin_pos', 'user_id' => ($actor ?? $this->cashier)->id, 'total' => $amount, 'payment_method' => 'gcash', 'gcash_amount' => $amount, 'gcash_reference' => $reference, 'status' => 'delivered']);
 
         return PaymentEntry::create(['order_id' => $order->id, 'user_id' => ($actor ?? $this->cashier)->id, 'kind' => 'pos_sale', 'cash_amount' => 0, 'gcash_amount' => $amount, 'gcash_reference' => $reference, 'posted_at' => now(), 'business_date' => app(BusinessDayService::class)->date()]);
     }

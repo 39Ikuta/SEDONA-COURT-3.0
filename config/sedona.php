@@ -3,7 +3,7 @@
 $continuousShiftEnabled = env('SEDONA_CONTINUOUS_SHIFT_ENABLED', true);
 
 return [
-    'hotel_name' => env('APP_NAME', 'Sedona Court PMS'),
+    'hotel_name' => 'SEDONA COURT TRAVELLERS INN',
     'seed_password' => env('SEDONA_SEED_PASSWORD'),
     'continuous_shift_enabled' => $continuousShiftEnabled,
     'shift_handover_enabled' => ! $continuousShiftEnabled && env('SEDONA_SHIFT_HANDOVER_ENABLED', false),

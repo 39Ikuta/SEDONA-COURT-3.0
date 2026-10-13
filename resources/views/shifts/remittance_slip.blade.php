@@ -100,8 +100,8 @@
     <div class="slip-container" id="printable-shift-remittance">
         <!-- Header -->
         <div class="text-center">
-            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
-            <div style="font-size: 9px; margin-top: 2px;">TRAVELLER'S INN &bull; STATION FD-01</div>
+            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
+            <div style="font-size: 9px; margin-top: 2px;">STATION FD-01</div>
             <div style="font-size: 8px; color: #555;">{{ config('sedona.shift_handover_enabled') ? 'SHIFT TERMINAL HANDOVER REPORT' : 'SHIFT DRAWER RECONCILIATION REPORT' }}</div>
         </div>
 
@@ -282,7 +282,7 @@
         </div>
 
         <div style="margin-top: 14px; text-align: center; font-size: 8px; color: #555;">
-            *** OFFICIAL SHIFT TURNOVER SLIP • SEDONA COURT HMS ***
+            *** OFFICIAL SHIFT TURNOVER SLIP • {{ config('sedona.hotel_name') }} ***
         </div>
     </div>
 

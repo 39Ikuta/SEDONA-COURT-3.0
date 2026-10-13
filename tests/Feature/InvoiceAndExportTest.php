@@ -189,6 +189,7 @@ class InvoiceAndExportTest extends TestCase
 
     public function test_partial_sale_refund_reverses_its_share_of_invoice_tax_in_export(): void
     {
+        config(['sedona.shift_handover_enabled' => true, 'sedona.continuous_shift_enabled' => false]);
         $this->configure();
         $date = app(BusinessDayService::class)->date();
         $shift = Shift::create(['opened_by' => $this->cashier->id, 'opened_at' => now()->subHour(), 'shift_type' => 'day', 'shift_date' => today(), 'opening_float' => 0]);
@@ -211,7 +212,7 @@ class InvoiceAndExportTest extends TestCase
 
     private function order(float $amount): Order
     {
-        $order = Order::create(['transaction_id' => (string) Str::uuid(), 'type' => 'walkin_pos', 'total' => $amount, 'status' => 'completed', 'user_id' => $this->cashier->id, 'payment_method' => 'cash', 'cash_tendered' => $amount]);
+        $order = Order::create(['transaction_id' => (string) Str::uuid(), 'type' => 'walkin_pos', 'total' => $amount, 'status' => 'delivered', 'user_id' => $this->cashier->id, 'payment_method' => 'cash', 'cash_tendered' => $amount]);
         PaymentEntry::create(['order_id' => $order->id, 'user_id' => $this->cashier->id, 'kind' => 'pos_sale', 'cash_amount' => $amount, 'gcash_amount' => 0, 'posted_at' => now(), 'business_date' => app(BusinessDayService::class)->date()]);
 
         return $order;

@@ -102,7 +102,7 @@
     <div class="pass-container" id="printable-gate-pass">
         <!-- Header Brand -->
         <div class="text-center">
-            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
+            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
             <div style="font-size: 9px; margin-top: 2px;">DOÑA REMEDIOS TRINIDAD HWY</div>
             <div style="font-size: 9px;">SAN RAFAEL, 3008 BULACAN</div>
             <div style="font-size: 9px;">TEL: +63 (0939) 905-2816</div>
@@ -169,7 +169,7 @@
 
         <div style="margin-top: 10px; text-align: center; font-size: 9px; font-style: italic; color: #444;">
             <div>Please surrender this pass to the gate security.</div>
-            <div>Thank you for choosing Sedona Court!</div>
+            <div>Thank you for choosing {{ config('sedona.hotel_name') }}!</div>
         </div>
     </div>
 

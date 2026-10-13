@@ -4,21 +4,21 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#572039">
-    <title>Staff Terminal Sign-In | {{ config('app.name', 'Sedona Court PMS') }}</title>
+    <title>Staff Terminal Sign-In | {{ config('sedona.hotel_name') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="login-page">
     <aside class="login-brand-panel">
         <div class="app-brand">
             <span class="brand-mark">S</span>
-            <span><span class="brand-name">Sedona</span><span class="brand-caption">Court PMS</span></span>
+            <span><span class="brand-name">SEDONA COURT</span><span class="brand-caption">TRAVELLERS INN</span></span>
         </div>
         <div class="login-intro">
             <span class="login-eyebrow">Your daily operations, simplified</span>
             <h1>A clear view.<br>A smoother stay.</h1>
             <p>From the first check-in to the final receipt, keep every part of your property working together.</p>
         </div>
-        <div class="login-brand-footer">Sedona Court · Property management</div>
+        <div class="login-brand-footer">{{ config('sedona.hotel_name') }} · Property management</div>
     </aside>
     <main class="login-form-panel">
         <div class="login-form-card">
@@ -52,7 +52,7 @@
                 </label>
                 <button type="submit" class="login-submit">Sign In to Terminal <span class="ml-2" aria-hidden="true">→</span></button>
             </form>
-            <p class="login-form-footer">Sedona Court · Staff access</p>
+            <p class="login-form-footer">{{ config('sedona.hotel_name') }} · Staff access</p>
         </div>
     </main>
 </body>

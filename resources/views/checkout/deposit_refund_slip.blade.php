@@ -103,8 +103,8 @@
         <div class="text-center" style="font-size: 10px; font-weight: bold;">{{ isset($receiptCopy) ? ($receiptCopy === 1 ? 'FIRST RECORDED PRINT REQUEST' : 'COPY — PRINT REQUEST #'.$receiptCopy) : 'PREVIEW — NO PRINT REQUEST RECORDED' }}</div>
         <!-- Header -->
         <div class="text-center">
-            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">SEDONA COURT</div>
-            <div style="font-size: 9px;">TRAVELLER'S INN & LODGING</div>
+            <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
+            <div style="font-size: 9px;">LODGING</div>
             <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
             <div style="font-size: 9px;">TEL: +63 (0939) 905-2816</div>
         </div>
@@ -200,7 +200,7 @@
         </div>
 
         <div style="margin-top: 10px; text-align: center; font-size: 8px; color: #555;">
-            {{ $refundAmount > 0 ? 'OFFICIAL DEPOSIT REFUND RECORD' : 'DEPOSIT REFUND SUMMARY' }} • SEDONA COURT PMS
+            {{ $refundAmount > 0 ? 'OFFICIAL DEPOSIT REFUND RECORD' : 'DEPOSIT REFUND SUMMARY' }} • {{ config('sedona.hotel_name') }}
         </div>
     </div>
 

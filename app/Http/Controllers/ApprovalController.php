@@ -10,6 +10,7 @@ use App\Models\Shift;
 use App\Models\StatementLine;
 use App\Services\ApprovalService;
 use App\Services\FinancialPostingService;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -24,6 +25,24 @@ class ApprovalController extends Controller
         if (! $request->user()->can('review-financial')) {
             $query->where('requested_by', $request->user()->id);
         }
+        $counts = (clone $query)->select('status')->selectRaw('COUNT(*) as total')->groupBy('status')->pluck('total', 'status')->all();
+        $statusCounts = ['pending' => $counts['pending'] ?? 0, 'approved' => $counts['approved'] ?? 0,
+            'history' => ($counts['executed'] ?? 0) + ($counts['rejected'] ?? 0) + ($counts['cancelled'] ?? 0), 'all' => array_sum($counts)];
+        $statusFilter = $request->query('status', $request->user()->can('review-financial') ? 'pending' : 'all');
+        if (! in_array($statusFilter, ['pending', 'approved', 'history', 'all'], true)) {
+            $statusFilter = $request->user()->can('review-financial') ? 'pending' : 'all';
+        }
+        if ($statusFilter === 'history') {
+            $query->whereIn('status', ['executed', 'rejected', 'cancelled']);
+        } elseif ($statusFilter !== 'all') {
+            $query->where('status', $statusFilter);
+        }
+        $query->with(['requester', 'reviewer', 'executor', 'source' => fn (MorphTo $source) => $source->morphWith([Folio::class => ['room', 'guest'], PaymentEntry::class => ['order.room']])]);
+        if (in_array($statusFilter, ['pending', 'approved'], true)) {
+            $query->oldest()->orderBy('id');
+        } else {
+            $query->latest()->orderByDesc('id');
+        }
 
         $folios = Folio::with(['guest', 'room'])->latest()->limit(100)->get();
         $selectedFolio = $folios->firstWhere('id', $request->integer('folio_id'));
@@ -35,7 +54,9 @@ class ApprovalController extends Controller
             ? strtoupper($discountType) : null;
 
         return view('accounting.approvals', [
-            'requests' => $query->latest()->paginate(20),
+            'requests' => $query->paginate(20)->withQueryString(),
+            'statusCounts' => $statusCounts,
+            'statusFilter' => $statusFilter,
             'folios' => $folios,
             'selectedFolio' => $selectedFolio,
             'selectedDiscountType' => $selectedFolio ? $selectedDiscountType : null,
@@ -63,7 +84,10 @@ class ApprovalController extends Controller
         $data = $request->validate(['decision' => 'required|in:approve,reject', 'note' => 'required|string|max:1000']);
         $this->approvals->review($request, $approval, $data['decision'] === 'approve', $data['note']);
 
-        return back()->with('success', 'Review recorded.');
+        $approved = $approval->fresh()->status === 'approved';
+
+        return redirect()->route('approvals.index', ['status' => $approved ? 'approved' : 'history'])
+            ->with('success', $approved ? 'Request #'.$approval->id.' approved. Apply the recorded change below.' : 'Request #'.$approval->id.' review recorded in History.');
     }
 
     public function execute(Request $request, ApprovalRequest $approval): RedirectResponse
@@ -71,7 +95,7 @@ class ApprovalController extends Controller
         $request->validate(['shift_override_reason' => 'nullable|string|max:500']);
         $this->approvals->execute($request, $approval);
 
-        return back()->with('success', 'Approved action executed and recorded.');
+        return back()->with('success', 'Request #'.$approval->id.' applied and recorded in History.');
     }
 
     public function cancel(Request $request, ApprovalRequest $approval): RedirectResponse
