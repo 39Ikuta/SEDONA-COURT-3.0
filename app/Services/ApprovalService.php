@@ -52,6 +52,10 @@ class ApprovalService
             }
             $approval = ApprovalRequest::create(['kind' => $kind, 'source_type' => $source::class, 'source_id' => $sourceId, 'requested_by' => $request->user()->id, 'payload' => $data, 'source_hash' => $this->fingerprint($source, $kind, $data), 'status' => 'pending', 'reason' => $reason, 'evidence_reference' => $evidence]);
             $this->audit->record($request, 'approval.requested', $approval, ['kind' => $kind, 'source_id' => $sourceId, 'payload' => $data, 'reason' => $reason, 'evidence_reference' => $evidence]);
+            if ($approval->permitsOwnerSelfReview($request->user()) && $request->user()->can('review-financial')) {
+                $approval->update(['status' => 'approved', 'reviewed_by' => $request->user()->id, 'reviewed_at' => now(), 'review_note' => 'Automatically approved by the owner for a room rate / custom discount change.']);
+                $this->audit->record($request, 'approval.approved', $approval, ['automatic' => true, 'note' => $approval->review_note]);
+            }
 
             return $approval;
         });
@@ -62,7 +66,7 @@ class ApprovalService
         Gate::authorize('review-financial');
         DB::transaction(function () use ($request, $approval, $approve, $note): void {
             $approval = ApprovalRequest::whereKey($approval->id)->lockForUpdate()->firstOrFail();
-            abort_if($approval->requested_by === $request->user()->id, 403, 'A different reviewer is required.');
+            abort_if($approval->requested_by === $request->user()->id && ! $approval->permitsOwnerSelfReview($request->user()), 403, 'A different reviewer is required.');
             abort_unless($approval->status === 'pending', 409, 'This request has already been reviewed.');
             $source = $this->source($approval->kind, $approval->source_id);
             if ($approve) {
@@ -85,7 +89,7 @@ class ApprovalService
 
         return $this->posting->execute($request, 'approval.execute', $approval->id, ['approval_id' => $approval->id, 'shift_override_reason' => $request->input('shift_override_reason')], function () use ($request, $approval): array {
             $approval = ApprovalRequest::whereKey($approval->id)->lockForUpdate()->firstOrFail();
-            if ($approval->status !== 'approved' || $approval->reviewed_by === $approval->requested_by) {
+            if ($approval->status !== 'approved' || ($approval->reviewed_by === $approval->requested_by && ! $approval->permitsOwnerSelfReview($approval->reviewer))) {
                 throw ValidationException::withMessages(['approval' => 'Independent approval is required and can be executed only once.']);
             }
             $source = $this->source($approval->kind, $approval->source_id);

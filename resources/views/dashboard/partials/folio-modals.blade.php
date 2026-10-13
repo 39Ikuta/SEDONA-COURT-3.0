@@ -86,12 +86,19 @@
 <!-- MODAL: XTEND -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="xtendModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 hidden">
-    <div class="bg-white w-full max-w-sm border-t-4 border-[#0284c7] p-5 shadow-2xl">
+    <div class="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border-t-4 border-[#421A2B] p-5 shadow-2xl">
         <div class="flex items-center justify-between border-b pb-2 mb-3">
-            <h3 class="font-bold text-[#0284c7] text-sm" id="xtendModalTitle">Extend Stay</h3>
+            <h3 class="font-bold text-[#421A2B] text-sm" id="xtendModalTitle">Extend Stay</h3>
             <button onclick="closeXtendModal()" class="text-slate-500 hover:text-black font-bold text-lg">&times;</button>
         </div>
 
+        <p class="text-xs text-slate-600 mb-3">Current package: <strong id="xtendCurrentTier"></strong><br>Scheduled checkout: <strong id="xtendCurrentCheckout"></strong></p>
+        <label for="xtendMode" class="block text-xs font-bold text-slate-700 mb-1">How would the guest like to extend?</label>
+        <select id="xtendMode" onchange="updateXtendMode()" class="form-control-hms font-bold mb-3">
+            <option value="hours">Add extra hours at ₱130 per hour</option>
+            <option value="convert" id="xtendConvertOption">Convert 12-hour stay to 24-hour package</option>
+        </select>
+        <p id="xtendConversionHint" class="text-xs text-slate-500 mb-3">Package conversion is available for a 12-hour stay.</p>
         <form method="POST" id="xtendForm" class="space-y-3">
             @csrf
             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
@@ -108,7 +115,24 @@
 
             <div class="border-t pt-3 flex justify-end space-x-2">
                 <button type="button" onclick="closeXtendModal()" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded">Cancel</button>
-                <button type="submit" class="px-4 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-bold rounded">Save Extension</button>
+                <button type="submit" class="btn-occupied">Save Extension</button>
+            </div>
+        </form>
+        <form method="POST" id="convertStayForm" class="hidden space-y-3">
+            @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+            <input type="hidden" name="rate_tier" value="24h">
+            <div class="rounded-lg border border-rose-100 bg-rose-50 p-3 text-xs space-y-2">
+                <p>24-hour base rate: <strong id="xtendConversionRate"></strong></p>
+                <p>New checkout: <strong id="xtendConversionCheckout"></strong></p>
+                <p>This replaces the 12-hour room charge and any separate extra-hour extension. The 24 hours run from the original check-in time. Existing discounts and add-ons are included when the bill is recalculated.</p>
+                <p>The 15-minute checkout grace period starts after the new checkout time.</p>
+            </div>
+            <label for="xtendConversionReason" class="block text-xs font-bold text-slate-700">Reason</label>
+            <input id="xtendConversionReason" name="reason" value="Guest requested a 24-hour package." required maxlength="500" class="form-control-hms">
+            <div class="border-t pt-3 flex justify-end gap-2">
+                <button type="button" onclick="closeXtendModal()" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded">Cancel</button>
+                <button type="submit" class="btn-occupied">Convert to 24 Hours</button>
             </div>
         </form>
     </div>
@@ -288,10 +312,29 @@
         document.getElementById('checkInModal').classList.add('hidden');
     }
 
+    const FOLIO_EXTENSION_OPTIONS = {{ \Illuminate\Support\Js::from($folioExtensionOptions) }};
+
     function openXtendModal(folioId, roomNumber) {
-        document.getElementById('xtendForm').action = `/folios/${folioId}/extend`;
+        const options = FOLIO_EXTENSION_OPTIONS[folioId];
+        if (!options) return;
+        document.getElementById('xtendForm').action = options.extendUrl;
+        document.getElementById('convertStayForm').action = options.convertUrl;
+        document.getElementById('xtendCurrentTier').textContent = options.currentTier === 'promo' ? 'Midnight promo' : options.currentTier;
+        document.getElementById('xtendCurrentCheckout').textContent = options.currentCheckout || 'Not set';
+        document.getElementById('xtendConversionRate').textContent = `₱${Number(options.conversionRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        document.getElementById('xtendConversionCheckout').textContent = options.conversionCheckout;
+        document.getElementById('xtendConvertOption').disabled = !options.canConvert;
+        document.getElementById('xtendConversionHint').classList.toggle('hidden', options.canConvert);
+        document.getElementById('xtendMode').value = 'hours';
+        document.getElementById('xtendConversionReason').value = 'Guest requested a 24-hour package.';
+        updateXtendMode();
         document.getElementById('xtendModalTitle').textContent = `Extend Stay - Room ${roomNumber}`;
         document.getElementById('xtendModal').classList.remove('hidden');
+    }
+    function updateXtendMode() {
+        const converting = document.getElementById('xtendMode').value === 'convert';
+        document.getElementById('xtendForm').classList.toggle('hidden', converting);
+        document.getElementById('convertStayForm').classList.toggle('hidden', !converting);
     }
     function closeXtendModal() {
         document.getElementById('xtendModal').classList.add('hidden');

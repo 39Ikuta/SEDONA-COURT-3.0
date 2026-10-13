@@ -163,7 +163,7 @@ class CheckInController extends Controller
             return ['folio_id' => $locked->id];
         });
 
-        return redirect()->route('folios.orders.index', $folio)->with('success', 'Stay package converted. Checkout time and alarms have been updated.');
+        return redirect()->route('dashboard')->with('success', 'Stay package converted. The room rate, discount, checkout time and alarms have been updated.');
     }
 
     public function cancelStay(Request $request, Folio $folio, StayCancellationService $cancellations): RedirectResponse

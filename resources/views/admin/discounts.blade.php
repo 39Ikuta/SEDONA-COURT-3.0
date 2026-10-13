@@ -17,7 +17,7 @@
             <div><h2 class="font-semibold text-slate-900">Change a current guest's discount</h2><p class="mt-1 text-sm text-slate-600">Choose the guest below, enter the correction and submit a request.</p></div>
             <a href="{{ route('approvals.index') }}" class="btn-occupied !px-4 !py-2 !text-sm !whitespace-normal">Open Approvals &amp; Tasks</a>
         </div>
-        <p class="text-sm text-slate-600">A different admin or owner must approve the request. Then click <strong>Execute approved action</strong> in Approvals &amp; Tasks and reload the guest's checkout page. The bill changes only after execution.</p>
+        <p class="text-sm text-slate-600">{{ auth()->user()->hasRole('owner') ? 'Your room-rate and custom-discount requests are automatically approved.' : 'A different admin or owner must approve the request.' }} Then click <strong>Apply approved action</strong> in Approvals &amp; Tasks and reload the guest's checkout page. The bill changes when the approved action is applied.</p>
         <div class="divide-y divide-slate-200">
             @forelse($folios as $folio)
                 @php($discount = app(\App\Services\BillingService::class)->calculate($folio, null, false)['totalDiscount'])

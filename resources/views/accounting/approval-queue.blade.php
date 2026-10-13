@@ -13,7 +13,7 @@
             </a>
         @endforeach
     </nav>
-    <p class="text-xs text-slate-500 mb-3">{{ in_array($statusFilter, ['pending', 'approved']) ? 'Oldest requests first.' : 'Newest requests first.' }} A different admin or owner must review a request they did not create.</p>
+    <p class="text-xs text-slate-500 mb-3">{{ in_array($statusFilter, ['pending', 'approved']) ? 'Oldest requests first.' : 'Newest requests first.' }} Owners can approve their own room-rate and custom-discount changes. Other requests require a different admin or owner.</p>
     <div class="space-y-3">
     @forelse($requests as $approval)
         <article class="rounded-lg border border-slate-200 bg-white p-4" aria-label="Request {{ $approval->id }}">
@@ -43,7 +43,7 @@
                         <p class="text-sm text-slate-600">This older request cannot be applied. Cancel it and ask RA to correct the time in Check-in Time Corrections.</p>
                     @elseif($approval->kind === 'handover_variance' && !config('sedona.shift_handover_enabled'))
                         <p class="text-sm text-slate-600">Handover is disabled. This request remains as history and does not block day closing.</p>
-                    @elseif($approval->status === 'pending' && auth()->user()->can('review-financial') && $approval->requested_by !== auth()->id())
+                    @elseif($approval->status === 'pending' && auth()->user()->can('review-financial') && ($approval->requested_by !== auth()->id() || $approval->permitsOwnerSelfReview(auth()->user())))
                         <form method="POST" action="{{ route('approvals.review', $approval) }}" class="grid gap-2">
                             @csrf
                             <label for="reviewNote{{ $approval->id }}" class="text-sm font-semibold">Review note</label>

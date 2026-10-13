@@ -41,7 +41,10 @@ abstract class TestCase extends BaseTestCase
 
     protected function executeLatestFinancialRequest(): void
     {
-        $approval = $this->approveLatestFinancialRequest();
+        $approval = ApprovalRequest::whereIn('status', ['pending', 'approved'])->latest('id')->firstOrFail();
+        if ($approval->status === 'pending') {
+            $approval = $this->approveLatestFinancialRequest();
+        }
         if ($approval->status === 'approved') {
             $this->post(route('approvals.execute', $approval), ['operation_key' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
         }

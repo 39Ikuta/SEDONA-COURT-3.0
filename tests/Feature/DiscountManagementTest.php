@@ -87,7 +87,7 @@ class DiscountManagementTest extends TestCase
         $folio = $this->checkIn('6', true);
         $this->actingAs($this->owner)->get(route('admin.discounts.index'))->assertOk()
             ->assertSee('Room 6')->assertSee('Guest room 6')->assertSee('₱79.00 discount')
-            ->assertSee('Execute approved action')->assertSee('Request discount change for Room 6')
+            ->assertSee('Apply approved action')->assertSee('Request discount change for Room 6')
             ->assertSee('name="source_id" value="'.$folio->id.'"', false);
     }
 
@@ -142,7 +142,7 @@ class DiscountManagementTest extends TestCase
     #[TestWith(['admin', 'SENIOR', 'OSCA-EDIT-1'])]
     #[TestWith(['owner', 'PWD', 'PWD-EDIT-1'])]
     #[TestWith(['owner', 'DC', null, 0.0])]
-    public function test_individual_discount_edit_requires_review_and_updates_only_the_selected_guest(string $role, string $type, ?string $reference, float $amount = 100.25): void
+    public function test_individual_discount_edit_respects_owner_authority_and_updates_only_the_selected_guest(string $role, string $type, ?string $reference, float $amount = 100.25): void
     {
         $folio = $this->checkIn('6');
         $other = $this->checkIn('7');
@@ -151,8 +151,13 @@ class DiscountManagementTest extends TestCase
         $this->actingAs($actor);
         $approval = $this->requestDiscount($folio, ['discount_type' => $type, 'discount_id_ref' => $reference, 'discount_override_amount' => $amount]);
         $this->assertSame('NONE', $folio->fresh()->discount_type);
-        $this->post(route('approvals.review', $approval), ['decision' => 'approve', 'note' => 'Self review'])->assertForbidden();
-        $this->actingAs($reviewer)->post(route('approvals.review', $approval), ['decision' => 'approve', 'note' => 'Verified correction'])->assertSessionHasNoErrors();
+        if ($role === 'owner') {
+            $this->assertSame('approved', $approval->status);
+            $this->assertSame($actor->id, $approval->reviewed_by);
+        } else {
+            $this->post(route('approvals.review', $approval), ['decision' => 'approve', 'note' => 'Self review'])->assertForbidden();
+            $this->actingAs($reviewer)->post(route('approvals.review', $approval), ['decision' => 'approve', 'note' => 'Verified correction'])->assertSessionHasNoErrors();
+        }
         $this->actingAs($actor)->post(route('approvals.execute', $approval), ['operation_key' => (string) Str::uuid()])->assertSessionHasNoErrors();
 
         $folio->refresh();
@@ -243,10 +248,10 @@ class DiscountManagementTest extends TestCase
     public function test_a_changed_discount_invalidates_the_pending_approval(): void
     {
         $folio = $this->checkIn('6', true);
-        $this->actingAs($this->owner);
+        $this->actingAs($this->admin);
         $approval = $this->requestDiscount($folio, ['discount_type' => 'SENIOR', 'discount_override_amount' => 100]);
         $folio->update(['discount_id_ref' => 'CHANGED-ID']);
-        $this->actingAs($this->admin)->post(route('approvals.review', $approval), ['decision' => 'approve', 'note' => 'Stale review'])->assertSessionHasErrors('approval');
+        $this->actingAs($this->owner)->post(route('approvals.review', $approval), ['decision' => 'approve', 'note' => 'Stale review'])->assertSessionHasErrors('approval');
         $this->assertSame('pending', $approval->fresh()->status);
     }
 
@@ -283,7 +288,7 @@ class DiscountManagementTest extends TestCase
     /** @param array<string, mixed> $payload */
     private function requestDiscount(Folio $folio, array $payload): ApprovalRequest
     {
-        $this->post(route('approvals.store'), $this->discountRequest($folio, $payload))->assertRedirect(route('approvals.index'))->assertSessionHasNoErrors();
+        $this->post(route('approvals.store'), $this->discountRequest($folio, $payload))->assertRedirect()->assertSessionHasNoErrors();
 
         return ApprovalRequest::latest('id')->firstOrFail();
     }

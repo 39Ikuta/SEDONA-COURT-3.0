@@ -197,10 +197,20 @@ class DashboardController extends Controller
         // Owner/admin/manager get the apartment board; cashiers keep the tables.
         $boardView = auth()->check() && auth()->user()->hasAnyRole(['owner', 'admin', 'manager']);
         $folioDiscountOptions = $activeFolios->mapWithKeys(fn (Folio $folio): array => [$folio->id => DiscountService::getOptionsForFolio($folio)])->all();
+        $folioExtensionOptions = $activeFolios->mapWithKeys(fn (Folio $folio): array => [$folio->id => [
+            'extendUrl' => route('folios.extend', $folio),
+            'convertUrl' => route('folios.convert', $folio),
+            'canConvert' => ! $folio->room->is_staff_quarters && $folio->rate_tier === '12h',
+            'currentTier' => $folio->rate_tier,
+            'currentCheckout' => $folio->expected_checkout_at?->format('m/d/Y h:i A'),
+            'conversionRate' => $folio->room->getRateForTier('24h'),
+            'conversionCheckout' => $folio->checked_in_at->copy()->addHours(24)->format('m/d/Y h:i A'),
+        ]])->all();
 
         return view($boardView ? 'dashboard.board' : 'dashboard.index', compact(
             'rooms',
             'folioDiscountOptions',
+            'folioExtensionOptions',
             'totalRooms',
             'availableRooms',
             'occupiedRooms',

@@ -53,6 +53,12 @@ class ApprovalRequest extends Model
         return self::KIND_LABELS[$this->kind] ?? ucfirst(str_replace('_', ' ', $this->kind));
     }
 
+    public function permitsOwnerSelfReview(?User $actor): bool
+    {
+        return $this->kind === 'folio_override' && $actor !== null
+            && $this->requested_by === $actor->id && $actor->hasRole('owner');
+    }
+
     public function sourceLabel(): string
     {
         $source = $this->source;

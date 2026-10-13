@@ -52,6 +52,7 @@ class ApprovalController extends Controller
         $discountType = $request->query('discount_type');
         $selectedDiscountType = is_string($discountType) && in_array(strtoupper($discountType), ['DC', 'SENIOR', 'PWD', 'NONE'], true)
             ? strtoupper($discountType) : null;
+        $paymentsQuery = PaymentEntry::where('kind', 'pos_sale')->when(! $request->user()->can('review-financial'), fn ($q) => $q->where('user_id', $request->user()->id));
 
         return view('accounting.approvals', [
             'requests' => $query->paginate(20)->withQueryString(),
@@ -60,7 +61,9 @@ class ApprovalController extends Controller
             'folios' => $folios,
             'selectedFolio' => $selectedFolio,
             'selectedDiscountType' => $selectedFolio ? $selectedDiscountType : null,
-            'payments' => PaymentEntry::where('kind', 'pos_sale')->when(! $request->user()->can('review-financial'), fn ($q) => $q->where('user_id', $request->user()->id))->latest()->limit(100)->get(),
+            'payments' => (clone $paymentsQuery)->latest()->limit(100)->get(),
+            'invoiceFolios' => $request->user()->can('record_payments') ? Folio::with(['guest', 'room'])->where('status', 'checked_out')->where('force_checkout', false)->latest('id')->paginate(10, ['*'], 'invoice_folio_page')->withQueryString() : null,
+            'invoiceSales' => $request->user()->can('record_payments') ? (clone $paymentsQuery)->with('order')->latest('id')->paginate(10, ['*'], 'invoice_sale_page')->withQueryString() : null,
             'statements' => $request->user()->can('review-financial') ? StatementLine::latest()->limit(100)->get() : collect(),
             'items' => PosItem::notRetired()->orderBy('name')->get(),
             'shift' => Shift::whereNull('closed_at')->first(),
@@ -73,8 +76,12 @@ class ApprovalController extends Controller
         $result = $this->posting->execute($request, 'approval.request', $data['source_id'], $data, function () use ($request, $data): array {
             $approval = $this->approvals->request($request, $data['kind'], $data['source_id'], array_filter($data['payload'] ?? [], fn ($value): bool => $value !== null), $data['reason'], $data['evidence_reference'] ?? null);
 
-            return ['approval_id' => $approval->id];
+            return ['approval_id' => $approval->id, 'status' => $approval->status];
         });
+
+        if (($result['status'] ?? 'pending') === 'approved') {
+            return redirect()->route('approvals.index', ['status' => 'approved'])->with('success', 'Request #'.$result['approval_id'].' approved by the owner. Apply the approved action to update the guest bill.');
+        }
 
         return redirect()->route('approvals.index')->with('success', 'Request #'.$result['approval_id'].' awaits independent review.');
     }

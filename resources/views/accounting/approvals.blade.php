@@ -16,6 +16,7 @@
     <details id="newApprovalRequest" class="hms-card" @if($selectedFolio) open @endif>
         <summary class="cursor-pointer font-bold">Create a new request</summary>
         <p class="text-sm text-slate-600 my-3">Choose the change you need. Fixed Senior, PWD and DC discounts can be applied directly by the cashier. Refunds do not return food or stock automatically.</p>
+        @if(auth()->user()->hasRole('owner'))<p class="text-sm text-slate-600 mb-3">Your room-rate and custom-discount requests are automatically approved. Use Ready to apply to update the guest's bill.</p>@endif
     <div class="grid gap-4 lg:grid-cols-2">
     @foreach(['folio_override' => 'Room rate / custom guest discount', 'invoice_tax_treatment' => 'Statutory invoice tax basis', 'deposit_refund' => 'Return remaining guest deposit', 'pos_refund' => 'Refund a walk-in sale', 'statement_void' => 'Exclude an incorrect statement import', 'cash_drop' => 'Drop drawer cash to safe', 'float_addition' => 'Add drawer float', 'bank_deposit' => 'Deposit drawer cash to bank'] as $kind => $label)
         @continue($kind === 'statement_void' && !auth()->user()->can('review-financial'))
@@ -64,9 +65,27 @@
     </div>
     </details>
     @can('record_payments')
-    <details class="hms-card"><summary class="cursor-pointer font-semibold">Configured invoices</summary><p class="text-sm text-slate-500 mb-3">Issuance remains disabled until the owner enters approved legal, tax and numbering details.</p>
-        @foreach($folios->where('status', 'checked_out')->where('force_checkout', false) as $folio)<form method="POST" action="{{ route('invoices.folio', $folio) }}" class="flex flex-wrap gap-3 items-center mb-2">@csrf<input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}"><span>Folio #{{ $folio->id }} · {{ $folio->guest?->name }}</span><button class="btn-occupied">Issue / open invoice</button></form>@endforeach
-        @foreach($payments as $payment)<form method="POST" action="{{ route('invoices.order', $payment->order_id) }}" class="flex flex-wrap gap-3 items-center mb-2">@csrf<input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}"><span>Walk-in order #{{ $payment->order_id }}</span><button class="btn-occupied">Issue / open invoice</button></form>@endforeach
+    <details id="configuredInvoices" class="hms-card" @if(request()->has('invoice_folio_page') || request()->has('invoice_sale_page')) open @endif>
+        <summary class="cursor-pointer font-semibold">Configured invoices</summary>
+        <p class="text-sm text-slate-500 my-3">Issuance remains disabled until the owner enters approved legal, tax and numbering details.</p>
+        <h3 class="font-semibold text-sm mb-3">Guest stays ({{ $invoiceFolios->total() }})</h3>
+        @forelse($invoiceFolios as $folio)
+            <form method="POST" action="{{ route('invoices.folio', $folio) }}" class="flex flex-wrap gap-3 items-center mb-2">
+                @csrf<input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+                <span class="text-sm">Room {{ $folio->room?->number }} · {{ $folio->transaction_id }} · {{ $folio->guest?->name }}</span>
+                <button class="btn-occupied">Issue / open invoice</button>
+            </form>
+        @empty<p class="text-sm text-slate-500">No settled guest stays.</p>@endforelse
+        <div class="my-4">{{ $invoiceFolios->fragment('configuredInvoices')->links() }}</div>
+        <h3 class="font-semibold text-sm mb-3">Walk-in sales ({{ $invoiceSales->total() }})</h3>
+        @forelse($invoiceSales as $payment)
+            <form method="POST" action="{{ route('invoices.order', $payment->order_id) }}" class="flex flex-wrap gap-3 items-center mb-2">
+                @csrf<input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+                <span class="text-sm">Walk-in order {{ $payment->order?->transaction_id ?? '#'.$payment->order_id }}</span>
+                <button class="btn-occupied">Issue / open invoice</button>
+            </form>
+        @empty<p class="text-sm text-slate-500">No paid walk-in sales.</p>@endforelse
+        <div class="mt-4">{{ $invoiceSales->fragment('configuredInvoices')->links() }}</div>
     </details>@endcan
 </div>
 @endsection
