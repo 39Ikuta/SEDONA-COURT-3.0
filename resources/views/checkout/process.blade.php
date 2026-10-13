@@ -317,13 +317,13 @@
                         <div class="border border-slate-300 bg-white p-2.5 rounded space-y-2 shadow-sm">
                             <div class="flex items-center justify-between">
                                 <label for="discountTypeSelect" class="font-bold text-slate-800 text-[11px]">DISCOUNT CLASSIFICATION:</label>
-                                <select name="discount_type" id="discountTypeSelect" @disabled($folio->discount_override_amount !== null || strtoupper($folio->discount_type ?? '') === 'DC') onchange="onDiscountChange()" class="form-control-hms !w-44 font-bold text-xs bg-amber-50/40 border-amber-300 focus:border-amber-600">
+                                <select name="discount_type" id="discountTypeSelect" @disabled($folio->discount_override_amount !== null) onchange="onDiscountChange()" class="form-control-hms !w-44 font-bold text-xs bg-amber-50/40 border-amber-300 focus:border-amber-600">
                                     <option value="none" {{ strtolower($folio->discount_type ?? 'none') === 'none' ? 'selected' : '' }}>None (₱0.00)</option>
                                     <option value="senior" {{ strtolower($folio->discount_type ?? '') === 'senior' ? 'selected' : '' }}>Senior Citizen (-₱{{ number_format($discountOptions['SENIOR'] ?? 79, 2) }})</option>
                                     <option value="pwd" {{ strtolower($folio->discount_type ?? '') === 'pwd' ? 'selected' : '' }}>PWD Disability (-₱{{ number_format($discountOptions['PWD'] ?? 79, 2) }})</option>
-                                    <option value="dc" @disabled(strtolower($folio->discount_type ?? '') !== 'dc') {{ strtolower($folio->discount_type ?? '') === 'dc' ? 'selected' : '' }}>Sedona Card / DC (-₱{{ number_format($discountOptions['DC'] ?? 40, 2) }})</option>
+                                    <option value="dc" {{ strtolower($folio->discount_type ?? '') === 'dc' ? 'selected' : '' }}>Sedona Card / DC (-₱{{ number_format($discountOptions['DC'] ?? 40, 2) }})</option>
                                 </select>
-                                @if($folio->discount_override_amount !== null || strtoupper($folio->discount_type ?? '') === 'DC')
+                                @if($folio->discount_override_amount !== null)
                                     <input type="hidden" name="discount_type" value="{{ strtolower($folio->discount_type ?? 'none') }}">
                                 @endif
                             </div>
@@ -337,7 +337,7 @@
                             </div>
 
                             <p class="text-xs text-slate-600">For Senior or PWD, select the discount and enter the ID reference, then save.</p>
-                            <p class="text-xs text-slate-600">DC and approved custom discount changes need owner/admin approval. <a href="{{ route('approvals.index', ['folio_id' => $folio->id, 'discount_type' => strtoupper($folio->discount_type ?? 'NONE') === 'NONE' ? 'DC' : strtoupper($folio->discount_type)]) }}" class="underline font-semibold">Request a discount change for Room {{ $folio->room->number }}</a>, then execute the approved request and reload this bill.</p>
+                            <p class="text-xs text-slate-600">Fixed Senior, PWD and DC discounts can be saved directly. Custom discount changes need owner/admin approval. <a href="{{ route('approvals.index', ['folio_id' => $folio->id, 'discount_type' => strtoupper($folio->discount_type ?? 'NONE') === 'NONE' ? 'DC' : strtoupper($folio->discount_type)]) }}" class="underline font-semibold">Request a custom discount change for Room {{ $folio->room->number }}</a>, then apply the approved request and reload this bill.</p>
                             <button type="button" onclick="saveSettlementDraftToServer()" class="btn-occupied !px-3 !py-2 !text-xs">Save discount</button>
                             <p id="settlementSaveStatus" role="status" aria-live="polite" class="text-xs text-slate-700">Showing the saved guest bill.</p>
 

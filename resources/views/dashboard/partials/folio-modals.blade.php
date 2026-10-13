@@ -333,7 +333,7 @@
         document.getElementById('discountApprovalType').value = type;
         document.getElementById('discountZeroNotice').classList.add('hidden');
         const tier = currentDiscountContext.roomType.toUpperCase().includes('VIP') ? 'VIP' : (currentDiscountContext.roomType.toUpperCase().includes('PREMIUM') ? 'PREMIUM' : 'CLASSIC');
-        const dur = currentDiscountContext.rateTier.startsWith('6') ? '6h' : (currentDiscountContext.rateTier.startsWith('12') ? '12h' : (currentDiscountContext.rateTier.startsWith('24') ? '24h' : '3h'));
+        const dur = currentDiscountContext.rateTier === 'promo' ? 'Midnight promo' : currentDiscountContext.rateTier;
 
         document.getElementById('discountTierNotice').textContent = `${tier} Room (${dur})`;
         
