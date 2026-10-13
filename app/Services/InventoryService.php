@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\InventoryEvent;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\PosItem;
 use App\Models\User;
 use DomainException;
@@ -181,6 +183,37 @@ class InventoryService
 
             return $egg;
         });
+    }
+
+    public function returnUnpreparedOrderStock(Order $order, OrderItem $line, int $quantity, User $actor, string $reason): void
+    {
+        $movements = InventoryEvent::where('reference_id', $order->transaction_id)->where('quantity_change', '<', 0)->get();
+        $returned = [];
+        foreach ($movements as $movement) {
+            if ((int) $movement->pos_item_id === (int) $line->pos_item_id && $movement->event_type !== 'recipe_ingredient') {
+                $returned[$movement->pos_item_id] = $quantity;
+            }
+            if ($movement->event_type === 'recipe_ingredient'
+                && preg_match('/^Recipe ingredient: [0-9]+x egg used for order of '.preg_quote($line->item_name, '/').'(?: \(|$)/', $movement->notes ?? '')) {
+                $returned[$movement->pos_item_id] = $quantity;
+            }
+        }
+        foreach ($this->lockItems(array_keys($returned)) as $item) {
+            $previous = (int) $item->stock_quantity;
+            $item->stock_quantity += $returned[$item->id];
+            if ($item->stock_quantity > 100000) {
+                throw ValidationException::withMessages(['quantity' => 'Returned stock exceeds the inventory limit.']);
+            }
+            $item->is_available = (bool) $item->getRawOriginal('is_available') || $previous === 0;
+            $item->save();
+            InventoryEvent::create([
+                'pos_item_id' => $item->id, 'item_name' => $item->name, 'event_type' => 'order_correction',
+                'quantity_change' => $returned[$item->id], 'balance_after' => $item->stock_quantity,
+                'reference_id' => $order->transaction_id, 'user_id' => $actor->id,
+                'operator_name' => $actor->name, 'notes' => $reason,
+            ]);
+        }
+        PosItem::clearEggCache();
     }
 
     public function setStockCount(

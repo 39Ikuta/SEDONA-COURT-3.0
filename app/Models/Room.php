@@ -15,7 +15,7 @@ class Room extends Model
     protected $fillable = [
         'number', 'floor', 'name', 'type', 'status',
         'is_staff_quarters',
-        'base_rate_3h', 'base_rate_6h', 'base_rate_12h',
+        'base_rate_3h', 'base_rate_4h', 'base_rate_6h', 'base_rate_12h',
         'base_rate_24h', 'base_rate_promo',
         'notes',
     ];
@@ -23,6 +23,7 @@ class Room extends Model
     protected $casts = [
         'is_staff_quarters' => 'boolean',
         'base_rate_3h' => 'decimal:2',
+        'base_rate_4h' => 'decimal:2',
         'base_rate_6h' => 'decimal:2',
         'base_rate_12h' => 'decimal:2',
         'base_rate_24h' => 'decimal:2',
@@ -69,6 +70,7 @@ class Room extends Model
     {
         return match ($tier) {
             '3h' => (float) $this->base_rate_3h,
+            '4h' => (float) $this->base_rate_4h,
             '6h' => (float) $this->base_rate_6h,
             '12h' => (float) $this->base_rate_12h,
             '24h' => (float) $this->base_rate_24h,
@@ -81,6 +83,7 @@ class Room extends Model
     {
         return match ($tier) {
             '3h' => 3,
+            '4h' => 4,
             '6h' => 6,
             '12h' => 12,
             '24h' => 24,

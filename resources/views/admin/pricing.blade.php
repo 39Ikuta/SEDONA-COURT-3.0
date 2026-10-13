@@ -59,6 +59,7 @@
                         <th>FLOOR</th>
                         <th>ROOM TYPE</th>
                         <th>3 HOURS</th>
+                        <th>4 HOURS</th>
                         <th>6 HOURS</th>
                         <th>12 HOURS</th>
                         <th>24 HOURS</th>
@@ -75,7 +76,7 @@
                             <td class="text-left pl-2 font-medium">{{ $room->type }}</td>
 
                             @if($room->is_staff_quarters)
-                                <td colspan="5" class="bg-indigo-50 text-indigo-900 font-bold text-center">
+                                <td colspan="6" class="bg-indigo-50 text-indigo-900 font-bold text-center">
                                     Permanent Employee Quarters (Non-billable)
                                 </td>
                                 <td>
@@ -85,6 +86,9 @@
                             @else
                                     <td>
                                         <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_3h" value="{{ $room->base_rate_3h }}" class="form-control-hms font-mono text-right !w-20">
+                                    </td>
+                                    <td>
+                                        <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_4h" min="0" max="999999.99" required value="{{ $room->base_rate_4h }}" class="form-control-hms font-mono text-right !w-20">
                                     </td>
                                     <td>
                                         <input form="roomPricing{{ $room->id }}" type="number" step="0.01" name="base_rate_6h" value="{{ $room->base_rate_6h }}" class="form-control-hms font-mono text-right !w-20">

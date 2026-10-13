@@ -93,6 +93,7 @@ class RoomController extends Controller
             $validated = $request->validate([
                 'room_id' => 'required|exists:rooms,id',
                 'base_rate_3h' => 'required|numeric|min:0',
+                'base_rate_4h' => 'required|numeric|min:0|max:999999.99',
                 'base_rate_6h' => 'required|numeric|min:0',
                 'base_rate_12h' => 'required|numeric|min:0',
                 'base_rate_24h' => 'required|numeric|min:0',
@@ -101,7 +102,7 @@ class RoomController extends Controller
 
             $room = DB::transaction(function () use ($request, $validated): Room {
                 $room = Room::whereKey($validated['room_id'])->lockForUpdate()->firstOrFail();
-                $fields = ['base_rate_3h', 'base_rate_6h', 'base_rate_12h', 'base_rate_24h', 'base_rate_promo'];
+                $fields = ['base_rate_3h', 'base_rate_4h', 'base_rate_6h', 'base_rate_12h', 'base_rate_24h', 'base_rate_promo'];
                 $before = $room->only($fields);
                 $room->update(array_intersect_key($validated, array_flip($fields)));
                 $this->audit->record($request, 'pricing.room_updated', $room, ['before' => $before, 'after' => $room->only($fields)]);

@@ -123,7 +123,7 @@
                                 @else
                                     <tr>
                                         <td>
-                                            <button onclick="openCheckInModal(this.dataset)" data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-3h="{{ $room->base_rate_3h }}" data-rate-6h="{{ $room->base_rate_6h }}" data-rate-12h="{{ $room->base_rate_12h }}" data-rate-24h="{{ $room->base_rate_24h }}" data-rate-promo="{{ $room->base_rate_promo }}" class="btn-checkin">
+                                            <button onclick="openCheckInModal(this.dataset)" data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-3h="{{ $room->base_rate_3h }}" data-rate-4h="{{ $room->base_rate_4h }}" data-rate-6h="{{ $room->base_rate_6h }}" data-rate-12h="{{ $room->base_rate_12h }}" data-rate-24h="{{ $room->base_rate_24h }}" data-rate-promo="{{ $room->base_rate_promo }}" class="btn-checkin">
                                                 Check In
                                             </button>
                                         </td>

@@ -12,6 +12,7 @@ use App\Services\BillingService;
 use App\Services\DiscountService;
 use App\Services\FinancialPostingService;
 use App\Services\ShiftAccessService;
+use App\Services\StayRateService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -23,17 +24,23 @@ use Illuminate\View\View;
 
 class CheckInController extends Controller
 {
-    public function __construct(private FinancialPostingService $posting, private AuditService $audit) {}
+    public function __construct(private FinancialPostingService $posting, private AuditService $audit, private StayRateService $stayRates) {}
 
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'room_id' => 'required|exists:rooms,id', 'guest_name' => 'nullable|string|max:255',
             'guest_contact' => 'nullable|string|max:50', 'headcount' => 'required|integer|min:1',
-            'rate_tier' => 'required|in:3h,6h,12h,24h,promo', 'is_senior' => 'nullable|boolean',
+            'rate_tier' => 'required|in:3h,4h,6h,12h,24h,promo', 'is_senior' => 'nullable|boolean',
             'is_pwd' => 'nullable|boolean', 'discount_id_ref' => 'nullable|string|max:100',
             'booking_id' => 'nullable|exists:bookings,id', 'checked_in_at' => 'nullable|date|before_or_equal:now',
+            'record_earlier_arrival' => 'nullable|boolean',
+            'actual_checked_in_at' => 'required_if:record_earlier_arrival,1|nullable|date|before_or_equal:now',
+            'late_entry_reason' => 'required_if:record_earlier_arrival,1|nullable|string|max:500',
         ]);
+        if ($request->boolean('record_earlier_arrival')) {
+            $data['checked_in_at'] = $data['actual_checked_in_at'];
+        }
         if (($request->boolean('is_senior') || $request->boolean('is_pwd')) && trim($data['discount_id_ref'] ?? '') === '') {
             throw ValidationException::withMessages(['discount_id_ref' => 'Record the statutory discount ID reference.']);
         }
@@ -55,6 +62,11 @@ class CheckInController extends Controller
                 'is_senior' => $request->boolean('is_senior'), 'is_pwd' => $request->boolean('is_pwd'),
             ]);
             $checkedInAt = ! empty($data['checked_in_at']) ? Carbon::parse($data['checked_in_at'])->setTimezone(config('app.timezone')) : now();
+            if ($request->boolean('record_earlier_arrival') && $room->folios()
+                ->where('status', 'checked_out')->where('checked_in_at', '<=', now())
+                ->where('checked_out_at', '>', $checkedInAt)->exists()) {
+                throw ValidationException::withMessages(['actual_checked_in_at' => 'This arrival overlaps another recorded stay in the room. Review the arrival time.']);
+            }
             $folio = Folio::create([
                 'room_id' => $room->id, 'guest_id' => $guest->id, 'user_id' => Auth::id(), 'booking_id' => $booking?->id,
                 'transaction_id' => Folio::generateTransactionId(), 'rate_tier' => $tier,
@@ -69,6 +81,13 @@ class CheckInController extends Controller
             $folio->recalculate();
             $room->update(['status' => 'occupied']);
             $booking?->update(['status' => 'checked_in']);
+            if ($request->boolean('record_earlier_arrival')) {
+                $this->audit->record($request, 'folio.late_checkin_recorded', $folio, [
+                    'checked_in_at' => $folio->checked_in_at->toIso8601String(),
+                    'expected_checkout_at' => $folio->expected_checkout_at->toIso8601String(),
+                    'recorded_at' => now()->toIso8601String(), 'reason' => $data['late_entry_reason'],
+                ]);
+            }
         });
 
         return redirect()->route('dashboard')->with('success', 'Guest checked in successfully.');
@@ -79,7 +98,7 @@ class CheckInController extends Controller
         abort_unless($folio->isActive(), 409, 'This folio has already been settled.');
 
         return view('checkout.process', $this->viewData($folio) + [
-            'allOccupied' => Room::where('status', 'occupied')->with('activeFolio.guest')->get(),
+            'allOccupied' => Room::where('status', 'occupied')->with('activeFolio.guest')->orderByNumber()->get(),
             'drawerStatus' => $shiftAccess->paymentStatus($request->user()),
         ]);
     }
@@ -147,6 +166,20 @@ class CheckInController extends Controller
         });
 
         return redirect()->route('dashboard')->with('success', 'Stay extended.');
+    }
+
+    public function convertPackage(Request $request, Folio $folio): RedirectResponse
+    {
+        $data = $request->validate(['rate_tier' => 'required|in:12h,24h', 'reason' => 'required|string|max:500']);
+        $this->posting->execute($request, 'folio.convert', $folio->id, $data, function () use ($request, $folio, $data): array {
+            [$locked, $room] = $this->lockActive($folio);
+            $locked->setRelation('room', $room);
+            $this->stayRates->convert($locked, $data['rate_tier'], $request);
+
+            return ['folio_id' => $locked->id];
+        });
+
+        return redirect()->route('folios.orders.index', $folio)->with('success', 'Stay package converted. Checkout time and alarms have been updated.');
     }
 
     public function applyDiscount(Request $request, Folio $folio): RedirectResponse
@@ -218,7 +251,7 @@ class CheckInController extends Controller
     public function transferRoom(Request $request, Folio $folio): RedirectResponse
     {
         $data = $request->validate(['target_room_id' => 'required|exists:rooms,id']);
-        DB::transaction(function () use ($folio, $data): void {
+        DB::transaction(function () use ($folio, $data, $request): void {
             $rooms = Room::whereIn('id', [$folio->room_id, $data['target_room_id']])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $locked = Folio::whereKey($folio->id)->lockForUpdate()->firstOrFail();
             $this->requireActive($locked);
@@ -226,10 +259,7 @@ class CheckInController extends Controller
             $target = $rooms[$data['target_room_id']];
             $this->requireAvailable($target);
             $oldRoom = $rooms[$locked->room_id];
-            $locked->room_id = $target->id;
-            $locked->room_charge = $target->getRateForTier($locked->rate_tier);
-            $locked->setRelation('room', $target);
-            $locked->recalculate();
+            $this->stayRates->transfer($locked, $target, $request);
             $locked->orders()->update(['room_id' => $target->id]);
             $oldRoom->update(['status' => 'available']);
             $target->update(['status' => 'occupied']);

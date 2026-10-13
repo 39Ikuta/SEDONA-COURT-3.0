@@ -9,6 +9,7 @@ use App\Http\Controllers\CheckInController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FinanceControlController;
+use App\Http\Controllers\GuestOrderController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LoginHistoryController;
 use App\Http\Controllers\PosController;
@@ -82,6 +83,9 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
         Route::post('/folios/{folio}/discount', [CheckInController::class, 'applyDiscount'])->name('folios.discount');
         Route::post('/folios/{folio}/transfer', [CheckInController::class, 'transferRoom'])->name('folios.transfer');
         Route::post('/folios/{folio}/force-checkout', [CheckInController::class, 'requestForceCheckout'])->name('folios.force_checkout');
+        Route::get('/folios/{folio}/orders', [GuestOrderController::class, 'index'])->name('folios.orders.index');
+        Route::post('/folios/{folio}/orders/{orderItem}/correct', [GuestOrderController::class, 'correct'])->name('folios.orders.correct');
+        Route::post('/folios/{folio}/convert', [CheckInController::class, 'convertPackage'])->name('folios.convert');
         Route::post('/folios/{folio}/add-on', [PosController::class, 'addQuickAddOn'])->name('folios.addon');
         Route::post('/folios/{folio}/deposit', [CheckInController::class, 'updateDeposit'])->name('folios.deposit');
 

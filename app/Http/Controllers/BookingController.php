@@ -43,7 +43,7 @@ class BookingController extends Controller
             'guest_name' => 'required|string|max:255',
             'guest_contact' => 'nullable|string|max:50',
             'headcount' => 'required|integer|min:1',
-            'rate_tier' => 'required|in:3h,6h,12h,24h,promo',
+            'rate_tier' => 'required|in:3h,4h,6h,12h,24h,promo',
             'arrival_at' => 'required|date|after_or_equal:today',
             'notes' => 'nullable|string|max:500',
         ]);

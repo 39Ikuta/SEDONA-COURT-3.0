@@ -132,6 +132,9 @@ class DiscountService
         if (str_starts_with($d, '3')) {
             return '3h';
         }
+        if (str_starts_with($d, '4')) {
+            return '4h';
+        }
         if (str_starts_with($d, '6')) {
             return '6h';
         }

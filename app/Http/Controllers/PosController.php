@@ -10,6 +10,7 @@ use App\Models\Room;
 use App\Services\AuditService;
 use App\Services\BillingService;
 use App\Services\FinancialPostingService;
+use App\Services\GuestOrderService;
 use App\Services\InventoryService;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
@@ -60,65 +61,24 @@ class PosController extends Controller
     /**
      * Add Quick Add-On to Room Folio (from Dashboard Add On button).
      */
-    public function addQuickAddOn(Request $request, Folio $folio): RedirectResponse
+    public function addQuickAddOn(Request $request, Folio $folio, GuestOrderService $orders): RedirectResponse
     {
-        $validated = $request->validate([
-            'pos_item_id' => 'required|exists:pos_items,id',
-            'quantity' => 'required|integer|min:1|max:65535',
+        $data = $request->validate([
+            'items' => 'required_without:pos_item_id|array|min:1|max:100',
+            'items.*' => 'array:id,qty',
+            'items.*.id' => 'required|integer|exists:pos_items,id',
+            'items.*.qty' => 'required|integer|min:1|max:65535',
+            'pos_item_id' => 'required_without:items|integer|exists:pos_items,id',
+            'quantity' => 'required_with:pos_item_id|integer|min:1|max:65535',
         ]);
-
-        $qty = (int) $validated['quantity'];
         try {
-            $result = $this->posting->execute($request, 'pos.addon', $folio->id, $validated, function () use ($folio, $validated, $qty, $request): array {
-                $room = Room::whereKey($folio->room_id)->lockForUpdate()->firstOrFail();
-                $lockedFolio = Folio::whereKey($folio->id)->lockForUpdate()->firstOrFail();
-                if (! $lockedFolio->isActive() || $lockedFolio->room_id !== $room->id) {
-                    throw new DomainException('Add-ons require an active folio in the selected room. Refresh the dashboard.');
-                }
-                if (! $room->is_staff_quarters && ! $room->isOccupied()) {
-                    throw new DomainException('Add-ons require an occupied guest room.');
-                }
-                $posItem = app(InventoryService::class)->consumeStockForOrder(
-                    [(int) $validated['pos_item_id'] => $qty],
-                    'quick_addon',
-                    'FOLIO-'.$lockedFolio->id,
-                    Auth::id(),
-                    "Room {$room->number} Folio Add-On"
-                )->first();
-                $subtotal = $posItem->price * $qty;
-                $order = Order::create([
-                    'user_id' => Auth::id(),
-                    'folio_id' => $lockedFolio->id,
-                    'room_id' => $room->id,
-                    'transaction_id' => 'ORD-'.strtoupper(uniqid()),
-                    'type' => 'room_charge',
-                    'status' => 'delivered',
-                    'payment_method' => 'charge_to_room',
-                    'total' => $subtotal,
-                    'dispatched_at' => now(),
-                ]);
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'pos_item_id' => $posItem->id,
-                    'item_name' => $posItem->name,
-                    'unit_price' => $posItem->price,
-                    'quantity' => $qty,
-                    'subtotal' => $subtotal,
-                ]);
-                $items = $lockedFolio->pos_items ?? [];
-                $items[] = ['name' => $posItem->name, 'qty' => $qty, 'price' => (float) $posItem->price, 'subtotal' => (float) $subtotal];
-                $lockedFolio->pos_items = $items;
-                $lockedFolio->recalculate();
-                $this->audit->record($request, 'pos.room_charge', $order, ['folio_id' => $lockedFolio->id, 'total' => $subtotal, 'operation_key' => $request->input('operation_key')]);
-
-                return ['order_id' => $order->id, 'name' => $posItem->name, 'room_number' => $room->number];
-            });
+            $result = $orders->add($request, $folio, $data);
         } catch (DomainException $exception) {
-            return back()->with('error', $exception->getMessage());
+            return back()->with('error', $exception->getMessage())->withInput();
         }
 
-        return redirect()->route('dashboard')
-            ->with('success', "Added {$qty}x {$result['name']} to Room {$result['room_number']} Folio.");
+        return redirect()->route('folios.orders.index', $folio)
+            ->with('success', 'Add-ons saved to Room '.$result['room_number'].'.');
     }
 
     /**

@@ -155,6 +155,7 @@
                     <label class="block font-bold text-slate-700 mb-1">Rate Stay Tier:</label>
                     <select name="rate_tier" required class="form-control-hms font-bold">
                         <option value="3h">3 Hours Stay</option>
+                        <option value="4h">4 Hours Stay</option>
                         <option value="6h">6 Hours Stay</option>
                         <option value="12h">12 Hours Stay</option>
                         <option value="24h" selected>24 Hours Stay</option>

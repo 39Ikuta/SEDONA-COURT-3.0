@@ -6,6 +6,7 @@ use App\Services\BillingService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class Folio extends Model
 {
@@ -131,10 +132,19 @@ class Folio extends Model
      */
     public static function generateTransactionId(): string
     {
-        do {
-            $id = 'SCTI-'.str_pad(random_int(1, 999999), 6, '0', STR_PAD_LEFT);
-        } while (self::where('transaction_id', $id)->exists());
+        return DB::transaction(function (): string {
+            $sequence = DB::table('document_sequences')->where('name', 'scti')->lockForUpdate()->first();
+            if (! $sequence) {
+                throw new \RuntimeException('The SCTI sequence is missing. Run database migrations.');
+            }
+            $number = (int) $sequence->last_number;
+            do {
+                $number++;
+                $id = 'SCTI-'.str_pad((string) $number, 6, '0', STR_PAD_LEFT);
+            } while (self::where('transaction_id', $id)->exists());
+            DB::table('document_sequences')->where('name', 'scti')->update(['last_number' => $number]);
 
-        return $id;
+            return $id;
+        }, 3);
     }
 }

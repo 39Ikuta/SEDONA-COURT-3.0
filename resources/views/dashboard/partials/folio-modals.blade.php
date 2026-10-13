@@ -1,16 +1,16 @@
-{{-- Shared folio action modals + scripts (check-in, xtend, discount, transfer, add-on, force). Included by tables + board views. --}}
+{{-- Shared folio actions for the table and board views. --}}
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- MODAL: CHECK IN -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="checkInModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 hidden">
-    <div class="bg-white w-full max-w-md border-t-4 border-[#421A2B] p-5 shadow-2xl">
+    <div class="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto border-t-4 border-[#421A2B] p-5 shadow-2xl">
         <div class="flex items-center justify-between border-b pb-2 mb-3">
             <h3 class="font-bold text-[#421A2B] text-sm" id="checkInModalTitle">Check In Guest</h3>
             <button onclick="closeCheckInModal()" class="text-slate-500 hover:text-black font-bold text-lg">&times;</button>
         </div>
 
-        <form method="POST" action="{{ route('checkin.store') }}" class="space-y-3">
+        <form method="POST" action="{{ route('checkin.store') }}" class="space-y-3" id="guestCheckInForm">
             @csrf
             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
             <input type="hidden" name="room_id" id="checkInRoomId">
@@ -23,8 +23,8 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <div class="flex items-center justify-between mb-1">
-                        <label class="block text-xs font-bold text-slate-700">Check-in Date & Time:</label>
-                        <span class="text-[9px] uppercase font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                        <label id="checkInTimeLabel" class="block text-xs font-bold text-slate-700">Check-in Date & Time:</label>
+                        <span id="checkInLiveBadge" class="text-[9px] uppercase font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                             Live
                         </span>
@@ -45,10 +45,27 @@
                 </div>
             </div>
 
+            <div class="space-y-2">
+                <label class="flex items-center gap-2 text-xs font-bold text-slate-700">
+                    <input type="checkbox" name="record_earlier_arrival" id="recordEarlierArrival" value="1" onchange="toggleEarlierArrival()">
+                    Record earlier arrival
+                </label>
+                <div id="earlierArrivalFields" class="hidden space-y-2">
+                    <label class="block text-xs font-bold text-slate-700">Actual arrival time (hotel time)
+                        <input type="datetime-local" name="actual_checked_in_at" id="actualArrivalTime" disabled class="form-control-hms">
+                    </label>
+                    <label class="block text-xs font-bold text-slate-700">Reason for late entry
+                        <input type="text" name="late_entry_reason" id="lateEntryReason" disabled maxlength="500" class="form-control-hms">
+                    </label>
+                    <p class="text-xs text-slate-600">Checkout and alarms start from the actual arrival time. The maximum checkout grace period remains 15 minutes.</p>
+                </div>
+            </div>
+
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Stay Duration Tier:</label>
                 <select name="rate_tier" id="checkInTierSelect" onchange="updateCheckInRatePreview()" class="form-control-hms font-bold">
                     <option value="3h">3 Hours Stay</option>
+                    <option value="4h">4 Hours Stay</option>
                     <option value="6h">6 Hours Stay</option>
                     <option value="12h" selected>12 Hours Stay</option>
                     <option value="24h">24 Hours Stay</option>
@@ -208,49 +225,6 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
-<!-- MODAL: ADD ON -->
-<!-- ═══════════════════════════════════════════════════════════════════════════ -->
-<div id="addOnModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 hidden">
-    <div class="bg-white w-full max-w-md border-t-4 border-[#0284c7] p-5 shadow-2xl">
-        <div class="flex items-center justify-between border-b pb-2 mb-3">
-            <h3 class="font-bold text-[#0284c7] text-sm" id="addOnModalTitle">Add On Item to Folio</h3>
-            <button onclick="closeAddOnModal()" class="text-slate-500 hover:text-black font-bold text-lg">&times;</button>
-        </div>
-
-        <form method="POST" id="addOnForm" class="space-y-3">
-            @csrf
-            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
-            <input type="hidden" name="operation_key" value="{{ \Illuminate\Support\Str::uuid() }}">
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Select Menu Item / Amenity:</label>
-                <select name="pos_item_id" class="form-control-hms font-bold">
-                    @foreach($posItems as $pi)
-                        @php
-                            $stock = $pi->stock_quantity ?? 0;
-                            $isOut = !$pi->isOrderable();
-                            $eggNote = $pi->requiresEgg() ? " (Uses Egg)" : "";
-                            $stockBadge = $pi->is_tracked ? " [Stock: {$stock}{$eggNote}]" : "";
-                        @endphp
-                        <option value="{{ $pi->id }}" {{ $isOut ? 'disabled class=text-slate-400' : '' }}>
-                            {{ $pi->category }}: {{ $pi->name }} (₱{{ number_format($pi->price, 2) }}){{ $stockBadge }}{{ $isOut ? ' - UNAVAILABLE' : '' }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Quantity:</label>
-                <input type="number" name="quantity" value="1" min="1" max="50" class="form-control-hms font-bold font-mono">
-            </div>
-
-            <div class="border-t pt-3 flex justify-end space-x-2">
-                <button type="button" onclick="closeAddOnModal()" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded">Cancel</button>
-                <button type="submit" class="px-4 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-bold rounded">Save Add On</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- MODAL: FORCE CHECKOUT REQUEST -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="forceCheckoutModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 hidden">
@@ -287,6 +261,29 @@
 
     let checkInClockInterval = null;
 
+    function hotelDateTimeValue() {
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: {{ \Illuminate\Support\Js::from(config('app.timezone')) }}, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+        const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+        return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+    }
+
+    function toggleEarlierArrival() {
+        const enabled = document.getElementById('recordEarlierArrival').checked;
+        document.getElementById('earlierArrivalFields').classList.toggle('hidden', !enabled);
+        document.getElementById('checkInLiveBadge').style.display = enabled ? 'none' : '';
+        document.getElementById('checkInTimeLabel').textContent = enabled ? 'Entry Date & Time:' : 'Check-in Date & Time:';
+        for (const id of ['actualArrivalTime', 'lateEntryReason']) {
+            const input = document.getElementById(id);
+            input.disabled = !enabled;
+            input.required = enabled;
+        }
+        if (enabled) {
+            const arrival = document.getElementById('actualArrivalTime');
+            arrival.max = hotelDateTimeValue();
+            if (!arrival.value) arrival.value = arrival.max;
+        }
+    }
+
     function syncCheckInLiveTime() {
         const now = new Date();
         const dtInput = document.getElementById('checkInDateTime');
@@ -303,12 +300,16 @@
     function openCheckInModal(room) {
         document.getElementById('checkInRoomId').value = room.roomId;
         document.getElementById('checkInModalTitle').textContent = `Check In Room ${room.roomNumber} (${room.roomType})`;
+        document.getElementById('recordEarlierArrival').checked = false;
+        document.getElementById('actualArrivalTime').value = '';
+        document.getElementById('lateEntryReason').value = '';
+        toggleEarlierArrival();
         
         syncCheckInLiveTime();
         if (checkInClockInterval) clearInterval(checkInClockInterval);
         checkInClockInterval = setInterval(syncCheckInLiveTime, 1000);
 
-        currentRoomRates = { '3h': Number(room['rate-3h']), '6h': Number(room['rate-6h']), '12h': Number(room['rate-12h']), '24h': Number(room['rate-24h']), 'promo': Number(room.ratePromo) };
+        currentRoomRates = { '3h': Number(room['rate-3h']), '4h': Number(room['rate-4h']), '6h': Number(room['rate-6h']), '12h': Number(room['rate-12h']), '24h': Number(room['rate-24h']), 'promo': Number(room.ratePromo) };
         updateCheckInRatePreview();
         document.getElementById('checkInModal').classList.remove('hidden');
     }
@@ -408,13 +409,10 @@
     }
 
     function openAddOnModal(folioId, roomNumber) {
-        document.getElementById('addOnForm').action = `/folios/${folioId}/add-on`;
-        document.getElementById('addOnModalTitle').textContent = `Add On Item - Room ${roomNumber}`;
-        document.getElementById('addOnModal').classList.remove('hidden');
+        const url = {{ \Illuminate\Support\Js::from(route('folios.orders.index', ['folio' => '__FOLIO__'])) }};
+        window.location.assign(url.replace('__FOLIO__', encodeURIComponent(folioId)));
     }
-    function closeAddOnModal() {
-        document.getElementById('addOnModal').classList.add('hidden');
-    }
+
 
     function openForceCheckoutModal(folioId, roomNumber, netTotal) {
         document.getElementById('forceForm').action = `/folios/${folioId}/force-checkout`;

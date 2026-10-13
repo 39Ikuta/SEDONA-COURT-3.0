@@ -96,13 +96,13 @@ class CatalogAuditIntegrityTest extends TestCase
     public function test_room_pricing_audit_retains_the_exact_before_and_after_rates(): void
     {
         $operator = $this->operator();
-        $room = Room::create(['number' => '1', 'floor' => 1, 'name' => 'Classic', 'type' => 'Classic Room', 'base_rate_3h' => 395, 'base_rate_6h' => 790, 'base_rate_12h' => 1195, 'base_rate_24h' => 2100, 'base_rate_promo' => 995]);
+        $room = Room::create(['number' => '1', 'floor' => 1, 'name' => 'Classic', 'type' => 'Classic Room', 'base_rate_3h' => 395, 'base_rate_4h' => 525, 'base_rate_6h' => 790, 'base_rate_12h' => 1195, 'base_rate_24h' => 2100, 'base_rate_promo' => 995]);
 
-        $this->actingAs($operator)->post(route('admin.pricing.update'), ['room_id' => $room->id, 'base_rate_3h' => 410, 'base_rate_6h' => 800, 'base_rate_12h' => 1200, 'base_rate_24h' => 2200, 'base_rate_promo' => 1000, 'password' => 'not-a-rate-field'])->assertSessionHasNoErrors();
+        $this->actingAs($operator)->post(route('admin.pricing.update'), ['room_id' => $room->id, 'base_rate_3h' => 410, 'base_rate_4h' => 540, 'base_rate_6h' => 800, 'base_rate_12h' => 1200, 'base_rate_24h' => 2200, 'base_rate_promo' => 1000, 'password' => 'not-a-rate-field'])->assertSessionHasNoErrors();
 
         $this->assertSame([
-            'before' => ['base_rate_3h' => '395.00', 'base_rate_6h' => '790.00', 'base_rate_12h' => '1195.00', 'base_rate_24h' => '2100.00', 'base_rate_promo' => '995.00'],
-            'after' => ['base_rate_3h' => '410.00', 'base_rate_6h' => '800.00', 'base_rate_12h' => '1200.00', 'base_rate_24h' => '2200.00', 'base_rate_promo' => '1000.00'],
+            'before' => ['base_rate_3h' => '395.00', 'base_rate_4h' => '525.00', 'base_rate_6h' => '790.00', 'base_rate_12h' => '1195.00', 'base_rate_24h' => '2100.00', 'base_rate_promo' => '995.00'],
+            'after' => ['base_rate_3h' => '410.00', 'base_rate_4h' => '540.00', 'base_rate_6h' => '800.00', 'base_rate_12h' => '1200.00', 'base_rate_24h' => '2200.00', 'base_rate_promo' => '1000.00'],
         ], $this->auditValues('pricing.room_updated', $room->id, $operator->id));
         $this->assertSame('410.00', $room->fresh()->base_rate_3h);
     }

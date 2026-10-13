@@ -236,7 +236,7 @@
                         </div>
                     </div>
                 @else
-                    <div onclick="openCheckInModal(this.dataset)" data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-3h="{{ $room->base_rate_3h }}" data-rate-6h="{{ $room->base_rate_6h }}" data-rate-12h="{{ $room->base_rate_12h }}" data-rate-24h="{{ $room->base_rate_24h }}" data-rate-promo="{{ $room->base_rate_promo }}"
+                    <div onclick="openCheckInModal(this.dataset)" data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-3h="{{ $room->base_rate_3h }}" data-rate-4h="{{ $room->base_rate_4h }}" data-rate-6h="{{ $room->base_rate_6h }}" data-rate-12h="{{ $room->base_rate_12h }}" data-rate-24h="{{ $room->base_rate_24h }}" data-rate-promo="{{ $room->base_rate_promo }}"
                          class="bg-[#f2fbf4] rounded-xl border border-emerald-200 p-3 flex flex-col justify-between min-h-[168px] cursor-pointer hover:shadow-md hover:border-emerald-400 transition">
                         <div class="flex items-start justify-between gap-1">
                             <div>

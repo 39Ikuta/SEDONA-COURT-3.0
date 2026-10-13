@@ -72,9 +72,11 @@ class DashboardController extends Controller
             ->get();
 
         // Active folios
-        $activeFolios = Folio::with(['room', 'guest', 'orders'])
-            ->where('status', 'active')
-            ->get()->sortBy(fn (Folio $folio): int => (int) $folio->room->number)->values();
+        $roomNumberCast = in_array(Room::query()->getConnection()->getDriverName(), ['mysql', 'mariadb'], true) ? 'UNSIGNED' : 'INTEGER';
+        $activeFolios = Folio::with(['room', 'guest', 'orders'])->select('folios.*')
+            ->join('rooms', 'rooms.id', '=', 'folios.room_id')
+            ->where('folios.status', 'active')
+            ->orderByRaw('CAST(rooms.number AS '.$roomNumberCast.')')->orderBy('rooms.number')->get();
 
         // Upcoming bookings for today/tomorrow
         $upcomingBookings = Booking::with('room')
