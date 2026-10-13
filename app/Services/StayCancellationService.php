@@ -38,7 +38,7 @@ class StayCancellationService
     /** @param array{reason: string} $data */
     public function cancel(Request $request, Folio $folio, array $data): void
     {
-        abort_unless($request->user()->can('manage_folios'), 403);
+        abort_unless($request->user()->hasRole('admin') && $request->user()->can('manage_folios'), 403);
         $this->posting->execute($request, 'folio.cancel', $folio->id, $data, function () use ($request, $folio, $data): array {
             $room = Room::whereKey($folio->room_id)->lockForUpdate()->firstOrFail();
             $locked = Folio::whereKey($folio->id)->lockForUpdate()->firstOrFail();

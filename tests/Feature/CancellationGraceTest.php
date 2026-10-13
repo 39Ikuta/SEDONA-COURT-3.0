@@ -29,15 +29,16 @@ class CancellationGraceTest extends TestCase
         $this->travelTo('2026-10-13 12:00:00');
     }
 
-    public function test_cashier_cancels_unpaid_stay_once_and_keeps_its_receipt_number(): void
+    public function test_admin_cancels_unpaid_stay_once_and_keeps_its_receipt_number(): void
     {
-        $actor = $this->actor();
+        $actor = $this->actor('admin');
         $folio = $this->folio($actor);
         $booking = Booking::create(['room_id' => $folio->room_id, 'user_id' => $actor->id, 'guest_name' => 'Cancelled reservation', 'headcount' => 1,
             'rate_tier' => '3h', 'arrival_at' => now(), 'departure_at' => now()->addHours(3), 'status' => 'checked_in']);
         $folio->update(['booking_id' => $booking->id]);
         $payload = $this->key() + ['reason' => 'Guest changed their mind.'];
 
+        $this->actingAs($actor)->get(route('folios.orders.index', $folio))->assertSee('Reason for cancelling stay');
         $this->actingAs($actor)->post('/folios/'.$folio->id.'/cancel', $payload)->assertSessionHasNoErrors()->assertSessionHas('success');
         $this->post('/folios/'.$folio->id.'/cancel', $payload)->assertSessionHasNoErrors();
 
@@ -56,7 +57,7 @@ class CancellationGraceTest extends TestCase
     #[TestWith([901, false])]
     public function test_stay_cancellation_window_is_fifteen_minutes_from_creation(int $elapsed, bool $allowed): void
     {
-        $actor = $this->actor();
+        $actor = $this->actor('admin');
         $folio = $this->folio($actor);
         $folio->update(['checked_in_at' => now()->subHours(2)]);
         $this->travel($elapsed)->seconds();
@@ -73,7 +74,7 @@ class CancellationGraceTest extends TestCase
 
     public function test_money_received_settled_stays_and_staff_quarters_cannot_be_cancelled(): void
     {
-        $actor = $this->actor();
+        $actor = $this->actor('admin');
         $folio = $this->folio($actor);
         $url = '/folios/'.$folio->id.'/cancel';
         $folio->update(['security_deposit' => 500]);
@@ -84,6 +85,21 @@ class CancellationGraceTest extends TestCase
         $folio->room->update(['is_staff_quarters' => true]);
         $this->post($url, $this->key() + ['reason' => 'Cancel'])->assertSessionHasErrors('cancel');
         $this->assertSame('active', $folio->fresh()->status);
+        $this->assertSame(0, DB::table('audit_logs')->where('event', 'folio.cancelled')->count());
+    }
+
+    #[TestWith(['cashier'])]
+    #[TestWith(['owner'])]
+    public function test_non_admin_cannot_cancel_stay_even_with_folio_permission(string $role): void
+    {
+        $actor = $this->actor($role);
+        $folio = $this->folio($actor);
+
+        $this->actingAs($actor)->get(route('folios.orders.index', $folio))->assertDontSee('cancelGuestStay')->assertDontSee('Reason for cancelling stay');
+        $this->post('/folios/'.$folio->id.'/cancel', $this->key() + ['reason' => 'Cancel stay'])->assertForbidden();
+
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'status' => 'active', 'room_charge' => 395, 'transaction_id' => 'SCTI-000001']);
+        $this->assertSame('occupied', $folio->room->fresh()->status);
         $this->assertSame(0, DB::table('audit_logs')->where('event', 'folio.cancelled')->count());
     }
 
@@ -104,7 +120,8 @@ class CancellationGraceTest extends TestCase
             $this->post(route('folios.addon', $folio), $this->key() + ['items' => [['id' => $dish->id, 'qty' => 2], ['id' => $water->id, 'qty' => 1]]])->assertSessionHasNoErrors();
         }
         $order = Order::firstOrFail();
-        $this->post('/folios/'.$folio->id.'/cancel', $this->key() + ['reason' => 'Cancel stay'])->assertSessionHasErrors('cancel');
+        $this->get(route('folios.orders.index', $folio))->assertSee('Reason for cancelling order')->assertDontSee('cancelGuestStay');
+        $this->post('/folios/'.$folio->id.'/cancel', $this->key() + ['reason' => 'Cancel stay'])->assertForbidden();
         $this->travel(15)->minutes();
         $payload = $this->key() + ['reason' => 'Guest cancelled before preparation.'];
         $url = '/folios/'.$folio->id.'/orders/'.$order->id.'/cancel';
@@ -119,6 +136,8 @@ class CancellationGraceTest extends TestCase
         $this->assertSame(10, $egg->fresh()->stock_quantity);
         $this->assertSame(10, $water->fresh()->stock_quantity);
         $this->assertSame('0.00', $folio->fresh()->pos_total);
+        $this->assertSame('active', $folio->fresh()->status);
+        $this->assertSame('occupied', $folio->room->fresh()->status);
         $this->assertDatabaseCount('order_items', 2);
         $this->assertSame(1, DB::table('audit_logs')->where('event', 'pos.order_cancelled')->count());
         $this->assertSame(3, DB::table('inventory_events')->where('event_type', 'order_correction')->count());
@@ -162,7 +181,7 @@ class CancellationGraceTest extends TestCase
 
     public function test_cancellation_requires_a_reason_and_folio_permission(): void
     {
-        $actor = $this->actor();
+        $actor = $this->actor('admin');
         $folio = $this->folio($actor);
         $this->actingAs($actor)->post('/folios/'.$folio->id.'/cancel', $this->key())->assertSessionHasErrors('reason');
         $kitchen = User::factory()->create();
@@ -173,7 +192,7 @@ class CancellationGraceTest extends TestCase
 
     public function test_recorded_payment_blocks_stay_cancellation_even_without_a_deposit_field(): void
     {
-        $actor = $this->actor();
+        $actor = $this->actor('admin');
         $folio = $this->folio($actor);
         PaymentEntry::create(['folio_id' => $folio->id, 'user_id' => $actor->id, 'kind' => 'deposit', 'cash_amount' => 500, 'gcash_amount' => 0, 'posted_at' => now()]);
 
@@ -220,10 +239,10 @@ class CancellationGraceTest extends TestCase
         $this->assertSame('2026-10-13 12:00:00', $folio->fresh()->checked_in_at->format('Y-m-d H:i:s'));
     }
 
-    private function actor(): User
+    private function actor(string $role = 'cashier'): User
     {
         $actor = User::factory()->create();
-        $actor->assignRole(Role::findOrCreate('cashier', 'web'));
+        $actor->assignRole(Role::findOrCreate($role, 'web'));
         foreach (['manage_folios', 'view_dashboard', 'post_pos_sales'] as $name) {
             $actor->givePermissionTo(Permission::findOrCreate($name, 'web'));
         }

@@ -24,7 +24,7 @@ class GuestOrderController extends Controller
         $folio->setRelation('orders', $folio->orders->sortBy('id')->values());
         $catalog = PosItem::available()->get()->filter(fn (PosItem $item): bool => $item->isOrderable())->groupBy('category');
         $legacyItems = $this->orders->legacyItems($folio);
-        $stayCancellationReason = $cancellations->unavailableReason($folio);
+        $stayCancellationReason = auth()->user()->hasRole('admin') ? $cancellations->unavailableReason($folio) : null;
         $lineIds = $folio->orders->flatMap(fn ($order) => $order->items->pluck('id'));
         $corrections = DB::table('audit_logs')->leftJoin('users', 'users.id', '=', 'audit_logs.user_id')
             ->where('auditable_type', OrderItem::class)->whereIn('auditable_id', $lineIds)

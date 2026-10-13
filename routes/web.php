@@ -87,7 +87,7 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
         Route::get('/folios/{folio}/orders', [GuestOrderController::class, 'index'])->name('folios.orders.index');
         Route::post('/folios/{folio}/orders/{orderItem}/correct', [GuestOrderController::class, 'correct'])->name('folios.orders.correct');
         Route::post('/folios/{folio}/convert', [CheckInController::class, 'convertPackage'])->name('folios.convert');
-        Route::post('/folios/{folio}/cancel', [CheckInController::class, 'cancelStay'])->name('folios.cancel');
+        Route::post('/folios/{folio}/cancel', [CheckInController::class, 'cancelStay'])->middleware('role:admin')->name('folios.cancel');
         Route::post('/folios/{folio}/orders/{order}/cancel', [GuestOrderController::class, 'cancel'])->name('folios.orders.cancel');
         Route::post('/folios/{folio}/add-on', [PosController::class, 'addQuickAddOn'])->name('folios.addon');
         Route::post('/folios/{folio}/deposit', [CheckInController::class, 'updateDeposit'])->name('folios.deposit');

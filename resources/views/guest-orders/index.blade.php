@@ -24,10 +24,10 @@
         <div class="font-bold">Add-ons billed: ₱{{ number_format($folio->pos_total, 2) }}</div>
     </div>
 
-    @if($folio->isActive() && !$folio->room->is_staff_quarters)
+    @if(auth()->user()->hasRole('admin') && $folio->isActive() && !$folio->room->is_staff_quarters)
         <section class="hms-card" id="cancelGuestStay">
-            <h2 class="hms-card-header">X ORDER / CANCEL STAY</h2>
-            <p class="text-sm text-slate-600">Cancel a new unpaid stay within 15 minutes of its creation. This window does not change when RA corrects the check-in time.</p>
+            <h2 class="hms-card-header">ADMIN: CANCEL STAY</h2>
+            <p class="text-sm text-slate-600">Admins can cancel a new unpaid stay within 15 minutes of its creation. This window does not change when RA corrects the check-in time.</p>
             <p class="text-sm mt-2">Created: <strong>{{ $folio->created_at->format('m/d/Y h:i:s A') }}</strong> · Cancellation deadline: <strong>{{ $folio->created_at->copy()->addMinutes(15)->format('h:i:s A') }}</strong></p>
             @if($stayCancellationReason)
                 <p class="text-sm text-amber-800 mt-3">{{ $stayCancellationReason }}</p>
