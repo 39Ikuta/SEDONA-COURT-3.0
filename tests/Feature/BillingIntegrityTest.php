@@ -117,18 +117,20 @@ class BillingIntegrityTest extends TestCase
         $this->assertSame($excessHours * 130, $bill['excessRate']);
     }
 
-    public function test_reported_checkout_collects_two_excess_hours_and_freezes_the_receipt(): void
+    #[TestWith(['2026-10-12 20:28:00', '2026-10-13 01:31:00', 655, 0])]
+    #[TestWith(['2026-10-13 04:04:00', '2026-10-13 09:14:00', 1000, 345])]
+    public function test_reported_checkout_collects_two_excess_hours_and_freezes_the_receipt(string $checkin, string $checkout, int $tendered, int $change): void
     {
-        $this->travelTo(Carbon::parse('2026-10-13 01:31:00'));
+        $this->travelTo(Carbon::parse($checkout));
         $folio = $this->folio([
-            'checked_in_at' => '2026-10-12 20:28:00',
-            'expected_checkout_at' => '2026-10-12 23:28:00',
+            'checked_in_at' => $checkin,
+            'expected_checkout_at' => Carbon::parse($checkin)->addHours(3),
         ]);
 
-        $this->post(route('checkout.submit', $folio), ['operation_key' => (string) Str::uuid(), 'cash_tendered' => 655])
+        $this->post(route('checkout.submit', $folio), ['operation_key' => (string) Str::uuid(), 'cash_tendered' => $tendered])
             ->assertSessionHasNoErrors()->assertRedirect(route('dashboard'));
 
-        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'overtime_hours' => 2, 'surcharge_total' => 260, 'net_total' => 655]);
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'overtime_hours' => 2, 'surcharge_total' => 260, 'net_total' => 655, 'cash_tendered' => $tendered, 'change_due' => $change]);
         $this->assertDatabaseHas('payment_entries', ['folio_id' => $folio->id, 'kind' => 'settlement', 'cash_amount' => 655]);
         $this->travel(2)->days();
         $this->get(route('folios.receipt', $folio))->assertViewHas('excessHours', 2)->assertViewHas('finalBalanceToPay', 655);
