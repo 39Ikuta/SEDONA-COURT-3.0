@@ -77,7 +77,7 @@ class PosController extends Controller
             return back()->with('error', $exception->getMessage())->withInput();
         }
 
-        return redirect()->route('folios.orders.index', $folio)
+        return redirect()->route('folios.orders.index', ['folio' => $folio, 'panel' => $request->boolean('panel') ? 1 : null])
             ->with('success', 'Add-ons saved to Room '.$result['room_number'].'.');
     }
 

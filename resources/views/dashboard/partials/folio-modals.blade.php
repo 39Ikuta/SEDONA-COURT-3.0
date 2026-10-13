@@ -239,6 +239,13 @@
 </div>
 
 @push('scripts')
+<dialog id="guestOrdersDialog" aria-labelledby="guestOrdersDialogTitle" class="w-[min(96vw,64rem)] max-w-none p-0 border-0 rounded-lg shadow-2xl backdrop:bg-black/60">
+    <div class="flex items-center justify-between gap-3 border-t-4 border-[#421A2B] border-b p-4">
+        <h3 id="guestOrdersDialogTitle" class="font-bold text-[#421A2B] text-sm">ADD-ONS</h3>
+        <button type="button" onclick="document.getElementById('guestOrdersDialog').close()" aria-label="Close add-ons" class="text-slate-500 hover:text-black font-bold text-xl">&times;</button>
+    </div>
+    <iframe id="guestOrdersFrame" title="Add-ons and previous orders" class="w-full h-[75vh] min-h-80 border-0"></iframe>
+</dialog>
 <script>
     let currentRoomRates = {};
 
@@ -363,11 +370,31 @@
         document.getElementById('transferModal').classList.add('hidden');
     }
 
+    let guestOrdersChanged = false;
     function openAddOnModal(folioId, roomNumber) {
         const url = {{ \Illuminate\Support\Js::from(route('folios.orders.index', ['folio' => '__FOLIO__'])) }};
-        window.location.assign(url.replace('__FOLIO__', encodeURIComponent(folioId)));
+        guestOrdersChanged = false;
+        document.getElementById('guestOrdersDialogTitle').textContent = `ADD-ONS — Room ${roomNumber}`;
+        document.getElementById('guestOrdersFrame').src = url.replace('__FOLIO__', encodeURIComponent(folioId)) + '?panel=1';
+        document.getElementById('guestOrdersDialog').showModal();
     }
-
+    window.addEventListener('message', event => {
+        if (event.origin !== window.location.origin || event.source !== document.getElementById('guestOrdersFrame').contentWindow) {
+            return;
+        }
+        if (event.data?.type === 'sedona:guest-orders-updated') {
+            guestOrdersChanged = true;
+        }
+        if (event.data?.type === 'sedona:guest-orders-close') {
+            document.getElementById('guestOrdersDialog').close();
+        }
+    });
+    document.getElementById('guestOrdersDialog').addEventListener('close', () => {
+        document.getElementById('guestOrdersFrame').removeAttribute('src');
+        if (guestOrdersChanged) {
+            window.location.reload();
+        }
+    });
 
     function openForceCheckoutModal(folioId, roomNumber, netTotal) {
         document.getElementById('forceForm').action = `/folios/${folioId}/force-checkout`;

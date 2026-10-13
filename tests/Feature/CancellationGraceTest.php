@@ -120,13 +120,13 @@ class CancellationGraceTest extends TestCase
             $this->post(route('folios.addon', $folio), $this->key() + ['items' => [['id' => $dish->id, 'qty' => 2], ['id' => $water->id, 'qty' => 1]]])->assertSessionHasNoErrors();
         }
         $order = Order::firstOrFail();
-        $this->get(route('folios.orders.index', $folio))->assertSee('Reason for cancelling order')->assertDontSee('cancelGuestStay');
+        $this->get(route('folios.orders.index', $folio))->assertSee('Cancel order')->assertDontSee('Reason for cancelling order')->assertDontSee('cancelGuestStay');
         $this->post('/folios/'.$folio->id.'/cancel', $this->key() + ['reason' => 'Cancel stay'])->assertForbidden();
         $this->travel(15)->minutes();
-        $payload = $this->key() + ['reason' => 'Guest cancelled before preparation.'];
+        $payload = $this->key() + ['panel' => 1];
         $url = '/folios/'.$folio->id.'/orders/'.$order->id.'/cancel';
 
-        $this->post($url, $payload)->assertSessionHasNoErrors()->assertSessionHas('success');
+        $this->post($url, $payload)->assertSessionHasNoErrors()->assertSessionHas('success')->assertRedirect(route('folios.orders.index', ['folio' => $folio, 'panel' => 1]));
         $this->post($url, $payload)->assertSessionHasNoErrors();
 
         $this->assertSame('cancelled', $order->fresh()->status);
@@ -140,7 +140,27 @@ class CancellationGraceTest extends TestCase
         $this->assertSame('occupied', $folio->room->fresh()->status);
         $this->assertDatabaseCount('order_items', 2);
         $this->assertSame(1, DB::table('audit_logs')->where('event', 'pos.order_cancelled')->count());
+        $audit = json_decode(DB::table('audit_logs')->where('event', 'pos.order_cancelled')->value('new_values'), true);
+        $this->assertSame('Cancelled using X Order.', $audit['reason']);
         $this->assertSame(3, DB::table('inventory_events')->where('event_type', 'order_correction')->count());
+    }
+
+    public function test_addons_popup_has_collapsed_previous_orders_and_no_conversion_or_cancellation_reason(): void
+    {
+        $actor = $this->actor();
+        $folio = $this->folio($actor);
+        $dish = $this->item('Kitchen Dish', 'Favorites', true);
+        $this->actingAs($actor)->post(route('folios.addon', $folio), $this->key() + ['pos_item_id' => $dish->id, 'quantity' => 1, 'panel' => 1])
+            ->assertSessionHasNoErrors()->assertRedirect(route('folios.orders.index', ['folio' => $folio, 'panel' => 1]));
+        $this->get(route('folios.orders.index', ['folio' => $folio, 'panel' => 1]));
+
+        $response = $this->get(route('folios.orders.index', ['folio' => $folio, 'panel' => 1]))
+            ->assertSee('PREVIOUS ORDERS')->assertSee('ITEM DESCRIPTION')->assertSee('Cancel order')
+            ->assertDontSee('Reason for cancelling order')->assertDontSee('CONVERT STAY PACKAGE')->assertDontSee('primaryNav');
+        $html = new \DOMDocument;
+        @$html->loadHTML($response->getContent());
+        $xpath = new \DOMXPath($html);
+        $this->assertSame(1, $xpath->query('//details[@id="previousGuestOrders" and not(@open)]/summary')->length);
     }
 
     #[TestWith(['new', 901])]

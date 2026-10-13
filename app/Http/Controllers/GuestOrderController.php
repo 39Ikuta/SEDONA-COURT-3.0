@@ -37,10 +37,11 @@ class GuestOrderController extends Controller
 
     public function cancel(Request $request, Folio $folio, Order $order): RedirectResponse
     {
-        $data = $request->validate(['reason' => 'required|string|max:500']);
+        $data = $request->validate(['reason' => 'nullable|string|max:500']);
+        $data['reason'] ??= 'Cancelled using X Order.';
         $this->orders->cancel($request, $folio, $order, $data);
 
-        return redirect()->route('folios.orders.index', $folio)->with('success', 'Order cancelled. Its charges were removed and unused stock was returned.');
+        return redirect()->route('folios.orders.index', ['folio' => $folio, 'panel' => $request->boolean('panel') ? 1 : null])->with('success', 'Order cancelled. Its charges were removed and unused stock was returned.');
     }
 
     public function correct(Request $request, Folio $folio, OrderItem $orderItem): RedirectResponse
@@ -53,6 +54,6 @@ class GuestOrderController extends Controller
         ]);
         $this->orders->correct($request, $folio, $orderItem, $data);
 
-        return redirect()->route('folios.orders.index', $folio)->with('success', 'Order corrected and the guest bill updated.');
+        return redirect()->route('folios.orders.index', ['folio' => $folio, 'panel' => $request->boolean('panel') ? 1 : null])->with('success', 'Order corrected and the guest bill updated.');
     }
 }

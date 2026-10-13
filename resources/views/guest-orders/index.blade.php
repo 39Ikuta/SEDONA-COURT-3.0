@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends(request()->boolean('panel') ? 'layouts.folio-panel' : 'layouts.app')
 
 @section('title', 'Guest Orders — Room '.$folio->room->number)
 @section('subtitle', $folio->transaction_id.' | '.$folio->guest->name)
@@ -44,8 +44,8 @@
         </section>
     @endif
 
-    <section class="hms-card" id="previousGuestOrders">
-        <h2 class="hms-card-header">PREVIOUS ORDERS</h2>
+    <details class="hms-card" id="previousGuestOrders" @if(session('success') || $errors->any()) open @endif>
+        <summary class="hms-card-header cursor-pointer">PREVIOUS ORDERS · ₱{{ number_format($folio->pos_total, 2) }}</summary>
         @forelse($folio->orders as $order)
             <div class="mt-4 border border-slate-200 rounded overflow-hidden">
                 <div class="bg-slate-50 p-3 flex flex-wrap justify-between gap-2 text-xs">
@@ -53,21 +53,19 @@
                     <span>{{ $order->created_at->format('m/d/Y h:i A') }} · {{ $order->cashier?->name ?? 'Staff' }}</span>
                 </div>
                 @if($folio->isActive() && $order->type === 'room_charge' && $order->isNew() && $order->isWithinCancellationGrace())
-                    <div class="p-3 bg-rose-50 border-b border-rose-100">
-                        <p class="text-xs text-rose-900 mb-2">Unprepared orders may be cancelled until {{ $order->created_at->copy()->addMinutes(15)->format('h:i:s A') }}. Their unused stock is returned automatically.</p>
-                        <form method="POST" action="{{ route('folios.orders.cancel', [$folio, $order]) }}" class="flex flex-wrap items-end gap-3">
+                    <div class="p-3 bg-rose-50 border-b border-rose-100 flex flex-wrap items-center justify-between gap-3">
+                        <p class="text-xs text-rose-900">Unprepared orders may be cancelled until {{ $order->created_at->copy()->addMinutes(15)->format('h:i:s A') }}.</p>
+                        <form method="POST" action="{{ route('folios.orders.cancel', [$folio, $order]) }}">
                             @csrf
                             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
-                            <label class="text-xs font-bold grow">Reason for cancelling order
-                                <input name="reason" type="text" required maxlength="500" class="form-control-hms block mt-1" placeholder="Guest cancelled before preparation">
-                            </label>
+                            @if(request()->boolean('panel'))<input type="hidden" name="panel" value="1">@endif
                             <button class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-3 py-2 rounded text-xs">Cancel order</button>
                         </form>
                     </div>
                 @endif
                 <div class="overflow-x-auto">
                     <table class="hms-table">
-                        <thead><tr><th>ITEM</th><th>QUANTITY</th><th>UNIT PRICE</th><th>AMOUNT</th><th>CORRECTIONS</th></tr></thead>
+                        <thead><tr><th>ITEM DESCRIPTION</th><th>QUANTITY</th><th>UNIT PRICE</th><th>AMOUNT</th>@can('review-financial')<th>CORRECTIONS</th>@endcan</tr></thead>
                         <tbody>
                             @foreach($order->items as $line)
                                 <tr>
@@ -75,6 +73,7 @@
                                     <td>{{ $line->quantity }} @if($line->quantity === 0)<span class="text-rose-700">Cancelled</span>@endif</td>
                                     <td>₱{{ number_format($line->unit_price, 2) }}</td>
                                     <td>₱{{ number_format($line->subtotal, 2) }}</td>
+                                    @can('review-financial')
                                     <td class="text-left">
                                         @if($correction = $corrections->get($line->id))
                                             <p class="text-xs text-slate-600">{{ json_decode($correction->new_values, true)['reason'] ?? '' }} — {{ $correction->name }}</p>
@@ -86,6 +85,7 @@
                                                     <form method="POST" action="{{ route('folios.orders.correct', [$folio, $line]) }}" class="mt-2 space-y-2">
                                                         @csrf
                                                         <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+                                                        @if(request()->boolean('panel'))<input type="hidden" name="panel" value="1">@endif
                                                         <input type="hidden" name="expected_quantity" value="{{ $line->quantity }}">
                                                         <label class="block">Correct quantity (0 cancels this line)
                                                             <input type="number" name="quantity" min="0" max="{{ $line->quantity }}" value="{{ $line->quantity }}" required class="form-control-hms">
@@ -100,10 +100,11 @@
                                             @endcan
                                         @endif
                                     </td>
+                                    @endcan
                                 </tr>
                             @endforeach
                         </tbody>
-                        <tfoot><tr><td colspan="3" class="font-bold text-right">ORDER TOTAL</td><td class="font-bold">₱{{ number_format($order->total, 2) }}</td><td></td></tr></tfoot>
+                        <tfoot><tr><td colspan="3" class="font-bold text-right">ORDER TOTAL</td><td class="font-bold">₱{{ number_format($order->total, 2) }}</td>@can('review-financial')<td></td>@endcan</tr></tfoot>
                     </table>
                 </div>
             </div>
@@ -123,7 +124,7 @@
                 </table>
             </div>
         @endif
-    </section>
+    </details>
 
     @if($folio->isActive())
         <section class="hms-card">
@@ -131,9 +132,10 @@
             <form method="POST" action="{{ route('folios.addon', $folio) }}" id="guestAddOnForm" class="space-y-3">
                 @csrf
                 <input type="hidden" name="operation_key" value="{{ old('operation_key', (string) \Illuminate\Support\Str::uuid()) }}">
+                @if(request()->boolean('panel'))<input type="hidden" name="panel" value="1">@endif
                 <div class="overflow-x-auto">
                     <table class="hms-table">
-                        <thead><tr><th>ITEM</th><th>QUANTITY</th><th>AMOUNT</th><th></th></tr></thead>
+                        <thead><tr><th>ITEM DESCRIPTION</th><th>QUANTITY</th><th>UNIT PRICE</th><th>AMOUNT</th><th></th></tr></thead>
                         <tbody id="guestAddonRows">
                             @foreach(old('items', [['id' => '', 'qty' => 1]]) as $index => $row)
                                 <tr class="addon-row">
@@ -144,6 +146,7 @@
                                         </optgroup>@endforeach
                                     </select></td>
                                     <td><input type="number" name="items[{{ $index }}][qty]" data-field="qty" min="1" max="65535" value="{{ $row['qty'] ?? 1 }}" required class="form-control-hms" aria-label="Add-on quantity"></td>
+                                    <td><output data-unit-price>₱0.00</output></td>
                                     <td><output data-line-total>₱0.00</output></td>
                                     <td><button type="button" data-remove-addon class="text-rose-700 font-bold">Remove</button></td>
                                 </tr>
@@ -159,28 +162,6 @@
             </form>
         </section>
 
-        @unless($folio->room->is_staff_quarters)
-            <section class="hms-card">
-                <h2 class="hms-card-header">CONVERT STAY PACKAGE</h2>
-                <p class="text-sm text-slate-600 mb-3">The new package starts from the original check-in time and replaces hourly extensions. Checkout alarms and the maximum 15-minute grace period follow the new checkout time.</p>
-                <form method="POST" action="{{ route('folios.convert', $folio) }}" class="flex flex-wrap items-end gap-3">
-                    @csrf
-                    <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
-                    <label class="text-sm">Package
-                        <select name="rate_tier" id="guestPackageTier" required class="form-control-hms">
-                            @foreach(['12h' => 12, '24h' => 24] as $tier => $hours)
-                                <option value="{{ $tier }}" @selected($tier === ($folio->rate_tier === '12h' ? '24h' : '12h')) data-checkout="{{ $folio->checked_in_at->copy()->addHours($hours)->format('m/d/Y h:i A') }}">{{ $hours }} hours — ₱{{ number_format($folio->room->getRateForTier($tier), 2) }}</option>
-                            @endforeach
-                        </select>
-                    </label>
-                    <label class="text-sm grow">Reason
-                        <input type="text" name="reason" maxlength="500" required placeholder="Guest requested a longer package" class="form-control-hms">
-                    </label>
-                    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded font-bold">Convert package</button>
-                    <p class="w-full text-sm font-bold" id="guestPackageCheckout"></p>
-                </form>
-            </section>
-        @endunless
     @endif
 </div>
 @endsection
@@ -198,6 +179,7 @@
                 const item = row.querySelector('[data-field="id"]');
                 const quantity = Number(row.querySelector('[data-field="qty"]').value) || 0;
                 const amount = (Number(item.selectedOptions[0]?.dataset.price) || 0) * quantity;
+                row.querySelector('[data-unit-price]').textContent = money.format(Number(item.selectedOptions[0]?.dataset.price) || 0);
                 row.querySelector('[data-line-total]').textContent = money.format(amount);
                 total += amount;
             });
@@ -224,12 +206,6 @@
             updateGuestAddons();
         });
         updateGuestAddons();
-    }
-    const packageTier = document.getElementById('guestPackageTier');
-    if (packageTier) {
-        const updateCheckout = () => { document.getElementById('guestPackageCheckout').textContent = 'New checkout: ' + packageTier.selectedOptions[0].dataset.checkout; };
-        packageTier.addEventListener('change', updateCheckout);
-        updateCheckout();
     }
 </script>
 @endpush

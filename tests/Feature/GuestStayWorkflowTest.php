@@ -40,6 +40,35 @@ class GuestStayWorkflowTest extends TestCase
         $this->assertSame('SCTI-000001', $first->fresh()->transaction_id);
     }
 
+    #[TestWith(['cashier', []])]
+    #[TestWith(['admin', ['bstatus' => 'occupied']])]
+    public function test_occupied_rooms_follow_check_in_time_instead_of_room_number(string $role, array $filters): void
+    {
+        $actor = $this->actor($role);
+        $latest = $this->folio($actor);
+        $earliest = $this->folio($actor);
+        $middle = $this->folio($actor);
+        $latest->room->update(['number' => '1']);
+        $earliest->room->update(['number' => '13']);
+        $middle->room->update(['number' => '8']);
+        $latest->update(['checked_in_at' => now()->subMinutes(5)]);
+        $earliest->update(['checked_in_at' => now()->subHours(2)]);
+        $middle->update(['checked_in_at' => now()->subHour()]);
+        $available = $this->room('available');
+
+        $response = $this->actingAs($actor)->get(route('dashboard', $filters))->assertOk();
+
+        $list = $response->viewData($role === 'admin' ? 'boardRooms' : 'occupiedRoomsList');
+        $this->assertSame(['13', '8', '1'], $list->pluck('number')->all());
+        $this->assertSame([$available->id], $response->viewData('availableRoomsList')->modelKeys());
+        if ($role === 'cashier') {
+            $html = new \DOMDocument;
+            @$html->loadHTML($response->getContent());
+            $rows = (new \DOMXPath($html))->query('//tr[contains(@class, "occupied-room-summary")]/@data-room-number');
+            $this->assertSame(['13', '8', '1'], array_map(fn ($row) => $row->nodeValue, iterator_to_array($rows)));
+        }
+    }
+
     public function test_sequence_initialization_skips_historical_receipt_numbers(): void
     {
         $actor = $this->actor();
@@ -133,7 +162,7 @@ class GuestStayWorkflowTest extends TestCase
             ->assertSee('Current Guest Water')->assertSee('Legacy Pillow');
         $document = new \DOMDocument;
         @$document->loadHTML($response->getContent());
-        $history = (new \DOMXPath($document))->query('//section[@id="previousGuestOrders"]')->item(0);
+        $history = (new \DOMXPath($document))->query('//details[@id="previousGuestOrders"]')->item(0);
         $this->assertStringNotContainsString('Other Guest Snack', $history->textContent);
 
         $this->assertSame('150.00', $folio->fresh()->pos_total);

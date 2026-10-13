@@ -47,6 +47,8 @@ class DashboardController extends Controller
         }
 
         $rooms = $query->orderByNumber()->get();
+        $checkInOrder = fn (Room $room): int => $room->activeFolio?->checked_in_at?->getTimestamp() ?? PHP_INT_MAX;
+        $occupiedRoomsList = $rooms->where('status', 'occupied')->sortBy($checkInOrder)->values();
 
         // Overall stats (3-state room lifecycle: available, occupied, maintenance)
         $allRooms = Room::all();
@@ -136,6 +138,9 @@ class DashboardController extends Controller
         if (in_array($btier, ['vip', 'premium', 'classic'], true)) {
             $boardRooms = $boardRooms->filter(fn ($r) => $this->roomTierKey($r) === $btier);
         }
+        if (in_array($bstatus, ['occupied', 'late', 'almost'], true)) {
+            $boardRooms = $boardRooms->sortBy($checkInOrder)->values();
+        }
 
         // Notification items for the executive tab bar dropdown.
         $lowStockCount = PosItem::where('is_tracked', true)->whereColumn('stock_quantity', '<=', 'reorder_level')->count();
@@ -206,6 +211,7 @@ class DashboardController extends Controller
             'upcomingBookings',
             'posItems',
             'availableRoomsList',
+            'occupiedRoomsList',
             'pendingForceCheckouts',
             'selectedFloor',
             'selectedStatus',
