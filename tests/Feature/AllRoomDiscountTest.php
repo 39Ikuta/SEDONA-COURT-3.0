@@ -37,6 +37,7 @@ class AllRoomDiscountTest extends TestCase
     public function test_every_guest_room_keeps_original_discounts_through_checkout_and_receipt(string $tier, array $prices, array $dcAmounts, array $seniorAmounts): void
     {
         $this->prepareCashier();
+        config(['sedona.midnight_promo_enabled' => true]);
         $rooms = Room::where('is_staff_quarters', false)->orderByNumber()->get();
         $this->assertCount(31, $rooms);
 

@@ -98,6 +98,37 @@ class InvoiceAndExportTest extends TestCase
         $this->assertDatabaseCount('invoices', 0);
     }
 
+    public function test_cancelled_stays_cannot_issue_invoices_or_consume_an_invoice_number(): void
+    {
+        $this->configure();
+        $room = Room::where('is_staff_quarters', false)->firstOrFail();
+        $folio = Folio::create(['room_id' => $room->id, 'guest_id' => Guest::create(['name' => 'Cancelled guest'])->id,
+            'user_id' => $this->cashier->id, 'transaction_id' => Folio::generateTransactionId(), 'status' => 'voided',
+            'rate_tier' => '3h', 'checked_in_at' => now(), 'expected_checkout_at' => now()->addHours(3), 'checked_out_at' => now()]);
+
+        $this->post(route('invoices.folio', $folio), $this->key())->assertConflict();
+
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertSame(1, app(BusinessDayService::class)->settings()['next_sequence']);
+    }
+
+    public function test_cashier_cannot_issue_view_or_print_another_operators_walk_in_invoice(): void
+    {
+        $this->configure();
+        $order = $this->order(112);
+        $other = User::where('email', 'raquel@sedonapms.com')->firstOrFail();
+        $this->actingAs($other)->post(route('invoices.order', $order), $this->key())->assertForbidden();
+        $this->assertDatabaseCount('invoices', 0);
+        $this->actingAs($this->cashier)->post(route('invoices.order', $order), $this->key())->assertSessionHasNoErrors();
+        $invoice = Invoice::sole();
+
+        $this->actingAs($other)->get(route('invoices.show', $invoice))->assertForbidden();
+        $this->post(route('invoices.print', $invoice), $this->key())->assertForbidden();
+        $this->assertDatabaseMissing('audit_logs', ['event' => 'invoice.print_requested']);
+        $this->actingAs($this->owner)->get(route('invoices.show', $invoice))->assertOk();
+        $this->actingAs($this->admin)->post(route('invoices.print', $invoice), $this->key())->assertOk();
+    }
+
     public function test_export_requires_closed_day_mappings_and_independent_review_and_retries_are_stable(): void
     {
         $this->configure(false);

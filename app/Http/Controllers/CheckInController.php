@@ -32,15 +32,16 @@ class CheckInController extends Controller
         $data = $request->validate([
             'room_id' => 'required|exists:rooms,id', 'guest_name' => 'nullable|string|max:255',
             'guest_contact' => 'nullable|string|max:50', 'headcount' => 'required|integer|min:1',
-            'rate_tier' => 'required|in:3h,4h,6h,12h,24h,promo', 'is_senior' => 'nullable|boolean',
+            'rate_tier' => 'required|in:3h,4h,6h,12h,24h'.(config('sedona.midnight_promo_enabled') ? ',promo' : ''), 'is_senior' => 'nullable|boolean',
             'is_pwd' => 'nullable|boolean', 'discount_id_ref' => 'nullable|string|max:100',
             'booking_id' => 'nullable|exists:bookings,id', 'checked_in_at' => 'prohibited',
             'record_earlier_arrival' => 'prohibited', 'actual_checked_in_at' => 'prohibited', 'late_entry_reason' => 'prohibited',
+            'operation_key' => 'nullable|uuid',
         ]);
         if (($request->boolean('is_senior') || $request->boolean('is_pwd')) && trim($data['discount_id_ref'] ?? '') === '') {
             throw ValidationException::withMessages(['discount_id_ref' => 'Record the statutory discount ID reference.']);
         }
-        DB::transaction(function () use ($request, $data): void {
+        $checkIn = function () use ($request, $data): array {
             $room = Room::whereKey($data['room_id'])->lockForUpdate()->firstOrFail();
             $this->requireAvailable($room);
             $booking = null;
@@ -51,6 +52,9 @@ class CheckInController extends Controller
                 }
             }
             $tier = $booking?->rate_tier ?? $data['rate_tier'];
+            if ($tier === 'promo' && ! config('sedona.midnight_promo_enabled')) {
+                throw ValidationException::withMessages(['rate_tier' => 'Midnight promo is temporarily unavailable. Select a regular stay package.']);
+            }
             $guest = Guest::create([
                 'name' => $booking?->guest_name ?? ($data['guest_name'] ?? 'Guest Room '.$room->number),
                 'contact' => $booking?->guest_contact ?? ($data['guest_contact'] ?? 'WALKIN-'.uniqid()),
@@ -72,7 +76,16 @@ class CheckInController extends Controller
             $folio->recalculate();
             $room->update(['status' => 'occupied']);
             $booking?->update(['status' => 'checked_in']);
-        });
+            $this->audit->record($request, 'folio.checked_in', $folio, ['room_id' => $room->id, 'rate_tier' => $tier,
+                'checked_in_at' => $checkedInAt->toIso8601String(), 'transaction_id' => $folio->transaction_id]);
+
+            return ['folio_id' => $folio->id];
+        };
+        if ($request->filled('operation_key')) {
+            $this->posting->execute($request, 'folio.checkin', (int) $data['room_id'], $data, $checkIn);
+        } else {
+            DB::transaction($checkIn, 3);
+        }
 
         return redirect()->route('dashboard')->with('success', 'Guest checked in successfully.');
     }
@@ -142,11 +155,16 @@ class CheckInController extends Controller
     {
         $data = $request->validate(['hours' => 'required|integer|min:1|max:8760']);
         $extraHours = (int) $data['hours'];
-        DB::transaction(function () use ($folio, $extraHours): void {
+        $this->posting->execute($request, 'folio.extend', $folio->id, $data, function () use ($request, $folio, $extraHours): array {
             [$locked] = $this->lockActive($folio);
+            $before = $locked->only(['extra_hours', 'expected_checkout_at', 'net_total']);
             $locked->extra_hours += $extraHours;
             $locked->expected_checkout_at = $locked->expected_checkout_at->copy()->addHours($extraHours);
             $locked->recalculate();
+            $this->audit->record($request, 'folio.extended', $locked, ['before' => $before,
+                'after' => $locked->only(array_keys($before)), 'operation_key' => $request->input('operation_key')]);
+
+            return ['folio_id' => $locked->id];
         });
 
         return redirect()->route('dashboard')->with('success', 'Stay extended.');

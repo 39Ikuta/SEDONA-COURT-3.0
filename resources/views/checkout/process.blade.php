@@ -98,7 +98,7 @@
                                style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" 
                                class="form-control-hms !text-left text-[11px] font-mono font-bold text-slate-800"
                                title="Guest check-in time recorded in system">
-                        <input type="hidden" name="checked_in_at" readonly id="inpCheckInTime" value="{{ $checkInTime->format('Y-m-d\TH:i') }}">
+                        <input type="hidden" name="checked_in_at" readonly id="inpCheckInTime" value="{{ $checkInTime->toIso8601String() }}">
                     </div>
 
                     <div class="flex items-center">
@@ -113,7 +113,7 @@
                                    value="{{ number_format($roomRate, 2, '.', '') }}" 
                                    oninput="onRoomRateChange(this.value)" 
                                    class="form-control-hms font-mono font-bold text-slate-900 !w-full text-left bg-white border-slate-300 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 shadow-inner" 
-                                   title="Cashier: Edit room base rate">
+                                   title="Recorded room base rate; request changes through Approvals">
                         </div>
                     </div>
                 </div>
@@ -127,7 +127,7 @@
 
                     <div class="flex items-center">
                         <label class="w-36 font-bold text-slate-700 text-[11px]">CHECK OUT TIME:</label>
-                        <input type="text" value="{{ $checkOutTime->format('m/d/Y h:i A') }}" readonly tabindex="-1" style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" class="form-control-hms !text-left text-[11px] font-mono">
+                        <input type="text" id="checkoutTimeDisplay" value="{{ $checkOutTime->format('m/d/Y h:i A') }}" readonly tabindex="-1" style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" class="form-control-hms !text-left text-[11px] font-mono">
                     </div>
 
                     <div class="flex items-center">
@@ -452,6 +452,7 @@
     let totalBookedHours = {{ (int)$totalBookedHours }};
     const overstayGraceMs = {{ max(0, (int) config('sedona.overstay_grace_minutes', 15)) }} * 60 * 1000;
     let checkOutTimestamp = new Date("{{ $checkOutTime->toIso8601String() }}").getTime();
+    let updatingStayEstimate = false;
     let addOnsTotal = {{ (float)$addOnsTotal }};
     let addHourUnitPrice = 130;
     let addHoursRate = {{ (float)$addHoursRate }};
@@ -541,6 +542,12 @@
         if (!val) return;
         const cInDate = new Date(val);
         if (isNaN(cInDate.getTime())) return;
+        checkOutTimestamp = Date.now();
+        const checkoutDisplay = document.getElementById('checkoutTimeDisplay');
+        if (checkoutDisplay) {
+            checkoutDisplay.value = new Date(checkOutTimestamp).toLocaleString('en-US', { timeZone: 'Asia/Manila',
+                month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+        }
 
         const diffMs = Math.max(0, checkOutTimestamp - cInDate.getTime());
         const actualHoursDiff = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
@@ -572,12 +579,12 @@
             }
         }
 
-        recalcGrossAndSettlement();
-
-        clearTimeout(checkInSaveTimer);
-        checkInSaveTimer = setTimeout(() => {
-            saveSettlementDraftToServer();
-        }, 500);
+        updatingStayEstimate = true;
+        try {
+            recalcGrossAndSettlement();
+        } finally {
+            updatingStayEstimate = false;
+        }
     }
 
     function onRoomRateChange(val) {
@@ -882,16 +889,21 @@
 
         syncBillingStatementUrl();
 
-        clearTimeout(depositSaveTimer);
-        depositSaveTimer = setTimeout(() => {
-            saveSettlementDraftToServer();
-        }, 500);
+        if (!updatingStayEstimate) {
+            clearTimeout(depositSaveTimer);
+            depositSaveTimer = setTimeout(() => {
+                saveSettlementDraftToServer();
+            }, 500);
+        }
     }
 
     // Initialize display state
     togglePaymentInputs();
     clearTimeout(depositSaveTimer);
     initializingSettlement = false;
+    setInterval(() => {
+        if (!settlementSubmitting) onCheckInTimeChange(document.getElementById('inpCheckInTime').value);
+    }, 1000);
     document.getElementById('checkoutProcessForm').addEventListener('submit', async function (event) {
         event.preventDefault();
         if (settlementSubmitting) return;

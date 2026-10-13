@@ -114,7 +114,7 @@ class CancellationGraceTest extends TestCase
         $water = $this->item('Water', 'Drinks', false);
         $this->actingAs($actor);
         if ($posScreen) {
-            $this->post(route('pos.order.store'), $this->key() + ['order_type' => 'room_charge', 'room_id' => $folio->room_id,
+            $this->post(route('pos.order.store'), $this->key() + ['order_type' => 'room_charge', 'room_id' => $folio->room_id, 'folio_id' => $folio->id,
                 'items' => [['id' => $dish->id, 'qty' => 2], ['id' => $water->id, 'qty' => 1]]])->assertSessionHasNoErrors();
         } else {
             $this->post(route('folios.addon', $folio), $this->key() + ['items' => [['id' => $dish->id, 'qty' => 2], ['id' => $water->id, 'qty' => 1]]])->assertSessionHasNoErrors();

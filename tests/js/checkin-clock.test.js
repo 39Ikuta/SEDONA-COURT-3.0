@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
-test('check-in records the same instant and displays Manila time on a device in another timezone', () => {
+test('check-in displays Manila time without submitting a cashier editable timestamp', () => {
     const blade = readFileSync(new URL('../../resources/views/dashboard/partials/folio-modals.blade.php', import.meta.url), 'utf8');
     const source = blade.slice(blade.indexOf('function syncCheckInLiveTime()'), blade.indexOf('function openCheckInModal('));
     class DeviceDate extends Date {
@@ -18,12 +18,12 @@ test('check-in records the same instant and displays Manila time on a device in 
         getMinutes() { return 15; }
         getSeconds() { return 0; }
     }
-    const elements = { checkInDateTime: {}, checkInDateTimeDisplay: {} };
+    const elements = { checkInDateTimeDisplay: {} };
     const context = { Date: DeviceDate, document: { getElementById: id => elements[id] } };
     runInNewContext(source, context);
 
     context.syncCheckInLiveTime();
 
-    assert.equal(elements.checkInDateTime.value, '2026-10-08T16:15:00.000Z');
+    assert.doesNotMatch(blade, /name="checked_in_at"/);
     assert.equal(elements.checkInDateTimeDisplay.value, '10/09/2026 12:15:00 AM');
 });

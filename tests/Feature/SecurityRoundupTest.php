@@ -147,6 +147,7 @@ class SecurityRoundupTest extends TestCase
 
     public function test_only_handover_participants_and_property_reviewers_see_a_designated_drawer_count(): void
     {
+        config(['sedona.continuous_shift_enabled' => false, 'sedona.shift_handover_enabled' => true]);
         $outgoing = User::where('email', 'pau@sedonapms.com')->firstOrFail();
         $incoming = User::where('email', 'raquel@sedonapms.com')->firstOrFail();
         $unrelated = User::where('email', 'ann@sedonapms.com')->firstOrFail();
@@ -164,6 +165,7 @@ class SecurityRoundupTest extends TestCase
 
     public function test_unassigned_handover_remains_available_to_a_different_incoming_operator(): void
     {
+        config(['sedona.continuous_shift_enabled' => false, 'sedona.shift_handover_enabled' => true]);
         $outgoing = User::where('email', 'pau@sedonapms.com')->firstOrFail();
         Shift::create(['opened_by' => $outgoing->id, 'closed_by' => $outgoing->id,
             'shift_type' => 'day', 'shift_date' => today(), 'opened_at' => now()->subHour(), 'closed_at' => now(),

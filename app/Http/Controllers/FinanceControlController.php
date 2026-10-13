@@ -157,16 +157,16 @@ class FinanceControlController extends Controller
         return redirect()->route('invoices.show', $invoices->issue($request, $order));
     }
 
-    public function invoice(Invoice $invoice): View
+    public function invoice(Request $request, Invoice $invoice, InvoiceService $invoices): View
     {
-        Gate::authorize('record_payments');
+        $invoices->authorizeInvoice($request, $invoice);
 
         return view('accounting.invoice', compact('invoice'));
     }
 
-    public function printInvoice(Request $request, Invoice $invoice, FinancialPostingService $posting): View
+    public function printInvoice(Request $request, Invoice $invoice, FinancialPostingService $posting, InvoiceService $invoices): View
     {
-        Gate::authorize('record_payments');
+        $invoices->authorizeInvoice($request, $invoice);
         $result = $posting->execute($request, 'invoice.print', $invoice->id, [], function () use ($request, $invoice): array {
             Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
             $copy = DB::table('audit_logs')->where('event', 'invoice.print_requested')->where('auditable_type', Invoice::class)->where('auditable_id', $invoice->id)->count() + 1;

@@ -291,7 +291,7 @@ class PosInventoryIntegrityTest extends TestCase
         $item = $this->item();
 
         $this->actingAs($cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
-            'order_type' => 'room_charge', 'room_id' => $folio->room_id,
+            'order_type' => 'room_charge', 'room_id' => $folio->room_id, 'folio_id' => $folio->id,
             'items' => [['id' => $item->id, 'qty' => 1]],
         ])->assertSessionHas('success');
 
@@ -301,6 +301,40 @@ class PosInventoryIntegrityTest extends TestCase
         $this->assertSame('Bottled Soda', $folio->pos_items[1]['name']);
         $this->assertSame(80.0, (float) $folio->pos_total);
         $this->assertDatabaseHas('orders', ['folio_id' => $folio->id, 'room_id' => $folio->room_id, 'total' => 60]);
+    }
+
+    public function test_a_stale_pos_room_selection_cannot_charge_the_next_guest(): void
+    {
+        $cashier = $this->cashier();
+        $old = $this->folio($cashier);
+        $item = $this->item();
+        $old->update(['status' => 'checked_out', 'checked_out_at' => now()]);
+        $next = $old->replicate();
+        $next->fill(['transaction_id' => Folio::generateTransactionId(), 'status' => 'active', 'checked_out_at' => null,
+            'guest_id' => Guest::create(['name' => 'Next guest'])->id])->save();
+
+        $this->actingAs($cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'room_charge', 'room_id' => $old->room_id, 'folio_id' => $old->id,
+            'items' => [['id' => $item->id, 'qty' => 1]]])->assertSessionHas('error');
+
+        $this->assertSame([], $next->fresh()->pos_items);
+        $this->assertSame(10, $item->fresh()->stock_quantity);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('inventory_events', 0);
+    }
+
+    public function test_guest_room_orders_require_the_selected_stay_reference(): void
+    {
+        $cashier = $this->cashier();
+        $folio = $this->folio($cashier);
+        $item = $this->item();
+
+        $this->actingAs($cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'room_charge', 'room_id' => $folio->room_id,
+            'items' => [['id' => $item->id, 'qty' => 1]]])->assertSessionHas('error');
+
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertSame(10, $item->fresh()->stock_quantity);
     }
 
     public function test_staff_room_creates_its_special_folio_for_room_orders(): void

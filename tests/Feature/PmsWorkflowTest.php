@@ -103,6 +103,7 @@ class PmsWorkflowTest extends TestCase
         $this->actingAs($cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
             'order_type' => 'room_charge',
             'room_id' => $room->id,
+            'folio_id' => $folio->id,
             'items' => [
                 ['id' => $posItem->id, 'qty' => 2],
             ],

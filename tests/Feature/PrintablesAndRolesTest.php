@@ -103,7 +103,7 @@ class PrintablesAndRolesTest extends TestCase
 
         $response = $this->actingAs($cashier)->get(route('shifts.remittance_slip', $shift));
         $response->assertStatus(200);
-        $response->assertSee('SHIFT TERMINAL HANDOVER REPORT');
+        $response->assertSee('SHIFT DRAWER RECONCILIATION REPORT');
         $response->assertSee('I. RECONCILIATION SUMMARY');
         $response->assertSee('OPERATIONAL EXPENSES');
         $response->assertSee('ROOM OCCUPANCY REPORT');

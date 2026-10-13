@@ -142,7 +142,7 @@ class AccountingTest extends TestCase
         $this->travelTo(now()->setTime(12, 0));
         $admin = User::where('email', 'admin1@sedonapms.com')->firstOrFail();
         $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
-        $order = Order::create(['transaction_id' => 'REPORT-SALE', 'type' => 'walkin_pos', 'user_id' => $cashier->id, 'total' => 100, 'payment_method' => 'gcash', 'gcash_amount' => 100, 'gcash_reference' => 'REPORT-GCASH', 'status' => 'completed']);
+        $order = Order::create(['transaction_id' => 'REPORT-SALE', 'type' => 'walkin_pos', 'user_id' => $cashier->id, 'total' => 100, 'payment_method' => 'gcash', 'gcash_amount' => 100, 'gcash_reference' => 'REPORT-GCASH', 'status' => 'delivered']);
         $sale = PaymentEntry::create(['order_id' => $order->id, 'kind' => 'pos_sale', 'cash_amount' => 0, 'gcash_amount' => 100, 'gcash_reference' => 'REPORT-GCASH', 'user_id' => $cashier->id, 'posted_at' => now()]);
         PaymentEntry::create(['order_id' => $order->id, 'kind' => 'pos_refund', 'cash_amount' => 0, 'gcash_amount' => -30, 'gcash_reference' => 'REPORT-REFUND', 'reversal_of_id' => $sale->id, 'user_id' => $cashier->id, 'posted_at' => now()]);
         Expense::create(['user_id' => $cashier->id, 'voucher_number' => 'REPORT-EXPENSE', 'expense_date' => today(), 'category' => 'other', 'description' => 'Sundry expense', 'amount' => 5, 'payment_source' => 'petty_cash', 'status' => 'approved']);

@@ -59,6 +59,32 @@ test('alarm names stay literal text and snooze callbacks preserve their argument
     assert.equal(nodes.find(node => node.textContent === 'Checkout').href, '/checkout/19');
 });
 
+test('checkout alarms ring fifteen minutes before, at checkout, and fifteen minutes after, then reset on extension', () => {
+    const source = readFileSync(new URL('../../resources/js/audio.js', import.meta.url), 'utf8').split('// Global instance')[0];
+    const due = Date.parse('2026-10-14T07:04:58+08:00');
+    let clock = due;
+    let checkout = due;
+    const attributes = { 'data-room-id': '8', 'data-room-number': '8', 'data-folio-id': '1', 'data-guest-name': 'Test guest' };
+    const row = { getAttribute: name => name === 'data-checkout-time' ? new Date(checkout).toISOString() : attributes[name], querySelector: () => null };
+    const document = { querySelectorAll: () => [row] };
+    const window = {};
+    runInNewContext(`${source}\nwindow.Engine = SedonaAudioEngine;`, { window, document, Date: class extends Date { static now() { return clock; } } });
+    const engine = Object.create(window.Engine.prototype);
+    let mode;
+    engine.isRoomSnoozed = () => false;
+    engine.isStageSilenced = () => false;
+    engine.setSoundMode = value => { mode = value; };
+    engine.updateAlarmBanner = () => {};
+    for (const [offset, expected] of [[-901000, null], [-900000, 'stage1'], [-1000, 'stage1'], [0, 'stage2'], [899000, 'stage2'], [900000, 'stage3']]) {
+        clock = due + offset;
+        engine.evaluateAlarms();
+        assert.equal(mode, expected);
+    }
+    checkout += 3600000;
+    engine.evaluateAlarms();
+    assert.equal(mode, null, 'Extending the stay must stop the old checkout alarm');
+});
+
 test('cart names stay literal text while quantities and submitted item fields work', () => {
     const blade = readFileSync(new URL('../../resources/views/pos/index.blade.php', import.meta.url), 'utf8');
     const source = blade.slice(blade.lastIndexOf('<script>') + 8, blade.lastIndexOf('</script>'));
@@ -96,14 +122,16 @@ for (const view of ['index', 'tv']) {
 
 test('checkin preview reads each configured rate from the HTML dataset keys', () => {
     const blade = readFileSync(new URL('../../resources/views/dashboard/partials/folio-modals.blade.php', import.meta.url), 'utf8');
-    const source = blade.slice(blade.lastIndexOf('<script>') + 8, blade.lastIndexOf('</script>'));
+    const source = blade.slice(blade.indexOf('let currentRoomRates ='), blade.indexOf('const FOLIO_EXTENSION_OPTIONS ='));
     const document = documentWith(['checkInRoomId', 'checkInModalTitle', 'checkInDateTime', 'checkInDateTimeDisplay', 'checkInTierSelect', 'checkInRatePreview', 'checkInModal']);
     const context = { document, setInterval() {}, clearInterval() {} };
     runInNewContext(source, context);
     const roomDataset = { roomId: '12', roomNumber: '201', roomType: 'Classic', 'rate-3h': '395', 'rate-6h': '777', 'rate-12h': '975', 'rate-24h': '1700', ratePromo: '750' };
+    context.openCheckInModal(roomDataset);
+    assert.equal(document.elements.checkInTierSelect.value, '3h');
     for (const [tier, expected] of [['6h', '₱777.00'], ['3h', '₱395.00'], ['12h', '₱975.00'], ['24h', '₱1,700.00'], ['promo', '₱750.00']]) {
         document.elements.checkInTierSelect.value = tier;
-        context.openCheckInModal(roomDataset);
+        context.updateCheckInRatePreview();
         assert.equal(document.elements.checkInRatePreview.textContent, expected);
     }
 });
@@ -111,12 +139,14 @@ test('checkin preview reads each configured rate from the HTML dataset keys', ()
 test('walkin tender inputs require only the selected method and never invent money received', () => {
     const blade = readFileSync(new URL('../../resources/views/pos/index.blade.php', import.meta.url), 'utf8');
     const source = blade.slice(blade.lastIndexOf('<script>') + 8, blade.lastIndexOf('</script>'));
-    const document = documentWith(['orderTypeSelect', 'roomChargeSection', 'walkinPosSection', 'walkinPaymentMethod', 'walkinCashFields', 'walkinGcashFields', 'walkinCashTendered', 'walkinGcashAmount', 'walkinGcashReference']);
+    const document = documentWith(['orderTypeSelect', 'roomChargeSection', 'walkinPosSection', 'walkinPaymentMethod', 'walkinCashFields', 'walkinGcashFields', 'walkinCashTendered', 'walkinGcashAmount', 'walkinGcashReference', 'selectedFolioId', 'posRoomSelect']);
+    document.elements.posRoomSelect.selectedOptions = [{ dataset: { folioId: '21' } }];
     const context = { document };
     runInNewContext(source, context);
     document.elements.orderTypeSelect.value = 'walkin_pos';
     document.elements.walkinPaymentMethod.value = 'cash';
     context.toggleOrderDestination();
+    assert.equal(document.elements.selectedFolioId.disabled, true);
     assert.equal(document.elements.walkinCashTendered.required, true);
     assert.equal(document.elements.walkinCashTendered.disabled, false);
     assert.equal(document.elements.walkinGcashAmount.disabled, true);
@@ -129,6 +159,11 @@ test('walkin tender inputs require only the selected method and never invent mon
     assert.equal(document.elements.walkinGcashAmount.value, undefined);
     document.elements.orderTypeSelect.value = 'room_charge';
     context.toggleOrderDestination();
+    assert.equal(document.elements.selectedFolioId.value, '21');
+    assert.equal(document.elements.selectedFolioId.disabled, false);
+    document.elements.posRoomSelect.selectedOptions = [{ dataset: { folioId: '22' } }];
+    context.updateSelectedFolio();
+    assert.equal(document.elements.selectedFolioId.value, '22');
     assert.equal(document.elements.walkinPaymentMethod.disabled, true);
     for (const id of ['walkinCashTendered', 'walkinGcashAmount', 'walkinGcashReference']) {
         assert.equal(document.elements[id].required, false);
@@ -140,7 +175,7 @@ test('checkout waits for captured autosaves in order and blocks later draft writ
     const blade = readFileSync(new URL('../../resources/views/checkout/process.blade.php', import.meta.url), 'utf8');
     const saveSource = blade.slice(blade.indexOf('let initializingSettlement = true;'), blade.indexOf('function togglePaymentInputs()'));
     const submitSource = blade.slice(blade.indexOf("document.getElementById('checkoutProcessForm').addEventListener('submit'"), blade.lastIndexOf('</script>'));
-    const document = documentWith(['paymentMethodSelect', 'inpCashTendered', 'inpGcashAmount', 'inpGcashRef', 'inpDiscountRef', 'inpCheckInTime', 'checkoutProcessForm']);
+    const document = documentWith(['paymentMethodSelect', 'inpCashTendered', 'inpGcashAmount', 'inpGcashRef', 'inpDiscountRef', 'inpCheckInTime', 'checkoutProcessForm', 'settlementSaveStatus']);
     const overrideReason = { value: 'Covering assigned cashier' };
     document.querySelector = selector => selector.includes('shift_override_reason') ? overrideReason : { value: 'csrf-token' };
     document.elements.paymentMethodSelect.value = 'cash';
@@ -195,7 +230,7 @@ test('checkout requires a reference only when a GCash payment is entered', () =>
     const blade = readFileSync(new URL('../../resources/views/checkout/process.blade.php', import.meta.url), 'utf8');
     const source = blade.slice(blade.indexOf('function calculateChange()'), blade.indexOf('// Initialize display state'));
     const document = documentWith(['paymentMethodSelect', 'inpCashTendered', 'inpGcashAmount', 'inpGcashRef', 'inpChange']);
-    const context = { document, finalBalanceToPay: 785, depositSaveTimer: null, syncBillingStatementUrl() {}, clearTimeout() {}, setTimeout() {} };
+    const context = { document, finalBalanceToPay: 785, depositSaveTimer: null, updatingStayEstimate: false, syncBillingStatementUrl() {}, clearTimeout() {}, setTimeout() {} };
     runInNewContext(source, context);
     document.elements.paymentMethodSelect.value = 'split';
     document.elements.inpCashTendered.value = '500.04';
@@ -214,6 +249,30 @@ test('checkout requires a reference only when a GCash payment is entered', () =>
     document.elements.inpGcashAmount.value = '785';
     context.calculateChange();
     assert.equal(document.elements.inpGcashRef.required, true);
+});
+
+test('checkout estimate follows the live clock and keeps the full fifteen minute grace', () => {
+    const blade = readFileSync(new URL('../../resources/views/checkout/process.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf('function onCheckInTimeChange('), blade.indexOf('function onRoomRateChange('));
+    const document = documentWith(['inpActualStayDiff', 'inpExcessOvertime', 'inpAddHoursRate']);
+    const checkIn = '2026-10-14T04:04:58+08:00';
+    const checkout = Date.parse(checkIn) + 3 * 3600000;
+    let clock = checkout + 900000;
+    let saves = 0;
+    const context = { document, Date: class extends Date { static now() { return clock; } }, checkOutTimestamp: checkout,
+        totalBookedHours: 3, overstayGraceMs: 900000, xtendHours: 0, addHourUnitPrice: 130,
+        checkInSaveTimer: null, recalcGrossAndSettlement() {}, clearTimeout() {}, setTimeout() { saves++; } };
+    runInNewContext(source, context);
+    context.onCheckInTimeChange(checkIn);
+    assert.equal(document.elements.inpExcessOvertime.value, '0 Hours');
+    clock += 1000;
+    context.onCheckInTimeChange(checkIn);
+    assert.equal(document.elements.inpExcessOvertime.value, '1 Hours');
+    clock = checkout + 2 * 3600000 + 10 * 60000;
+    context.onCheckInTimeChange(checkIn);
+    assert.equal(document.elements.inpExcessOvertime.value, '2 Hours');
+    assert.equal(context.addHoursRate, 260);
+    assert.equal(saves, 0, 'Live estimates must not continually submit settlement drafts');
 });
 
 test('mobile navigation restores page interaction on dismissal and desktop resize', () => {

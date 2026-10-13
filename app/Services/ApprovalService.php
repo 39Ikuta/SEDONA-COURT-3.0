@@ -101,6 +101,11 @@ class ApprovalService
             $source = $this->source($approval->kind, $approval->source_id);
             $this->requireCurrent($approval, $source);
             $data = $approval->payload;
+            if ($approval->isStockChange()) {
+                $this->applyStockChange($request, $approval);
+
+                return ['approval_id' => $approval->id];
+            }
             $this->days->assertWritable();
             if ($approval->kind === 'statement_void') {
                 $this->days->assertWritable($source->business_date->toDateString());
@@ -125,10 +130,6 @@ class ApprovalService
             } elseif ($approval->kind === 'pos_refund') {
                 $amount = BillingService::cents($data['amount']);
                 $this->posting->post($request, $source->order, 'pos_refund', $data['payment_method'] === 'cash' ? -$amount : 0, $data['payment_method'] === 'gcash' ? -$amount : 0, $data['gcash_reference'] ?? null, $approval->id, $source->id);
-            } elseif ($approval->isStockChange()) {
-                $this->applyStockChange($request, $approval);
-
-                return ['approval_id' => $approval->id];
             } elseif ($approval->kind === 'expense_reversal') {
                 $shift = $source->payment_source === 'cash_drawer' ? $this->custody->requireOperatingShift($request->user(), $request->input('shift_override_reason'), 'expense.reversal') : null;
                 Expense::create(['user_id' => $request->user()->id, 'shift_id' => $shift?->id, 'voucher_number' => Expense::generateVoucherNumber(), 'expense_date' => $this->days->date(), 'category' => $source->category, 'description' => 'Returned expense '.$source->voucher_number, 'amount' => -BillingService::cents($source->amount) / 100, 'payment_source' => $source->payment_source, 'receipt_reference' => $approval->evidence_reference, 'status' => 'approved', 'reversal_of_id' => $source->id, 'approval_request_id' => $approval->id, 'notes' => $approval->reason]);
@@ -166,7 +167,6 @@ class ApprovalService
 
     private function applyStockChange(Request $request, ApprovalRequest $approval): void
     {
-        $this->days->assertWritable();
         $data = $approval->payload;
         if ($approval->kind === 'stock_adjustment') {
             $this->inventory->setStockCount($approval->source_id, (int) $data['stock_quantity'], $data['reason'], $approval->reason, $request->user()->id);

@@ -125,7 +125,7 @@ class FinancialPostingTest extends TestCase
     {
         $folio = $this->folio();
         $item = $this->item();
-        $data = $this->operation(['order_type' => 'room_charge', 'room_id' => $folio->room_id, 'items' => [['id' => $item->id, 'qty' => 1]]]);
+        $data = $this->operation(['order_type' => 'room_charge', 'room_id' => $folio->room_id, 'folio_id' => $folio->id, 'items' => [['id' => $item->id, 'qty' => 1]]]);
         $this->post(route('pos.order.store'), $data)->assertSessionHasNoErrors();
         $this->post(route('pos.order.store'), $data)->assertSessionHasNoErrors();
         $this->assertDatabaseCount('orders', 1);

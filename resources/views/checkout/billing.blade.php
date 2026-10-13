@@ -31,6 +31,19 @@
             box-sizing: border-box;
         }
         .text-center { text-align: center; }
+        .billing-logo {
+            display: block;
+            width: 22mm;
+            height: auto;
+            margin: 0 auto 6px;
+            filter: brightness(0);
+        }
+        .billing-facebook-qr {
+            display: block;
+            width: 32mm;
+            height: 32mm;
+            margin: 6px auto 2px;
+        }
         .text-right { text-align: right; }
         .text-left { text-align: left; }
         .font-bold { font-weight: bold; }
@@ -131,6 +144,7 @@
     <div class="thermal-container" id="printable-billing">
         <!-- Header -->
         <div class="text-center">
+            <img class="billing-logo" src="{{ asset('billing-sedona-logo.png') }}" alt="Sedona Court logo">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
             <div style="font-size: 9px;">LODGING</div>
             <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
@@ -366,6 +380,10 @@
             <div style="margin-top: 4px; font-size: 8px; color: #666;">
                 "Interim Billing Folio &bull; {{ config('sedona.hotel_name') }}"
             </div>
+        </div>
+        <div class="text-center" style="margin-top: 8px; font-size: 9px;">
+            <img class="billing-facebook-qr" src="{{ asset('billing-facebook-qr.svg') }}" alt="QR code for the Sedona Court Facebook page">
+            <div class="font-bold">Scan to visit our Facebook page</div>
         </div>
     </div>
 

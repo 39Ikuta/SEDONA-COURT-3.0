@@ -4,7 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\CashMovement;
 use App\Models\Expense;
+use App\Models\Folio;
+use App\Models\Guest;
 use App\Models\PaymentEntry;
+use App\Models\Room;
 use App\Models\Shift;
 use App\Models\StatementLine;
 use App\Models\User;
@@ -16,6 +19,23 @@ use Tests\TestCase;
 class TransactionHistoryIntegrityTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_cashier_history_keeps_legacy_settlements_with_no_checkout_operator(): void
+    {
+        $this->withoutVite();
+        $this->seed(DatabaseSeeder::class);
+        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        $room = Room::where('is_staff_quarters', false)->firstOrFail();
+        $folio = Folio::create(['room_id' => $room->id, 'guest_id' => Guest::create(['name' => 'Historical guest'])->id,
+            'user_id' => $cashier->id, 'transaction_id' => 'SCTI-LEGACY-QA', 'status' => 'checked_out', 'rate_tier' => '3h',
+            'checked_in_at' => now()->subHours(3), 'expected_checkout_at' => now(), 'checked_out_at' => now(),
+            'checked_out_by' => null, 'payment_method' => 'cash', 'cash_tendered' => 500, 'change_due' => 105]);
+
+        $this->actingAs($cashier)->get(route('transactions.index'))->assertOk()->assertSee($folio->transaction_id)
+            ->assertViewHas('transactions', fn ($rows): bool => $rows->total() === 1 && (float) $rows->first()->cash_amount === 395.0);
+        $other = User::where('email', 'raquel@sedonapms.com')->firstOrFail();
+        $this->actingAs($other)->get(route('transactions.index'))->assertOk()->assertDontSee($folio->transaction_id);
+    }
 
     public function test_history_keeps_actual_pending_rejected_and_reversed_expenses_visible(): void
     {

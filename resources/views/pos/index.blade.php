@@ -115,9 +115,10 @@
                     <!-- Room Folio Dropdown -->
                     <div id="roomChargeSection">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Select Occupied Room:</label>
-                        <select name="room_id" class="form-control-hms font-bold">
+                        <input type="hidden" name="folio_id" id="selectedFolioId" value="{{ $occupiedRooms->first()?->activeFolio?->id }}">
+                        <select name="room_id" id="posRoomSelect" onchange="updateSelectedFolio()" class="form-control-hms font-bold">
                             @forelse($occupiedRooms as $occ)
-                                <option value="{{ $occ->id }}">
+                                <option value="{{ $occ->id }}" data-folio-id="{{ $occ->activeFolio?->id }}">
                                     Room {{ $occ->number }} &bull; {{ $occ->is_staff_quarters ? 'Permanent Employee Quarters (Staff Order)' : ($occ->activeFolio->guest->name ?? 'Guest') }}
                                 </option>
                             @empty
@@ -358,6 +359,13 @@
             walkinSec.classList.remove('hidden');
         }
         toggleWalkinPayment();
+        updateSelectedFolio();
+    }
+
+    function updateSelectedFolio() {
+        const input = document.getElementById('selectedFolioId');
+        input.value = document.getElementById('posRoomSelect').selectedOptions[0]?.dataset.folioId ?? '';
+        input.disabled = document.getElementById('orderTypeSelect').value !== 'room_charge';
     }
 
     function toggleWalkinPayment() {

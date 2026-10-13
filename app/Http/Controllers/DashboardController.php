@@ -161,9 +161,11 @@ class DashboardController extends Controller
         if (auth()->check() && auth()->user()->hasAnyRole(['cashier', 'front_desk'])) {
             $myId = auth()->id();
             $ownsDrawer = $activeShift && $activeShift->opened_by === $myId;
-            $myShiftStart = $ownsDrawer ? $activeShift->opened_at : today()->startOfDay();
-            $myShiftLabel = $ownsDrawer
-                ? ucfirst($activeShift->shift_type ?? 'shift').' · opened '.$activeShift->opened_at->format('m/d h:i A')
+            $sharesDrawer = $activeShift && config('sedona.continuous_shift_enabled') && $request->user()->can('operate-shift', $activeShift);
+            $usesDrawer = $ownsDrawer || $sharesDrawer;
+            $myShiftStart = $usesDrawer ? $activeShift->opened_at : today()->startOfDay();
+            $myShiftLabel = $usesDrawer
+                ? ($sharesDrawer ? 'Shared drawer #'.$activeShift->id : ucfirst($activeShift->shift_type ?? 'shift')).' · opened '.$activeShift->opened_at->format('m/d h:i A')
                 : 'Today';
 
             $myCheckIns = Folio::where('user_id', $myId)

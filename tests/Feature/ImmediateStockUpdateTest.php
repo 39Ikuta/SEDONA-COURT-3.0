@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\ApprovalRequest;
+use App\Models\BusinessDay;
 use App\Models\PosItem;
 use App\Models\User;
+use App\Services\BusinessDayService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -15,6 +17,32 @@ use Tests\TestCase;
 class ImmediateStockUpdateTest extends TestCase
 {
     use RefreshDatabase;
+
+    #[TestWith(['adjustment'])]
+    #[TestWith(['recount'])]
+    #[TestWith(['legacy'])]
+    public function test_stock_changes_do_not_require_reopening_a_closed_accounting_day(string $action): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        BusinessDay::create(['business_date' => app(BusinessDayService::class)->date(), 'status' => 'closed', 'version' => 1]);
+        $approval = ApprovalRequest::factory()->create(['requested_by' => $cashier->id]);
+        $item = $approval->source;
+        $payload = ['operation_key' => (string) Str::uuid()];
+        $this->actingAs($cashier);
+        if ($action === 'adjustment') {
+            $this->post(route('inventory.update-stock', $item), $payload + ['stock_quantity' => 20, 'reason' => 'restock'])->assertSessionHasNoErrors();
+        } elseif ($action === 'recount') {
+            $this->post(route('inventory.recount'), $payload + ['counts' => [$item->id => 20]])->assertSessionHasNoErrors();
+        } else {
+            $this->post(route('approvals.execute', $approval), $payload)->assertSessionHasNoErrors();
+        }
+
+        $this->assertSame(20, $item->fresh()->stock_quantity);
+        $this->assertDatabaseHas('inventory_events', ['pos_item_id' => $item->id, 'quantity_change' => 10, 'user_id' => $cashier->id]);
+        $this->assertSame('closed', BusinessDay::sole()->status);
+        $this->assertDatabaseCount('payment_entries', 0);
+    }
 
     #[TestWith(['cashier'])]
     #[TestWith(['front_desk'])]

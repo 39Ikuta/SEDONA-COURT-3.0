@@ -65,7 +65,7 @@ class BillingIntegrityTest extends TestCase
         $folio = $this->folio();
         $folio->recalculate();
 
-        $this->post(route('folios.extend', $folio), ['hours' => '3'])
+        $this->post(route('folios.extend', $folio), ['operation_key' => (string) Str::uuid(), 'hours' => '3'])
             ->assertRedirect(route('dashboard'))
             ->assertSessionHasNoErrors()
             ->assertSessionHas('success', 'Stay extended.');

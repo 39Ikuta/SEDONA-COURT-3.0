@@ -122,6 +122,7 @@ class VersionSecurityAndReportingTest extends TestCase
 
     public function test_second_shift_is_rejected_and_next_shift_can_open_after_close(): void
     {
+        config(['sedona.continuous_shift_enabled' => false, 'sedona.shift_handover_enabled' => true]);
         $this->actingAs(User::where('email', 'pau@sedonapms.com')->firstOrFail());
         $this->post(route('shifts.open'), ['operation_key' => (string) Str::uuid(), 'opening_float' => 100])->assertRedirect();
         $shift = Shift::firstOrFail();

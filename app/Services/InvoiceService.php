@@ -18,6 +18,9 @@ class InvoiceService
     public function issue(Request $request, Folio|Order $source): Invoice
     {
         Gate::authorize('record_payments');
+        if ($source instanceof Order) {
+            $this->authorizeOrder($request, $source);
+        }
         $column = $source instanceof Folio ? 'folio_id' : 'order_id';
         $result = $this->posting->execute($request, 'invoice.issue.'.$column, $source->id, [], function () use ($request, $source, $column): array {
             $source = $source::whereKey($source->id)->lockForUpdate()->firstOrFail();
@@ -25,7 +28,7 @@ class InvoiceService
             if ($existing) {
                 return ['invoice_id' => $existing->id];
             }
-            abort_if($source instanceof Folio ? $source->isActive() || $source->force_checkout : $source->type !== 'walkin_pos', 409, 'Invoices require a completed paid sale.');
+            abort_if($source instanceof Folio ? $source->status !== 'checked_out' || $source->force_checkout : $source->type !== 'walkin_pos' || $source->status === 'cancelled', 409, 'Invoices require a completed paid sale.');
             $settingsRow = DB::table('accounting_settings')->where('id', 1)->lockForUpdate()->first();
             $settings = json_decode($settingsRow->configuration, true, 512, JSON_THROW_ON_ERROR);
             $this->requireConfiguration($settings);
@@ -61,6 +64,19 @@ class InvoiceService
         });
 
         return Invoice::findOrFail($result['invoice_id']);
+    }
+
+    public function authorizeInvoice(Request $request, Invoice $invoice): void
+    {
+        Gate::authorize('record_payments');
+        if ($invoice->order_id) {
+            $this->authorizeOrder($request, Order::findOrFail($invoice->order_id));
+        }
+    }
+
+    private function authorizeOrder(Request $request, Order $order): void
+    {
+        abort_unless((int) $order->user_id === $request->user()->id || $request->user()->can('review-financial'), 403);
     }
 
     public static function refundTaxCents(PaymentEntry $entry): int

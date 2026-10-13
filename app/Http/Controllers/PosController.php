@@ -96,6 +96,7 @@ class PosController extends Controller
         $validated = $request->validate([
             'order_type' => 'required|in:room_charge,walkin_pos',
             'room_id' => 'required_if:order_type,room_charge|nullable|exists:rooms,id',
+            'folio_id' => 'nullable|integer|exists:folios,id',
             'items' => 'required|array|min:1',
             'items.*.id' => 'required|exists:pos_items,id',
             'items.*.qty' => 'required|integer|min:1|max:65535',
@@ -127,6 +128,9 @@ class PosController extends Controller
                     $folio = Folio::where('room_id', $room->id)->where('status', 'active')->latest('id')->lockForUpdate()->first();
                     if (! $folio) {
                         throw new DomainException('Room charges require an active folio. Refresh the room selection.');
+                    }
+                    if ((! $room->is_staff_quarters || ! empty($validated['folio_id'])) && (int) ($validated['folio_id'] ?? 0) !== $folio->id) {
+                        throw new DomainException('The guest stay in this room has changed. Refresh the POS screen and select the guest again.');
                     }
                 }
                 $orderNumber = 'ORD-'.strtoupper(uniqid());
