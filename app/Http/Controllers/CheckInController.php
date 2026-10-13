@@ -12,6 +12,7 @@ use App\Services\BillingService;
 use App\Services\DiscountService;
 use App\Services\FinancialPostingService;
 use App\Services\ShiftAccessService;
+use App\Services\StayCancellationService;
 use App\Services\StayRateService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -163,6 +164,14 @@ class CheckInController extends Controller
         });
 
         return redirect()->route('folios.orders.index', $folio)->with('success', 'Stay package converted. Checkout time and alarms have been updated.');
+    }
+
+    public function cancelStay(Request $request, Folio $folio, StayCancellationService $cancellations): RedirectResponse
+    {
+        $data = $request->validate(['reason' => 'required|string|max:500']);
+        $cancellations->cancel($request, $folio, $data);
+
+        return redirect()->route('dashboard')->with('success', 'Stay '.$folio->transaction_id.' cancelled. The room is available again.');
     }
 
     public function applyDiscount(Request $request, Folio $folio): RedirectResponse

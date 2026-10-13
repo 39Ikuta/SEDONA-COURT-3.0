@@ -24,6 +24,26 @@
         <div class="font-bold">Add-ons billed: ₱{{ number_format($folio->pos_total, 2) }}</div>
     </div>
 
+    @if($folio->isActive() && !$folio->room->is_staff_quarters)
+        <section class="hms-card" id="cancelGuestStay">
+            <h2 class="hms-card-header">X ORDER / CANCEL STAY</h2>
+            <p class="text-sm text-slate-600">Cancel a new unpaid stay within 15 minutes of its creation. This window does not change when RA corrects the check-in time.</p>
+            <p class="text-sm mt-2">Created: <strong>{{ $folio->created_at->format('m/d/Y h:i:s A') }}</strong> · Cancellation deadline: <strong>{{ $folio->created_at->copy()->addMinutes(15)->format('h:i:s A') }}</strong></p>
+            @if($stayCancellationReason)
+                <p class="text-sm text-amber-800 mt-3">{{ $stayCancellationReason }}</p>
+            @else
+                <form method="POST" action="{{ route('folios.cancel', $folio) }}" class="mt-3 flex flex-wrap items-end gap-3">
+                    @csrf
+                    <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+                    <label class="text-sm font-bold grow">Reason for cancelling stay
+                        <input type="text" name="reason" required maxlength="500" placeholder="Guest changed their mind" class="form-control-hms block mt-1">
+                    </label>
+                    <button type="submit" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-4 py-2 rounded">Cancel stay</button>
+                </form>
+            @endif
+        </section>
+    @endif
+
     <section class="hms-card" id="previousGuestOrders">
         <h2 class="hms-card-header">PREVIOUS ORDERS</h2>
         @forelse($folio->orders as $order)
@@ -32,6 +52,19 @@
                     <span class="font-bold">{{ $order->transaction_id }} · {{ ucfirst($order->status) }}</span>
                     <span>{{ $order->created_at->format('m/d/Y h:i A') }} · {{ $order->cashier?->name ?? 'Staff' }}</span>
                 </div>
+                @if($folio->isActive() && $order->type === 'room_charge' && $order->isNew() && $order->isWithinCancellationGrace())
+                    <div class="p-3 bg-rose-50 border-b border-rose-100">
+                        <p class="text-xs text-rose-900 mb-2">Unprepared orders may be cancelled until {{ $order->created_at->copy()->addMinutes(15)->format('h:i:s A') }}. Their unused stock is returned automatically.</p>
+                        <form method="POST" action="{{ route('folios.orders.cancel', [$folio, $order]) }}" class="flex flex-wrap items-end gap-3">
+                            @csrf
+                            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+                            <label class="text-xs font-bold grow">Reason for cancelling order
+                                <input name="reason" type="text" required maxlength="500" class="form-control-hms block mt-1" placeholder="Guest cancelled before preparation">
+                            </label>
+                            <button class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-3 py-2 rounded text-xs">Cancel order</button>
+                        </form>
+                    </div>
+                @endif
                 <div class="overflow-x-auto">
                     <table class="hms-table">
                         <thead><tr><th>ITEM</th><th>QUANTITY</th><th>UNIT PRICE</th><th>AMOUNT</th><th>CORRECTIONS</th></tr></thead>
@@ -136,7 +169,7 @@
                     <label class="text-sm">Package
                         <select name="rate_tier" id="guestPackageTier" required class="form-control-hms">
                             @foreach(['12h' => 12, '24h' => 24] as $tier => $hours)
-                                <option value="{{ $tier }}" data-checkout="{{ $folio->checked_in_at->copy()->addHours($hours)->format('m/d/Y h:i A') }}">{{ $hours }} hours — ₱{{ number_format($folio->room->getRateForTier($tier), 2) }}</option>
+                                <option value="{{ $tier }}" @selected($tier === ($folio->rate_tier === '12h' ? '24h' : '12h')) data-checkout="{{ $folio->checked_in_at->copy()->addHours($hours)->format('m/d/Y h:i A') }}">{{ $hours }} hours — ₱{{ number_format($folio->room->getRateForTier($tier), 2) }}</option>
                             @endforeach
                         </select>
                     </label>

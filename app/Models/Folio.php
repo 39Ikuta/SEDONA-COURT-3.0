@@ -100,6 +100,12 @@ class Folio extends Model
         return $this->status === 'active';
     }
 
+    public function isWithinCancellationGrace(): bool
+    {
+        return $this->created_at !== null && now()->gte($this->created_at)
+            && now()->lte($this->created_at->copy()->addMinutes(15));
+    }
+
     public function isOverdue(): bool
     {
         return $this->status === 'active' && now()->gt($this->expected_checkout_at);

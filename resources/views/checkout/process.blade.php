@@ -7,7 +7,7 @@
     @if(auth()->user()->hasRole('admin'))
         <a href="{{ route('admin.check-in-times.index', ['folio_id' => $folio->id]) }}" class="bg-brand text-white text-[11px] font-bold px-3 py-1 rounded">Correct check-in time</a>
     @endif
-    <a href="{{ route('folios.orders.index', $folio) }}" class="bg-sky-700 text-white text-[11px] font-bold px-3 py-1 rounded">Guest orders &amp; package conversion</a>
+    <a href="{{ route('folios.orders.index', $folio) }}" class="bg-sky-700 text-white text-[11px] font-bold px-3 py-1 rounded">Orders, cancellation &amp; packages</a>
     <a href="{{ route('dashboard') }}" class="bg-[#333333] hover:bg-[#222222] text-white text-[11px] font-bold px-3 py-1 rounded shadow-sm border border-[#666666]">
         &larr; Back to Front Desk Matrix
     </a>

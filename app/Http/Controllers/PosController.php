@@ -156,7 +156,7 @@ class PosController extends Controller
                     $qty = $quantities[$posItem->id];
                     $subtotal = $posItem->price * $qty;
 
-                    OrderItem::create([
+                    $orderLine = OrderItem::create([
                         'order_id' => $order->id,
                         'pos_item_id' => $posItem->id,
                         'item_name' => $posItem->name,
@@ -171,6 +171,8 @@ class PosController extends Controller
                             'qty' => $qty,
                             'price' => (float) $posItem->price,
                             'subtotal' => (float) $subtotal,
+                            'order_id' => $order->id,
+                            'order_item_id' => $orderLine->id,
                         ];
                     }
                 }

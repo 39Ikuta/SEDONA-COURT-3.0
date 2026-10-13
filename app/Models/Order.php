@@ -52,6 +52,12 @@ class Order extends Model
         return $this->status === 'new';
     }
 
+    public function isWithinCancellationGrace(): bool
+    {
+        return $this->created_at !== null && now()->gte($this->created_at)
+            && now()->lte($this->created_at->copy()->addMinutes(15));
+    }
+
     public function isPreparing(): bool
     {
         return $this->status === 'preparing';

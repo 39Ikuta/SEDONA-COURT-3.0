@@ -197,7 +197,7 @@
                                                 <button onclick="openTransferModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-transfer font-bold">Transfer</button>
                                                 <button onclick="openAddOnModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-addon font-bold">Add On</button>
                                                 <a href="{{ route('folios.orderslip', $folio->id) }}" target="_blank" class="btn-orderslip font-bold">Order Slip</a>
-                                                <a href="{{ route('pos.index') }}" class="btn-xorder font-bold">X Order</a>
+                                                <a href="{{ route('folios.orders.index', $folio) }}" class="btn-xorder font-bold">X Order / Cancel</a>
                                                 <button onclick="openForceCheckoutModal({{ $folio->id }}, '{{ $room->number }}', '{{ number_format($folio->net_total, 2) }}')" class="btn-force font-bold" title="Force Checkout Request">Force</button>
                                             </div>
                                         </td>
