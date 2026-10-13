@@ -184,7 +184,7 @@ class ApprovalAndCustodyTest extends TestCase
     public function test_sale_refund_links_original_without_automatic_restock(): void
     {
         $item = PosItem::where('is_tracked', true)->firstOrFail();
-        $order = Order::create(['transaction_id' => 'TEST-POS', 'type' => 'walkin_pos', 'user_id' => $this->cashier->id, 'payment_method' => 'cash', 'total' => 100, 'status' => 'completed', 'shift_id' => $this->shift->id]);
+        $order = Order::create(['transaction_id' => 'TEST-POS', 'type' => 'walkin_pos', 'user_id' => $this->cashier->id, 'payment_method' => 'cash', 'total' => 100, 'status' => 'delivered', 'shift_id' => $this->shift->id]);
         $payment = PaymentEntry::create(['order_id' => $order->id, 'user_id' => $this->cashier->id, 'shift_id' => $this->shift->id, 'kind' => 'pos_sale', 'cash_amount' => 100, 'gcash_amount' => 0, 'posted_at' => now()]);
         $stock = $item->stock_quantity;
         $approval = $this->requestApproval('pos_refund', $payment->id, ['amount' => 30, 'payment_method' => 'cash']);
@@ -225,15 +225,14 @@ class ApprovalAndCustodyTest extends TestCase
 
     #[TestWith([false])]
     #[TestWith([true])]
-    public function test_approved_arrival_time_preserves_the_manila_hour_with_or_without_an_explicit_offset(bool $withOffset): void
+    public function test_admin_corrected_arrival_time_preserves_the_manila_hour_with_or_without_an_explicit_offset(bool $withOffset): void
     {
         $folio = $this->folio();
         $arrival = now()->subHours(2);
         $input = $withOffset ? $arrival->setTimezone('UTC')->toIso8601String() : $arrival->format('Y-m-d H:i:s');
-        $approval = $this->requestApproval('folio_override', $folio->id, ['checked_in_at' => $input]);
-        $this->approve($approval);
-
-        $this->post(route('approvals.execute', $approval), $this->key())->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($this->reviewer)->post('/admin/check-in-times/'.$folio->id, $this->key() + [
+            'checked_in_at' => $input, 'expected_checked_in_at' => $folio->checked_in_at->toIso8601String(), 'reason' => 'RA corrected declaration time.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
 
         $this->assertSame('10:00:00', $folio->fresh()->checked_in_at->format('H:i:s'));
         $this->assertSame('22:00:00', $folio->fresh()->expected_checkout_at->format('H:i:s'));

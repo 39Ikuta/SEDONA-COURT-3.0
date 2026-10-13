@@ -4,6 +4,9 @@
 @section('subtitle', 'Check Out | Settle Guest Stay & Issue Official Receipt')
 
 @section('top_action')
+    @if(auth()->user()->hasRole('admin'))
+        <a href="{{ route('admin.check-in-times.index', ['folio_id' => $folio->id]) }}" class="bg-brand text-white text-[11px] font-bold px-3 py-1 rounded">Correct check-in time</a>
+    @endif
     <a href="{{ route('folios.orders.index', $folio) }}" class="bg-sky-700 text-white text-[11px] font-bold px-3 py-1 rounded">Guest orders &amp; package conversion</a>
     <a href="{{ route('dashboard') }}" class="bg-[#333333] hover:bg-[#222222] text-white text-[11px] font-bold px-3 py-1 rounded shadow-sm border border-[#666666]">
         &larr; Back to Front Desk Matrix
@@ -11,7 +14,7 @@
 @endsection
 
 @section('content')
-<div class="hms-card mb-4 text-sm"><a href="{{ route('approvals.index', ['folio_id' => $folio->id]) }}" class="underline font-semibold">Request rate, check-in time or guest discount changes for Room {{ $folio->room->number }}</a>. Execute the approved request, then reload checkout. @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
+<div class="hms-card mb-4 text-sm"><a href="{{ route('approvals.index', ['folio_id' => $folio->id]) }}" class="underline font-semibold">Request rate or guest discount changes for Room {{ $folio->room->number }}</a>. Execute the approved request, then reload checkout. Check-in time corrections are handled by RA (admin). @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
     <div class="rounded-xl border p-5 mx-2 mb-4 text-sm {{ $drawerStatus['state'] === 'ready' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50' }}" role="status" id="checkoutDrawerStatus">
         <h2 class="font-bold text-brand">{{ $drawerStatus['title'] }}</h2>
         <p class="mt-1 text-slate-700">{{ $drawerStatus['message'] }}</p>

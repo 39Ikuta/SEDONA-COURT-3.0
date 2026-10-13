@@ -58,7 +58,7 @@ class StatutoryDiscountEvidenceTest extends TestCase
         $this->assertDatabaseHas('folios', ['room_id' => $room->id, 'discount_type' => 'SENIOR', 'discount_id_ref' => 'OSCA-EVIDENCE-1']);
     }
 
-    public function test_offset_arrival_is_stored_and_displayed_in_manila_time(): void
+    public function test_admin_offset_correction_is_stored_and_displayed_in_manila_time(): void
     {
         $this->withoutVite();
         $this->travelTo('2026-10-08 12:00:00');
@@ -66,10 +66,15 @@ class StatutoryDiscountEvidenceTest extends TestCase
         $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
         $room = Room::where('number', '5')->firstOrFail();
 
-        $this->actingAs($cashier)->post(route('checkin.store'), ['room_id' => $room->id, 'headcount' => 1, 'rate_tier' => '3h',
-            'checked_in_at' => '2026-10-08T02:00:00.000Z'])->assertSessionHasNoErrors();
+        $this->actingAs($cashier)->post(route('checkin.store'), ['room_id' => $room->id, 'headcount' => 1, 'rate_tier' => '3h'])->assertSessionHasNoErrors();
 
         $folio = Folio::where('room_id', $room->id)->firstOrFail();
+        $admin = User::where('email', 'admin@sedonapms.com')->firstOrFail();
+        $this->actingAs($admin)->post('/admin/check-in-times/'.$folio->id, [
+            'operation_key' => (string) Str::uuid(), 'expected_checked_in_at' => $folio->checked_in_at->toIso8601String(),
+            'checked_in_at' => '2026-10-08T02:00:00.000Z', 'reason' => 'RA declaration time correction.',
+        ])->assertSessionHasNoErrors();
+        $folio->refresh();
         $this->assertSame('2026-10-08 10:00:00', $folio->checked_in_at->format('Y-m-d H:i:s'));
         $this->assertSame('2026-10-08 13:00:00', $folio->expected_checkout_at->format('Y-m-d H:i:s'));
     }

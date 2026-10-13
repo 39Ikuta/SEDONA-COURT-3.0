@@ -11,7 +11,7 @@
     @endif
     <div class="hms-card"><p class="text-sm text-slate-600">A different admin or owner reviews each request. Approved actions apply once to the recorded details. Monetary refunds do not return food or stock automatically.</p></div>
     <div class="grid gap-4 lg:grid-cols-2">
-    @foreach(['folio_override' => 'Rate, time or guest discount', 'invoice_tax_treatment' => 'Statutory invoice tax basis', 'deposit_refund' => 'Return remaining guest deposit', 'pos_refund' => 'Refund a walk-in sale', 'statement_void' => 'Exclude an incorrect statement import', 'cash_drop' => 'Drop drawer cash to safe', 'float_addition' => 'Add drawer float', 'bank_deposit' => 'Deposit drawer cash to bank'] as $kind => $label)
+    @foreach(['folio_override' => 'Rate or guest discount', 'invoice_tax_treatment' => 'Statutory invoice tax basis', 'deposit_refund' => 'Return remaining guest deposit', 'pos_refund' => 'Refund a walk-in sale', 'statement_void' => 'Exclude an incorrect statement import', 'cash_drop' => 'Drop drawer cash to safe', 'float_addition' => 'Add drawer float', 'bank_deposit' => 'Deposit drawer cash to bank'] as $kind => $label)
         @continue($kind === 'statement_void' && !auth()->user()->can('review-financial'))
         @continue(in_array($kind, ['cash_drop', 'float_addition', 'bank_deposit']) && !$shift)
         <details class="hms-card" @if($kind === 'folio_override' && $selectedFolio) open @endif><summary class="cursor-pointer font-semibold">{{ $label }}</summary>
@@ -29,7 +29,7 @@
                 @if($kind === 'folio_override')
                     <p class="text-sm text-slate-500">Leave unchanged fields empty. Choosing a discount type with no custom amount restores that guest's recorded default. Senior and PWD discounts require an ID reference.</p>
                     <label>New room charge<input name="payload[room_charge]" type="number" step="0.01" min="0" class="form-control-hms"></label>
-                    <label>Corrected check-in time<input name="payload[checked_in_at]" type="datetime-local" class="form-control-hms"></label>
+                    <p class="text-sm text-slate-500">Check-in time corrections are handled by RA (admin).</p>
                     <label>Guest discount<select name="payload[discount_type]" class="form-control-hms"><option value="">Unchanged</option>@foreach(['DC' => 'Sedona Card / DC', 'SENIOR' => 'Senior Citizen', 'PWD' => 'PWD', 'NONE' => 'Remove discount'] as $type => $discountLabel)<option value="{{ $type }}" @selected($selectedDiscountType === $type)>{{ $discountLabel }}</option>@endforeach</select></label>
                     <label>Discount ID reference<input name="payload[discount_id_ref]" maxlength="100" class="form-control-hms"></label>
                     @if(auth()->user()->hasAnyRole(['admin', 'owner']))
@@ -63,7 +63,9 @@
                 <td class="p-3">{{ class_basename($approval->source_type) }} #{{ $approval->source_id }}<p>{{ $approval->reason }}</p><p>Evidence: {{ $approval->evidence_reference ?? 'None recorded' }}</p><pre class="whitespace-pre-wrap text-xs">{{ json_encode($approval->payload, JSON_PRETTY_PRINT) }}</pre></td>
                 <td class="p-3 font-semibold">{{ str_replace('_', ' ', $approval->status) }}<p class="font-normal">{{ $approval->review_note }}</p>@if($approval->reviewed_by)<p class="font-normal">Reviewer #{{ $approval->reviewed_by }} · {{ $approval->reviewed_at }}</p>@endif</td>
                 <td class="p-3">
-                    @if($approval->kind === 'handover_variance' && !config('sedona.shift_handover_enabled'))
+                    @if($approval->kind === 'folio_override' && array_key_exists('checked_in_at', $approval->payload))
+                        <p class="text-slate-500">Check-in time corrections now use RA's admin panel. Cancel this old request and ask RA to correct the time.</p>
+                    @elseif($approval->kind === 'handover_variance' && !config('sedona.shift_handover_enabled'))
                         <p class="text-slate-500">Handover temporarily disabled. This historical request is retained and does not block day closing.</p>
                     @elseif($approval->status === 'pending' && auth()->user()->can('review-financial') && $approval->requested_by !== auth()->id())
                         <form method="POST" action="{{ route('approvals.review', $approval) }}" class="grid gap-2">@csrf<textarea name="note" required maxlength="1000" placeholder="Review reason" class="form-control-hms"></textarea><button name="decision" value="approve" class="btn-hms-primary">Approve recorded details</button><button name="decision" value="reject" class="text-rose-700">Reject</button></form>

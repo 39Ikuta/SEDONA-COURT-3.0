@@ -51,6 +51,9 @@
             ['label' => 'Master Pricing Editor', 'route' => 'admin.pricing.index', 'patterns' => ['admin.pricing.*'], 'icon' => 'M4 4h7l9 9-7 7-9-9V4z M8 8h.01'],
             ['label' => 'Staff Accounts & RBAC', 'route' => 'admin.users.index', 'patterns' => ['admin.users.*'], 'icon' => 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M19 8a3 3 0 0 1 0 6 M22 21v-2a4 4 0 0 0-3-4'],
         ];
+        if ($operator?->hasRole('admin')) {
+            array_unshift($settingsNavigation, ['label' => 'Check-in Time Corrections', 'route' => 'admin.check-in-times.index', 'patterns' => ['admin.check-in-times.*'], 'icon' => 'M12 8v4l3 2 M21 12a9 9 0 1 1-9-9 M16 3h5v5']);
+        }
     @endphp
     <a href="#main-content" class="skip-link">Skip to content</a>
     <button type="button" id="sidebarOverlay" class="sidebar-overlay hidden" onclick="closePrimaryNav()" aria-label="Close navigation" tabindex="-1"></button>

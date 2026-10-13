@@ -75,53 +75,6 @@ class GuestStayWorkflowTest extends TestCase
         $this->assertSame('SCTI-000002', Folio::generateTransactionId());
     }
 
-    public function test_late_entry_uses_actual_arrival_and_records_the_reason_and_operator(): void
-    {
-        $actor = $this->actor();
-        $room = $this->room('available');
-        $this->actingAs($actor)->post(route('checkin.store'), [
-            'room_id' => $room->id, 'guest_name' => 'Earlier Arrival', 'headcount' => 2, 'rate_tier' => '3h',
-            'checked_in_at' => now()->toIso8601String(), 'record_earlier_arrival' => 1,
-            'actual_checked_in_at' => '2026-10-13T11:00', 'late_entry_reason' => 'Guest arrived while the computer was restarting.',
-        ])->assertSessionHasNoErrors()->assertSessionHas('success');
-
-        $this->assertDatabaseHas('folios', ['room_id' => $room->id, 'checked_in_at' => '2026-10-13 11:00:00', 'expected_checkout_at' => '2026-10-13 14:00:00']);
-        $audit = DB::table('audit_logs')->where('event', 'folio.late_checkin_recorded')->first();
-        $this->assertSame($actor->id, (int) $audit->user_id);
-        $values = json_decode($audit->new_values, true);
-        $this->assertSame('Guest arrived while the computer was restarting.', $values['reason']);
-        $this->assertSame(now()->toIso8601String(), $values['recorded_at']);
-    }
-
-    public function test_late_entry_requires_an_arrival_and_reason_and_rejects_future_arrivals(): void
-    {
-        $actor = $this->actor();
-        $room = $this->room('available');
-        $payload = ['room_id' => $room->id, 'headcount' => 2, 'rate_tier' => '3h', 'record_earlier_arrival' => 1];
-        $this->actingAs($actor)->post(route('checkin.store'), $payload)->assertSessionHasErrors(['actual_checked_in_at', 'late_entry_reason']);
-        $this->post(route('checkin.store'), $payload + ['actual_checked_in_at' => now()->addHour()->toIso8601String(), 'late_entry_reason' => 'Late entry'])->assertSessionHasErrors('actual_checked_in_at');
-
-        $this->assertDatabaseCount('folios', 0);
-        $this->assertSame('available', $room->fresh()->status);
-    }
-
-    public function test_late_entry_cannot_overlap_a_previous_recorded_stay(): void
-    {
-        $actor = $this->actor();
-        $previous = $this->folio($actor);
-        $previous->update(['checked_in_at' => '2026-10-13 08:00:00', 'checked_out_at' => '2026-10-13 11:30:00', 'status' => 'checked_out']);
-        $previous->room->update(['status' => 'available']);
-
-        $this->actingAs($actor)->post(route('checkin.store'), [
-            'room_id' => $previous->room_id, 'headcount' => 2, 'rate_tier' => '3h', 'record_earlier_arrival' => 1,
-            'actual_checked_in_at' => '2026-10-13T11:00', 'late_entry_reason' => 'Late entry',
-        ])->assertSessionHasErrors('actual_checked_in_at');
-
-        $this->assertDatabaseCount('folios', 1);
-        $this->assertDatabaseCount('guests', 1);
-        $this->assertSame('available', $previous->room->fresh()->status);
-    }
-
     public function test_multi_item_addons_aggregate_duplicates_and_retries_create_one_order(): void
     {
         $actor = $this->actor();

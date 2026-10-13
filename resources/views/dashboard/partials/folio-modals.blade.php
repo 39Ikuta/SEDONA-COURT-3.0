@@ -37,7 +37,6 @@
                            class="form-control-hms font-mono text-[11px] font-bold text-slate-800 cursor-not-allowed select-none !text-center w-full" 
                            value="{{ now()->format('m/d/Y h:i:s A') }}"
                            title="Check-in date & time is locked to system live clock">
-                    <input type="hidden" name="checked_in_at" id="checkInDateTime" value="{{ now()->toIso8601String() }}">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">No. of Guest (Pax):</label>
@@ -45,29 +44,13 @@
                 </div>
             </div>
 
-            <div class="space-y-2">
-                <label class="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" name="record_earlier_arrival" id="recordEarlierArrival" value="1" onchange="toggleEarlierArrival()">
-                    Record earlier arrival
-                </label>
-                <div id="earlierArrivalFields" class="hidden space-y-2">
-                    <label class="block text-xs font-bold text-slate-700">Actual arrival time (hotel time)
-                        <input type="datetime-local" name="actual_checked_in_at" id="actualArrivalTime" disabled class="form-control-hms">
-                    </label>
-                    <label class="block text-xs font-bold text-slate-700">Reason for late entry
-                        <input type="text" name="late_entry_reason" id="lateEntryReason" disabled maxlength="500" class="form-control-hms">
-                    </label>
-                    <p class="text-xs text-slate-600">Checkout and alarms start from the actual arrival time. The maximum checkout grace period remains 15 minutes.</p>
-                </div>
-            </div>
-
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Stay Duration Tier:</label>
                 <select name="rate_tier" id="checkInTierSelect" onchange="updateCheckInRatePreview()" class="form-control-hms font-bold">
-                    <option value="3h">3 Hours Stay</option>
+                    <option value="3h" selected>3 Hours Stay</option>
                     <option value="4h">4 Hours Stay</option>
                     <option value="6h">6 Hours Stay</option>
-                    <option value="12h" selected>12 Hours Stay</option>
+                    <option value="12h">12 Hours Stay</option>
                     <option value="24h">24 Hours Stay</option>
                     <option value="promo">Midnight Promo (12 hours)</option>
                 </select>
@@ -75,7 +58,7 @@
 
             <div class="bg-slate-50 p-2.5 border border-slate-200 text-xs flex items-center justify-between">
                 <span class="text-slate-600 font-semibold">Standard Room Rate:</span>
-                <span class="font-mono font-bold text-sm text-[#421A2B]" id="checkInRatePreview">₱1,195.00</span>
+                <span class="font-mono font-bold text-sm text-[#421A2B]" id="checkInRatePreview">₱395.00</span>
             </div>
 
             <div class="flex items-center space-x-2 pt-1">
@@ -261,33 +244,8 @@
 
     let checkInClockInterval = null;
 
-    function hotelDateTimeValue() {
-        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: {{ \Illuminate\Support\Js::from(config('app.timezone')) }}, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
-        const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-        return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
-    }
-
-    function toggleEarlierArrival() {
-        const enabled = document.getElementById('recordEarlierArrival').checked;
-        document.getElementById('earlierArrivalFields').classList.toggle('hidden', !enabled);
-        document.getElementById('checkInLiveBadge').style.display = enabled ? 'none' : '';
-        document.getElementById('checkInTimeLabel').textContent = enabled ? 'Entry Date & Time:' : 'Check-in Date & Time:';
-        for (const id of ['actualArrivalTime', 'lateEntryReason']) {
-            const input = document.getElementById(id);
-            input.disabled = !enabled;
-            input.required = enabled;
-        }
-        if (enabled) {
-            const arrival = document.getElementById('actualArrivalTime');
-            arrival.max = hotelDateTimeValue();
-            if (!arrival.value) arrival.value = arrival.max;
-        }
-    }
-
     function syncCheckInLiveTime() {
         const now = new Date();
-        const dtInput = document.getElementById('checkInDateTime');
-        if (dtInput) dtInput.value = now.toISOString();
 
         const displayEl = document.getElementById('checkInDateTimeDisplay');
         if (displayEl) {
@@ -300,10 +258,7 @@
     function openCheckInModal(room) {
         document.getElementById('checkInRoomId').value = room.roomId;
         document.getElementById('checkInModalTitle').textContent = `Check In Room ${room.roomNumber} (${room.roomType})`;
-        document.getElementById('recordEarlierArrival').checked = false;
-        document.getElementById('actualArrivalTime').value = '';
-        document.getElementById('lateEntryReason').value = '';
-        toggleEarlierArrival();
+        document.getElementById('checkInTierSelect').value = '3h';
         
         syncCheckInLiveTime();
         if (checkInClockInterval) clearInterval(checkInClockInterval);

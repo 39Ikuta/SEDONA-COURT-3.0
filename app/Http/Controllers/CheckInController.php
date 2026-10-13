@@ -33,14 +33,9 @@ class CheckInController extends Controller
             'guest_contact' => 'nullable|string|max:50', 'headcount' => 'required|integer|min:1',
             'rate_tier' => 'required|in:3h,4h,6h,12h,24h,promo', 'is_senior' => 'nullable|boolean',
             'is_pwd' => 'nullable|boolean', 'discount_id_ref' => 'nullable|string|max:100',
-            'booking_id' => 'nullable|exists:bookings,id', 'checked_in_at' => 'nullable|date|before_or_equal:now',
-            'record_earlier_arrival' => 'nullable|boolean',
-            'actual_checked_in_at' => 'required_if:record_earlier_arrival,1|nullable|date|before_or_equal:now',
-            'late_entry_reason' => 'required_if:record_earlier_arrival,1|nullable|string|max:500',
+            'booking_id' => 'nullable|exists:bookings,id', 'checked_in_at' => 'prohibited',
+            'record_earlier_arrival' => 'prohibited', 'actual_checked_in_at' => 'prohibited', 'late_entry_reason' => 'prohibited',
         ]);
-        if ($request->boolean('record_earlier_arrival')) {
-            $data['checked_in_at'] = $data['actual_checked_in_at'];
-        }
         if (($request->boolean('is_senior') || $request->boolean('is_pwd')) && trim($data['discount_id_ref'] ?? '') === '') {
             throw ValidationException::withMessages(['discount_id_ref' => 'Record the statutory discount ID reference.']);
         }
@@ -61,12 +56,7 @@ class CheckInController extends Controller
                 'headcount' => $booking?->headcount ?? $data['headcount'],
                 'is_senior' => $request->boolean('is_senior'), 'is_pwd' => $request->boolean('is_pwd'),
             ]);
-            $checkedInAt = ! empty($data['checked_in_at']) ? Carbon::parse($data['checked_in_at'])->setTimezone(config('app.timezone')) : now();
-            if ($request->boolean('record_earlier_arrival') && $room->folios()
-                ->where('status', 'checked_out')->where('checked_in_at', '<=', now())
-                ->where('checked_out_at', '>', $checkedInAt)->exists()) {
-                throw ValidationException::withMessages(['actual_checked_in_at' => 'This arrival overlaps another recorded stay in the room. Review the arrival time.']);
-            }
+            $checkedInAt = now();
             $folio = Folio::create([
                 'room_id' => $room->id, 'guest_id' => $guest->id, 'user_id' => Auth::id(), 'booking_id' => $booking?->id,
                 'transaction_id' => Folio::generateTransactionId(), 'rate_tier' => $tier,
@@ -81,13 +71,6 @@ class CheckInController extends Controller
             $folio->recalculate();
             $room->update(['status' => 'occupied']);
             $booking?->update(['status' => 'checked_in']);
-            if ($request->boolean('record_earlier_arrival')) {
-                $this->audit->record($request, 'folio.late_checkin_recorded', $folio, [
-                    'checked_in_at' => $folio->checked_in_at->toIso8601String(),
-                    'expected_checkout_at' => $folio->expected_checkout_at->toIso8601String(),
-                    'recorded_at' => now()->toIso8601String(), 'reason' => $data['late_entry_reason'],
-                ]);
-            }
         });
 
         return redirect()->route('dashboard')->with('success', 'Guest checked in successfully.');
@@ -423,7 +406,9 @@ class CheckInController extends Controller
                     ? BillingService::cents($data[$restricted]) !== BillingService::cents($folio->room_charge)
                     : ! Carbon::parse($data[$restricted])->equalTo(strlen($data[$restricted]) <= 16 ? $folio->checked_in_at->copy()->startOfMinute() : $folio->checked_in_at);
                 if ($changed) {
-                    throw ValidationException::withMessages([$restricted => 'Use Approvals to request and execute a rate or time override.']);
+                    throw ValidationException::withMessages([$restricted => $restricted === 'checked_in_at'
+                        ? 'Only RA (admin) can correct check-in time in Check-in Time Corrections.'
+                        : 'Use Approvals to request and execute a rate override.']);
                 }
             }
         }
@@ -472,7 +457,7 @@ class CheckInController extends Controller
         $at = null;
         if ($preview->isActive() && $request) {
             $data = $request->validate($this->draftRules() + ['deposit' => 'nullable|numeric|min:0', 'checked_out_at' => 'nullable|date']);
-            foreach (['checked_in_at', 'room_charge', 'discount_type', 'discount_id_ref', 'payment_method', 'cash_tendered', 'gcash_amount', 'gcash_reference'] as $field) {
+            foreach (['room_charge', 'discount_type', 'discount_id_ref', 'payment_method', 'cash_tendered', 'gcash_amount', 'gcash_reference'] as $field) {
                 if (isset($data[$field])) {
                     $preview->{$field} = $data[$field];
                 }

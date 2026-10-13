@@ -11,7 +11,6 @@ use App\Models\PaymentEntry;
 use App\Models\PosItem;
 use App\Models\Shift;
 use App\Models\StatementLine;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -100,9 +99,6 @@ class ApprovalService
                 $this->days->assertWritable($this->days->date($source->checked_out_at));
             } elseif ($approval->kind === 'folio_override') {
                 $source->fill($data);
-                if (isset($data['checked_in_at'])) {
-                    $source->expected_checkout_at = $source->checked_in_at->copy()->addHours($source->room->getTierHours($source->rate_tier) + $source->extra_hours);
-                }
                 if (isset($data['discount_type'])) {
                     $source->senior_pwd_discount = in_array($data['discount_type'], ['SENIOR', 'PWD'], true);
                     $source->discount_override_amount = $data['discount_override_amount'] ?? null;
@@ -164,7 +160,7 @@ class ApprovalService
         $money = ['amount' => 'required|numeric|min:0.01|max:500000|decimal:0,2', 'payment_method' => 'required|in:cash,gcash', 'gcash_reference' => 'required_if:payment_method,gcash|nullable|string|max:50'];
         $rules = match ($kind) {
             'deposit_refund', 'pos_refund' => $money,
-            'folio_override' => ['room_charge' => 'sometimes|numeric|min:0|max:500000|decimal:0,2', 'checked_in_at' => 'sometimes|date|before_or_equal:now',
+            'folio_override' => ['room_charge' => 'sometimes|numeric|min:0|max:500000|decimal:0,2', 'checked_in_at' => 'prohibited',
                 'discount_type' => 'sometimes|in:DC,NONE,SENIOR,PWD', 'discount_id_ref' => 'sometimes|string|max:100',
                 'discount_override_amount' => 'sometimes|numeric|min:0|max:500000|decimal:0,2'],
             'stock_adjustment' => ['stock_quantity' => 'required|integer|min:0|max:100000', 'reason' => 'required|in:restock,adjustment,damage_spoilage,return'],
@@ -178,9 +174,6 @@ class ApprovalService
         $data = Validator::make($payload, $rules)->validate();
         if ($kind === 'folio_override' && $data === []) {
             throw ValidationException::withMessages(['payload' => 'Select at least one override.']);
-        }
-        if ($kind === 'folio_override' && isset($data['checked_in_at'])) {
-            $data['checked_in_at'] = Carbon::parse($data['checked_in_at'], config('app.timezone'))->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s');
         }
 
         return $data;
@@ -203,6 +196,9 @@ class ApprovalService
     /** @param array<string, mixed> $data */
     private function checkSource(string $kind, Model $source, array $data): void
     {
+        if ($kind === 'folio_override' && array_key_exists('checked_in_at', $data)) {
+            throw ValidationException::withMessages(['checked_in_at' => 'Only RA (admin) can correct check-in time in Check-in Time Corrections. Cancel this old request and use the admin panel.']);
+        }
         if ($source instanceof Folio) {
             if ($kind === 'deposit_refund') {
                 abort_if($source->isActive(), 409, 'Settle the bill before refunding.');

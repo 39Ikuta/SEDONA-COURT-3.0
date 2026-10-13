@@ -65,7 +65,7 @@ class DepositSlipAndBillingTest extends TestCase
         $responseWithDeposit->assertDontSee('₱250.00');
     }
 
-    public function test_billing_statement_reflects_overridden_check_in_time_and_room_charge()
+    public function test_billing_statement_uses_recorded_check_in_time_and_preview_room_charge()
     {
         $cashier = User::where('email', 'pau@sedonapms.com')->first();
         $room = Room::first();
@@ -88,9 +88,9 @@ class DepositSlipAndBillingTest extends TestCase
             'security_deposit' => 0.00,
         ]);
 
-        // Override check-in time to 10 hours ago and room_charge to 500
+        // A preview can change the draft rate but must retain the recorded arrival.
         $newCheckIn = now()->subHours(10)->startOfMinute();
-        $newExpectedOut = $newCheckIn->copy()->addHours(3);
+        $newExpectedOut = $cIn->copy()->addHours(3);
 
         $response = $this->actingAs($cashier)->get(route('folios.billing', [
             'folio' => $folio->id,
@@ -103,7 +103,8 @@ class DepositSlipAndBillingTest extends TestCase
         ]));
 
         $response->assertStatus(200);
-        $response->assertSee($newCheckIn->format('m/d/Y h:i A'));
+        $response->assertSee($cIn->format('m/d/Y h:i A'));
+        $response->assertDontSee($newCheckIn->format('m/d/Y h:i A'));
         $response->assertSee($newExpectedOut->format('m/d/Y h:i A'));
         $response->assertSee('Check-Out:');
         $response->assertSee('Actual Stay:');
@@ -114,19 +115,18 @@ class DepositSlipAndBillingTest extends TestCase
         $response->assertSee('Change Due to Guest:');
     }
 
-    public function test_checkin_store_records_exact_manila_time_and_supports_custom_checkin_time(): void
+    public function test_checkin_store_stamps_current_manila_time(): void
     {
         $cashier = User::where('email', 'pau@sedonapms.com')->first() ?? User::first();
         $room = Room::where('number', '5')->first();
 
-        // Check in with custom time
-        $customTime = now()->subMinutes(45)->format('Y-m-d\TH:i');
+        $this->travelTo('2026-10-13 12:00:00');
+        $customTime = now()->format('Y-m-d\TH:i');
         $resp = $this->actingAs($cashier)->post(route('checkin.store'), [
             'room_id' => $room->id,
             'guest_name' => 'Custom Time Guest',
             'headcount' => 2,
             'rate_tier' => '3h',
-            'checked_in_at' => $customTime,
         ]);
 
         $resp->assertRedirect(route('dashboard'));

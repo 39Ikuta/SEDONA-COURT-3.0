@@ -465,7 +465,7 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
         $response->assertSee('[Float + Cash Inflow - Cash Expenses]');
     }
 
-    public function test_cashier_can_edit_check_in_time_and_room_rate_through_approved_override(): void
+    public function test_cashier_settles_using_admin_corrected_time_and_approved_room_rate(): void
     {
         $guest = Guest::create([
             'name' => 'Editable Time Guest',
@@ -487,17 +487,22 @@ class CheckoutSecurityAndDepositLedgerTest extends TestCase
             'net_total' => 395.00,
         ]);
 
-        // Verify the checkout process page displays the editable inputs
+        // The checkout screen displays recorded time and rate.
         $response = $this->actingAs($this->cashier)->get(route('checkout.process', $folio->id));
         $response->assertOk();
         $response->assertSee('name="checked_in_at"', false);
         $response->assertSee('name="room_charge"', false);
 
-        // Cashier edits check-in time to ~4.8 hours ago (5 hour billing bucket) and adjusts base room rate to 450
+        // RA corrects declaration time; the base rate uses an independent approval.
         $newCheckIn = now()->subMinutes(290)->format('Y-m-d H:i:s');
         $this->actingAs($this->cashier)->post(route('shifts.open'), ['operation_key' => (string) Str::uuid(), 'opening_float' => 5000])->assertSessionHasNoErrors();
-        $this->post(route('approvals.store'), ['operation_key' => (string) Str::uuid(), 'kind' => 'folio_override', 'source_id' => $folio->id, 'payload' => ['room_charge' => 450, 'checked_in_at' => $newCheckIn], 'reason' => 'Correct recorded rate and arrival'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->post(route('approvals.store'), ['operation_key' => (string) Str::uuid(), 'kind' => 'folio_override', 'source_id' => $folio->id, 'payload' => ['room_charge' => 450], 'reason' => 'Correct recorded rate'])->assertRedirect()->assertSessionHasNoErrors();
         $this->executeLatestFinancialRequest();
+        $admin = User::where('email', 'admin@sedonapms.com')->firstOrFail();
+        $this->actingAs($admin)->post('/admin/check-in-times/'.$folio->id, [
+            'operation_key' => (string) Str::uuid(), 'expected_checked_in_at' => $folio->fresh()->checked_in_at->toIso8601String(),
+            'checked_in_at' => $newCheckIn, 'reason' => 'RA declared the guest before the cashier entered the stay.',
+        ])->assertSessionHasNoErrors();
         $submitResponse = $this->actingAs($this->cashier)->post(route('checkout.submit', $folio->id), ['operation_key' => (string) Str::uuid(),
             'payment_method' => 'cash',
             'cash_tendered' => 1000.00,
