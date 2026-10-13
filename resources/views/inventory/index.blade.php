@@ -18,6 +18,8 @@
 
 @section('content')
 <div class="px-3 pt-2 space-y-4 max-w-7xl mx-auto">
+    @if(session('success'))<p role="status" class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{{ session('success') }}</p>@endif
+    @if($errors->any())<div role="alert" class="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><p class="font-semibold">Stock was not saved.</p><ul class="list-disc pl-5">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
     <!-- KPI Summary Cards -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -236,6 +238,7 @@
             <div>
                 <label class="block text-[11px] font-bold text-slate-700 mb-1">New Exact Physical Count: <span class="text-rose-600">*</span></label>
                 <input type="number" name="stock_quantity" id="stockModalQty" required min="0" max="100000" class="form-control-hms font-mono font-bold text-center text-base">
+                <p class="mt-1 text-slate-500">Enter the final total on hand. For example, 50 on hand plus 10 delivered means enter 60. Saving updates stock immediately without approval.</p>
             </div>
 
             <div>

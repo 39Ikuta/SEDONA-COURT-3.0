@@ -23,7 +23,7 @@
                     <p class="text-sm mt-1">{{ $approval->sourceLabel() }}</p>
                     <p class="text-xs text-slate-500 mt-1">Requested by {{ $approval->requester?->name ?? 'Staff #'.$approval->requested_by }} · {{ $approval->created_at->format('m/d/Y h:i A') }} · {{ $approval->created_at->diffForHumans() }}</p>
                 </div>
-                <span @class(['px-3 py-1 rounded-full text-xs font-semibold', 'bg-amber-50 text-amber-800' => $approval->status === 'pending', 'bg-emerald-50 text-emerald-800' => $approval->status === 'approved', 'bg-sky-50 text-sky-800' => $approval->status === 'executed', 'bg-slate-100 text-slate-600' => in_array($approval->status, ['rejected', 'cancelled'])])>{{ $statusLabels[$approval->status] ?? ucfirst($approval->status) }}</span>
+                <span @class(['px-3 py-1 rounded-full text-xs font-semibold', 'bg-amber-50 text-amber-800' => $approval->status === 'pending', 'bg-emerald-50 text-emerald-800' => $approval->status === 'approved', 'bg-sky-50 text-sky-800' => $approval->status === 'executed', 'bg-slate-100 text-slate-600' => in_array($approval->status, ['rejected', 'cancelled'])])>{{ $approval->isStockChange() && $approval->status === 'pending' ? 'Apply directly' : ($statusLabels[$approval->status] ?? ucfirst($approval->status)) }}</span>
             </div>
             <div class="grid gap-4 lg:grid-cols-3">
                 <div class="lg:col-span-2 space-y-3">
@@ -43,6 +43,12 @@
                         <p class="text-sm text-slate-600">This older request cannot be applied. Cancel it and ask RA to correct the time in Check-in Time Corrections.</p>
                     @elseif($approval->kind === 'handover_variance' && !config('sedona.shift_handover_enabled'))
                         <p class="text-sm text-slate-600">Handover is disabled. This request remains as history and does not block day closing.</p>
+                    @elseif($approval->isStockChange() && in_array($approval->status, ['pending', 'approved']) && ($approval->requested_by === auth()->id() || auth()->user()->can('review-financial')))
+                        <form method="POST" action="{{ route('approvals.execute', $approval) }}" class="grid gap-2">
+                            @csrf<input name="operation_key" type="hidden" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+                            <button class="btn-occupied">Apply stock update now</button>
+                            <p class="text-xs text-slate-500">No approval is required. New stock adjustments and recounts are saved immediately from Stock.</p>
+                        </form>
                     @elseif($approval->status === 'pending' && auth()->user()->can('review-financial') && ($approval->requested_by !== auth()->id() || $approval->permitsOwnerSelfReview(auth()->user())))
                         <form method="POST" action="{{ route('approvals.review', $approval) }}" class="grid gap-2">
                             @csrf

@@ -59,6 +59,11 @@ class ApprovalRequest extends Model
             && $this->requested_by === $actor->id && $actor->hasRole('owner');
     }
 
+    public function isStockChange(): bool
+    {
+        return in_array($this->kind, ['stock_adjustment', 'stock_recount'], true);
+    }
+
     public function sourceLabel(): string
     {
         $source = $this->source;

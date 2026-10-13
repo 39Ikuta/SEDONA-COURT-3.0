@@ -384,7 +384,6 @@ class PosInventoryIntegrityTest extends TestCase
             'stock_quantity' => 15, 'reason' => 'restock',
         ])->assertRedirect()->assertSessionHas('success');
 
-        $this->executeLatestFinancialRequest();
         $this->assertSame(15, $item->fresh()->stock_quantity);
         $this->assertDatabaseHas('inventory_events', ['pos_item_id' => $item->id, 'event_type' => 'restock', 'quantity_change' => 5]);
     }
@@ -425,9 +424,7 @@ class PosInventoryIntegrityTest extends TestCase
         try {
             $this->actingAs($this->cashier())->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(),
                 'counts' => [$first->id => 3, $second->id => 4],
-            ])->assertRedirect()->assertSessionHasNoErrors();
-            $approval = $this->approveLatestFinancialRequest();
-            $this->post(route('approvals.execute', $approval), ['operation_key' => (string) Str::uuid()])->assertStatus(500);
+            ])->assertServerError();
         } finally {
             Event::forget('eloquent.creating: '.InventoryEvent::class);
         }
@@ -435,6 +432,7 @@ class PosInventoryIntegrityTest extends TestCase
         $this->assertSame(10, $first->fresh()->stock_quantity);
         $this->assertSame(10, $second->fresh()->stock_quantity);
         $this->assertDatabaseCount('inventory_events', 0);
+        $this->assertDatabaseCount('approval_requests', 0);
     }
 
     public function test_recount_updates_every_valid_count_and_records_balances(): void
@@ -446,7 +444,6 @@ class PosInventoryIntegrityTest extends TestCase
             'counts' => [$second->id => 4, $first->id => 3],
         ])->assertSessionHas('success');
 
-        $this->executeLatestFinancialRequest();
         $this->assertSame(3, $first->fresh()->stock_quantity);
         $this->assertSame(4, $second->fresh()->stock_quantity);
         $this->assertDatabaseCount('inventory_events', 2);

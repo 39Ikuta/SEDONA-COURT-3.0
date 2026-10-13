@@ -79,6 +79,9 @@ class ApprovalController extends Controller
             return ['approval_id' => $approval->id, 'status' => $approval->status];
         });
 
+        if (($result['status'] ?? 'pending') === 'executed') {
+            return redirect()->route('approvals.index', ['status' => 'history'])->with('success', 'Stock update applied immediately. No approval is required.');
+        }
         if (($result['status'] ?? 'pending') === 'approved') {
             return redirect()->route('approvals.index', ['status' => 'approved'])->with('success', 'Request #'.$result['approval_id'].' approved by the owner. Apply the approved action to update the guest bill.');
         }

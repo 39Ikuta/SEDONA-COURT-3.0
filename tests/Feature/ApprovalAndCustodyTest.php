@@ -57,28 +57,31 @@ class ApprovalAndCustodyTest extends TestCase
         $this->assertSame(80.0, app(FinancialSummaryService::class)->shift($this->shift)['expectedCash']);
     }
 
-    public function test_stock_request_does_not_apply_until_review_and_rejects_stale_counts(): void
+    public function test_stock_changes_apply_immediately_and_retries_do_not_reset_later_counts(): void
     {
         $item = PosItem::where('is_tracked', true)->firstOrFail();
         $before = $item->stock_quantity;
-        $this->post(route('inventory.update-stock', $item), $this->key(['stock_quantity' => $before + 10, 'reason' => 'restock']))->assertRedirect()->assertSessionHasNoErrors();
+        $data = $this->key(['stock_quantity' => $before + 10, 'reason' => 'restock']);
+        $this->post(route('inventory.update-stock', $item), $data)->assertRedirect(route('inventory.index'))->assertSessionHasNoErrors();
         $approval = ApprovalRequest::latest('id')->firstOrFail();
-        $this->assertSame($before, $item->fresh()->stock_quantity);
-        $this->approve($approval);
-        $item->update(['stock_quantity' => $before - 1]);
+        $this->assertSame($before + 10, $item->fresh()->stock_quantity);
+        $this->assertSame('executed', $approval->status);
+        $this->assertNull($approval->reviewed_by);
+        $item->update(['stock_quantity' => $before + 9]);
+        $this->post(route('inventory.update-stock', $item), $data)->assertSessionHasNoErrors();
         $this->post(route('approvals.execute', $approval), $this->key())->assertSessionHasErrors('approval');
-        $this->assertSame($before - 1, $item->fresh()->stock_quantity);
-        $this->assertDatabaseCount('inventory_events', 0);
+        $this->assertSame($before + 9, $item->fresh()->stock_quantity);
+        $this->assertDatabaseCount('inventory_events', 1);
     }
 
-    public function test_approved_stock_recount_is_atomic_and_has_audited_result(): void
+    public function test_immediate_stock_recount_is_atomic_and_has_audited_result(): void
     {
         $items = PosItem::where('is_tracked', true)->take(2)->get();
         $counts = [$items[0]->id => 17, $items[1]->id => 23];
         $this->post(route('inventory.recount'), $this->key(['counts' => $counts]))->assertRedirect()->assertSessionHasNoErrors();
         $approval = ApprovalRequest::latest('id')->firstOrFail();
-        $this->approve($approval);
-        $this->post(route('approvals.execute', $approval), $this->key())->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('executed', $approval->status);
+        $this->assertNull($approval->reviewed_by);
         $this->assertSame(17, $items[0]->fresh()->stock_quantity);
         $this->assertSame(23, $items[1]->fresh()->stock_quantity);
         $this->assertDatabaseHas('audit_logs', ['event' => 'approval.executed', 'auditable_id' => $approval->id]);
@@ -275,7 +278,8 @@ class ApprovalAndCustodyTest extends TestCase
     public function test_stale_approval_can_be_cancelled_but_paid_expense_review_cannot_be_hidden(): void
     {
         $item = PosItem::where('is_tracked', true)->firstOrFail();
-        $request = $this->requestApproval('stock_adjustment', $item->id, ['stock_quantity' => 20, 'reason' => 'restock']);
+        $request = ApprovalRequest::factory()->create(['source_id' => $item->id, 'requested_by' => $this->cashier->id,
+            'source_hash' => hash('sha256', json_encode($item->only(['stock_quantity', 'retired_at'])))]);
         $this->approve($request);
         $this->post(route('approvals.cancel', $request), ['reason' => 'Delivery corrected'])->assertRedirect()->assertSessionHasNoErrors();
         $this->post(route('approvals.execute', $request), $this->key())->assertSessionHasErrors('approval');

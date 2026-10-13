@@ -38,7 +38,7 @@ class ApprovalQueueTest extends TestCase
             ->assertViewHas('statusCounts', ['pending' => 2, 'approved' => 1, 'history' => 1, 'all' => 4])
             ->assertViewHas('requests', fn ($requests): bool => $requests->modelKeys() === [$older->id, $newer->id])
             ->assertSee($requester->name)->assertSee($older->source->name)
-            ->assertSeeInOrder(['Property review queue', 'Approve request', 'Create a new request']);
+            ->assertSeeInOrder(['Property review queue', 'Apply stock update now', 'Create a new request']);
     }
 
     public function test_status_filters_and_pagination_keep_review_and_history_separate(): void
@@ -51,7 +51,7 @@ class ApprovalQueueTest extends TestCase
 
         $this->actingAs($reviewer)->get(route('approvals.index', ['status' => 'approved']))->assertOk()
             ->assertViewHas('requests', fn ($requests): bool => $requests->total() === 21 && $requests->count() === 20)
-            ->assertSee('status=approved&amp;page=2', false)->assertSee('Apply approved action');
+            ->assertSee('status=approved&amp;page=2', false)->assertSee('Apply stock update now');
         $this->get(route('approvals.index', ['status' => 'history']))->assertOk()
             ->assertViewHas('requests', fn ($requests): bool => $requests->modelKeys() === [$cancelled->id, $rejected->id])
             ->assertDontSee('Apply approved action')->assertDontSee('Approve request');
@@ -79,7 +79,7 @@ class ApprovalQueueTest extends TestCase
         $approval = ApprovalRequest::factory()->create(['requested_by' => $reviewer->id]);
 
         $this->actingAs($reviewer)->get(route('approvals.index'))->assertOk()->assertDontSee('Approve request')
-            ->assertSee('A different admin or owner must review this request.');
+            ->assertSee('No approval is required.');
         $this->post(route('approvals.review', $approval), ['decision' => 'approve', 'note' => 'Verified'])
             ->assertForbidden();
         $this->assertSame('pending', $approval->fresh()->status);

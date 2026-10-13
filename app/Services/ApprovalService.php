@@ -52,7 +52,9 @@ class ApprovalService
             }
             $approval = ApprovalRequest::create(['kind' => $kind, 'source_type' => $source::class, 'source_id' => $sourceId, 'requested_by' => $request->user()->id, 'payload' => $data, 'source_hash' => $this->fingerprint($source, $kind, $data), 'status' => 'pending', 'reason' => $reason, 'evidence_reference' => $evidence]);
             $this->audit->record($request, 'approval.requested', $approval, ['kind' => $kind, 'source_id' => $sourceId, 'payload' => $data, 'reason' => $reason, 'evidence_reference' => $evidence]);
-            if ($approval->permitsOwnerSelfReview($request->user()) && $request->user()->can('review-financial')) {
+            if ($approval->isStockChange()) {
+                $this->applyStockChange($request, $approval);
+            } elseif ($approval->permitsOwnerSelfReview($request->user()) && $request->user()->can('review-financial')) {
                 $approval->update(['status' => 'approved', 'reviewed_by' => $request->user()->id, 'reviewed_at' => now(), 'review_note' => 'Automatically approved by the owner for a room rate / custom discount change.']);
                 $this->audit->record($request, 'approval.approved', $approval, ['automatic' => true, 'note' => $approval->review_note]);
             }
@@ -86,10 +88,14 @@ class ApprovalService
     public function execute(Request $request, ApprovalRequest $approval): array
     {
         abort_unless($approval->requested_by === $request->user()->id || $request->user()->can('review-financial'), 403);
+        if ($approval->isStockChange()) {
+            abort_unless($request->user()->hasAnyRole(['cashier', 'front_desk', 'admin', 'owner', 'manager']), 403);
+        }
 
         return $this->posting->execute($request, 'approval.execute', $approval->id, ['approval_id' => $approval->id, 'shift_override_reason' => $request->input('shift_override_reason')], function () use ($request, $approval): array {
             $approval = ApprovalRequest::whereKey($approval->id)->lockForUpdate()->firstOrFail();
-            if ($approval->status !== 'approved' || ($approval->reviewed_by === $approval->requested_by && ! $approval->permitsOwnerSelfReview($approval->reviewer))) {
+            $canApplyStock = $approval->isStockChange() && in_array($approval->status, ['pending', 'approved'], true);
+            if (! $canApplyStock && ($approval->status !== 'approved' || ($approval->reviewed_by === $approval->requested_by && ! $approval->permitsOwnerSelfReview($approval->reviewer)))) {
                 throw ValidationException::withMessages(['approval' => 'Independent approval is required and can be executed only once.']);
             }
             $source = $this->source($approval->kind, $approval->source_id);
@@ -119,10 +125,10 @@ class ApprovalService
             } elseif ($approval->kind === 'pos_refund') {
                 $amount = BillingService::cents($data['amount']);
                 $this->posting->post($request, $source->order, 'pos_refund', $data['payment_method'] === 'cash' ? -$amount : 0, $data['payment_method'] === 'gcash' ? -$amount : 0, $data['gcash_reference'] ?? null, $approval->id, $source->id);
-            } elseif ($approval->kind === 'stock_adjustment') {
-                $this->inventory->setStockCount($source->id, $data['stock_quantity'], $data['reason'], $approval->reason, $request->user()->id);
-            } elseif ($approval->kind === 'stock_recount') {
-                $this->inventory->batchRecount($data['counts'], $request->user()->id, $approval->reason);
+            } elseif ($approval->isStockChange()) {
+                $this->applyStockChange($request, $approval);
+
+                return ['approval_id' => $approval->id];
             } elseif ($approval->kind === 'expense_reversal') {
                 $shift = $source->payment_source === 'cash_drawer' ? $this->custody->requireOperatingShift($request->user(), $request->input('shift_override_reason'), 'expense.reversal') : null;
                 Expense::create(['user_id' => $request->user()->id, 'shift_id' => $shift?->id, 'voucher_number' => Expense::generateVoucherNumber(), 'expense_date' => $this->days->date(), 'category' => $source->category, 'description' => 'Returned expense '.$source->voucher_number, 'amount' => -BillingService::cents($source->amount) / 100, 'payment_source' => $source->payment_source, 'receipt_reference' => $approval->evidence_reference, 'status' => 'approved', 'reversal_of_id' => $source->id, 'approval_request_id' => $approval->id, 'notes' => $approval->reason]);
@@ -156,6 +162,19 @@ class ApprovalService
 
             return ['approval_id' => $approval->id];
         });
+    }
+
+    private function applyStockChange(Request $request, ApprovalRequest $approval): void
+    {
+        $this->days->assertWritable();
+        $data = $approval->payload;
+        if ($approval->kind === 'stock_adjustment') {
+            $this->inventory->setStockCount($approval->source_id, (int) $data['stock_quantity'], $data['reason'], $approval->reason, $request->user()->id);
+        } else {
+            $this->inventory->batchRecount($data['counts'], $request->user()->id, $approval->reason);
+        }
+        $approval->update(['status' => 'executed', 'executed_by' => $request->user()->id, 'executed_at' => now()]);
+        $this->audit->record($request, 'approval.executed', $approval, ['kind' => $approval->kind, 'source_id' => $approval->source_id, 'payload' => $data, 'approval_required' => false]);
     }
 
     /** @param array<string, mixed> $payload @return array<string, mixed> */

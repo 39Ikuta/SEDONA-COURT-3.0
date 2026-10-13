@@ -126,7 +126,6 @@ class DiscountAndInventoryRbacTest extends TestCase
         ]);
 
         $recountResp->assertRedirect();
-        $this->executeLatestFinancialRequest();
         $this->assertEquals(25, $item->fresh()->stock_quantity);
 
         // Export movement CSV

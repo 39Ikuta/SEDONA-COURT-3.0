@@ -81,7 +81,7 @@ class InventoryController extends Controller
             return ['approval_id' => $approval->id];
         });
 
-        return redirect()->route('approvals.index')->with('success', 'Stock change awaits independent review.');
+        return redirect()->route('inventory.index')->with('success', 'Stock count saved immediately. No approval is required.');
     }
 
     /**
@@ -105,7 +105,7 @@ class InventoryController extends Controller
             return ['approval_id' => $approval->id];
         });
 
-        return redirect()->route('approvals.index')->with('success', 'Recount awaits independent review.');
+        return redirect()->route('inventory.index')->with('success', 'Stock recount saved immediately. No approval is required.');
     }
 
     /**
