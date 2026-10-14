@@ -4,12 +4,39 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
+use DOMDocument;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class CashierAccountAccessTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_sidebar_only_offers_pages_the_account_can_access(): void
+    {
+        $this->withoutVite();
+        $cashier = User::factory()->create()->assignRole(Role::findOrCreate('cashier', 'web'));
+        foreach (['view_dashboard', 'manage_folios'] as $permission) {
+            $cashier->givePermissionTo(Permission::findOrCreate($permission, 'web'));
+        }
+
+        $response = $this->actingAs($cashier)->get(route('dashboard'))->assertOk();
+
+        $document = new DOMDocument;
+        @$document->loadHTML($response->getContent());
+        $links = (new DOMXPath($document))->query('//nav[@aria-label="Primary"]//a/@href');
+        $urls = array_map(fn ($link): string => $link->nodeValue, iterator_to_array($links));
+        foreach (['dashboard', 'checkins.index', 'bookings.index', 'inventory.index', 'approvals.index'] as $page) {
+            $this->assertContains(route($page), $urls);
+        }
+        foreach (['pos.index', 'shifts.index', 'transactions.index'] as $page) {
+            $this->assertNotContains(route($page), $urls);
+            $this->get(route($page))->assertForbidden();
+        }
+    }
 
     public function test_every_configured_cashier_can_open_operational_pages_but_cannot_open_admin_pages(): void
     {
@@ -20,7 +47,7 @@ class CashierAccountAccessTest extends TestCase
         $this->assertNotEmpty($cashiers);
         foreach ($cashiers as $cashier) {
             $this->actingAs($cashier);
-            foreach (['dashboard', 'pos.index', 'bookings.index', 'inventory.index', 'shifts.index', 'transactions.index', 'transactions.audit', 'approvals.index'] as $page) {
+            foreach (['dashboard', 'checkins.index', 'pos.index', 'bookings.index', 'inventory.index', 'shifts.index', 'transactions.index', 'transactions.audit', 'approvals.index'] as $page) {
                 $this->get(route($page))->assertOk();
             }
             foreach (['admin.users.index', 'admin.pricing.index', 'admin.discounts.index', 'admin.check-in-times.index', 'admin.login-history.index',

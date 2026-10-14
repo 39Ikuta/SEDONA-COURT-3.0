@@ -16,6 +16,50 @@ class RoomPricingTest extends TestCase
 {
     use RefreshDatabase;
 
+    #[TestWith(['base_rate_3h'])]
+    #[TestWith(['base_rate_4h'])]
+    #[TestWith(['base_rate_6h'])]
+    #[TestWith(['base_rate_12h'])]
+    #[TestWith(['base_rate_24h'])]
+    #[TestWith(['base_rate_promo'])]
+    public function test_room_pricing_rejects_extreme_amounts_without_changing_rates(string $field): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $admin = User::where('email', 'admin@sedonapms.com')->firstOrFail();
+        $room = Room::where('number', '6')->firstOrFail();
+        $rates = $room->only(['base_rate_3h', 'base_rate_4h', 'base_rate_6h', 'base_rate_12h', 'base_rate_24h', 'base_rate_promo']);
+
+        $this->actingAs($admin)->postJson(route('admin.pricing.update'), array_replace($rates, ['room_id' => $room->id, $field => '1e309']))
+            ->assertUnprocessable()->assertJsonValidationErrors($field);
+
+        $this->assertSame($rates, $room->fresh()->only(array_keys($rates)));
+    }
+
+    public function test_catalog_pricing_rejects_extreme_amounts_without_changing_the_item(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $admin = User::where('email', 'admin@sedonapms.com')->firstOrFail();
+        $item = PosItem::firstOrFail();
+        $before = $item->price;
+
+        $this->actingAs($admin)->postJson(route('admin.pricing.update'), ['pos_item_id' => $item->id, 'price' => '1e309', 'is_available' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('price');
+
+        $this->assertSame($before, $item->fresh()->price);
+    }
+
+    public function test_catalog_creation_rejects_extreme_amounts_without_creating_an_item(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $admin = User::where('email', 'admin@sedonapms.com')->firstOrFail();
+        $before = PosItem::count();
+
+        $this->actingAs($admin)->postJson(route('admin.pricing.items.store'), ['name' => 'Extreme-price QA item', 'category' => 'Services', 'price' => '1e309', 'is_available' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('price');
+
+        $this->assertDatabaseCount('pos_items', $before);
+    }
+
     /** @param array{int, int, int, int, int, int} $rates */
     #[TestWith(['6', [395, 525, 785, 1195, 2100, 995]])]
     #[TestWith(['13', [495, 625, 885, 1295, 2300, 1055]])]

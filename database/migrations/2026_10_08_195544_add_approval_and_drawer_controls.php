@@ -82,11 +82,16 @@ return new class extends Migration
             $table->dropColumn('business_date');
         });
         Schema::table('expenses', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('reversal_of_id');
+            $table->dropForeign(['reversal_of_id']);
+            $table->dropUnique(['reversal_of_id']);
+            $table->dropColumn('reversal_of_id');
             $table->dropConstrainedForeignId('approval_request_id');
         });
         Schema::table('shifts', function (Blueprint $table) {
-            foreach (['incoming_user_id', 'accepted_by', 'handover_from_id'] as $column) {
+            $table->dropForeign(['handover_from_id']);
+            $table->dropUnique(['handover_from_id']);
+            $table->dropColumn('handover_from_id');
+            foreach (['incoming_user_id', 'accepted_by'] as $column) {
                 $table->dropConstrainedForeignId($column);
             }
             $table->dropColumn(['handover_status', 'accepted_cash', 'handover_variance', 'accepted_at']);

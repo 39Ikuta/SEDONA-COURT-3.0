@@ -28,10 +28,23 @@
         if ($operator?->can('manage_folios')) {
             array_splice($navigation, 1, 0, [['label' => 'Daily SCTI Register', 'route' => 'checkins.index', 'patterns' => ['checkins.*'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5']]);
         }
-        if ($operator?->canAny(['record_payments', 'post_pos_sales'])) {
+        if ($operator?->canAny(['manage_shifts', 'manage_folios', 'post_pos_sales'])) {
             $navigation[] = ['label' => 'Approvals & Tasks', 'route' => 'approvals.index', 'patterns' => ['approvals.*'], 'icon' => 'M5 3h14v18H5z M8 8l2 2 4-4'];
+        }
+        if ($operator?->canAny(['record_payments', 'post_pos_sales'])) {
             $navigation[] = ['label' => 'Transactions & Audit', 'route' => 'transactions.index', 'patterns' => ['transactions.*'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5'];
         }
+        $workspaceAccess = [
+            'dashboard' => $operator?->canAny(['view_dashboard', 'view_kds', 'view_kiosk']),
+            'bookings.index' => $operator?->can('manage_folios'),
+            'checkins.index' => $operator?->can('manage_folios'),
+            'pos.index' => $operator?->can('post_pos_sales'),
+            'shifts.index' => $operator?->can('manage_shifts'),
+            'inventory.index' => $operator?->hasAnyRole(['cashier', 'front_desk', 'admin', 'owner', 'manager']),
+            'approvals.index' => $operator?->canAny(['manage_shifts', 'manage_folios', 'post_pos_sales']),
+            'transactions.index' => $operator?->canAny(['record_payments', 'post_pos_sales']),
+        ];
+        $navigation = array_values(array_filter($navigation, fn (array $link): bool => $workspaceAccess[$link['route']] ?? false));
         $lobbyNavigation = [
             ['label' => 'Lobby Kiosk Display', 'route' => 'kiosk.view', 'patterns' => ['kiosk.*'], 'new_tab' => true, 'icon' => 'M3 4h18v13H3z M8 21h8 M12 17v4'],
         ];
@@ -166,7 +179,7 @@
         </div>
             <!-- Flash Messages -->
     <div class="app-feedback">
-        @if(request()->routeIs('dashboard') && $errors->any())
+        @if($errors->any() && !request()->routeIs('inventory.index', 'folios.orders.index', 'approvals.index', 'admin.discounts.index', 'admin.check-in-times.index', 'admin.pricing.index', 'checkout.process'))
             <div role="alert" class="p-3 mb-3 bg-rose-50 border border-rose-500 text-rose-900 text-sm rounded">
                 <p class="font-bold">The change could not be saved.</p>
                 <ul class="list-disc pl-5 mt-1">

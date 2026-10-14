@@ -32,6 +32,27 @@ class PosInventoryIntegrityTest extends TestCase
         $this->travelTo(now()->setTime(12, 0));
     }
 
+    #[TestWith([false, 'delivered', 0])]
+    #[TestWith([true, 'new', 1])]
+    public function test_pos_preparation_queue_matches_whether_items_require_the_kitchen(bool $kitchenItem, string $status, int $pending): void
+    {
+        $cashier = $this->cashier();
+        $cashier->givePermissionTo(Permission::findOrCreate('view_kds', 'web'));
+        $item = $this->item(['kitchen_hours_only' => $kitchenItem]);
+
+        $this->actingAs($cashier)->post(route('pos.order.store'), ['operation_key' => (string) Str::uuid(),
+            'order_type' => 'walkin_pos', 'payment_method' => 'cash', 'cash_tendered' => 60,
+            'items' => [['id' => $item->id, 'qty' => 1]],
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $order = Order::sole();
+        $this->assertSame($status, $order->status);
+        $this->assertSame($status === 'delivered', $order->dispatched_at !== null);
+        $this->assertSame(9, $item->fresh()->stock_quantity);
+        $this->withoutVite();
+        $this->get(route('kitchen.view'))->assertOk()->assertViewHas('pendingOrders', fn ($orders): bool => $orders->count() === $pending);
+    }
+
     public function test_duplicate_lines_are_aggregated_and_use_authoritative_prices(): void
     {
         $cashier = $this->cashier();

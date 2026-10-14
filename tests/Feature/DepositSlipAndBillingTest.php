@@ -65,7 +65,7 @@ class DepositSlipAndBillingTest extends TestCase
         $responseWithDeposit->assertDontSee('₱250.00');
     }
 
-    public function test_billing_statement_uses_recorded_check_in_time_and_preview_room_charge()
+    public function test_billing_statement_uses_recorded_check_in_time_and_approved_room_charge(): void
     {
         $cashier = User::where('email', 'pau@sedonapms.com')->first();
         $room = Room::first();
@@ -88,7 +88,7 @@ class DepositSlipAndBillingTest extends TestCase
             'security_deposit' => 0.00,
         ]);
 
-        // A preview can change the draft rate but must retain the recorded arrival.
+        $folio->update(['room_charge' => 500]);
         $newCheckIn = now()->subHours(10)->startOfMinute();
         $newExpectedOut = $cIn->copy()->addHours(3);
 

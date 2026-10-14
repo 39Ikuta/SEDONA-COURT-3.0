@@ -54,7 +54,7 @@ class DashboardController extends Controller
         $allRooms = Room::all();
         $totalRooms = $allRooms->where('is_staff_quarters', false)->count();
         $availableRooms = $allRooms->where('status', 'available')->where('is_staff_quarters', false)->count();
-        $occupiedRooms = $allRooms->where('status', 'occupied')->count();
+        $occupiedRooms = $allRooms->where('is_staff_quarters', false)->where('status', 'occupied')->count();
         $maintenanceRooms = $allRooms->where('status', 'maintenance')->count();
         $occupancyRate = $totalRooms > 0 ? round(($occupiedRooms / $totalRooms) * 100, 1) : 0;
 

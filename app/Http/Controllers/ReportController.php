@@ -19,7 +19,8 @@ class ReportController extends Controller
         $todayRevenue = $today['netRevenue'];
         $weekRevenue = $week['netRevenue'];
         $totalDiscountsGiven = $week['discounts'];
-        $totalFoliosThisWeek = Folio::whereBetween('checked_in_at', [$weekStart, now()])->count();
+        $totalFoliosThisWeek = Folio::where('status', '!=', 'voided')->whereHas('room', fn ($query) => $query->where('is_staff_quarters', false))
+            ->whereBetween('checked_in_at', [$weekStart, now()])->count();
         $roomRevenueWeek = $week['roomRevenue'];
         $overtimeRevenueWeek = $week['overtimeRevenue'] + $week['surchargesRevenue'];
         $posRevenueWeek = $week['diningRevenue'];
@@ -33,7 +34,8 @@ class ReportController extends Controller
         $recentFolios = Folio::with(['room', 'guest', 'cashier'])->latest('checked_in_at')->paginate(15);
         $pastShifts = $custody->visibleShifts($request->user())->whereNotNull('closed_at')->with(['openedBy', 'closedBy'])->latest('created_at')->take(10)->get();
         $rooms = Room::withCount(['folios' => function ($query) use ($weekStart): void {
-            $query->whereBetween('checked_in_at', [$weekStart, now()]);
+            $query->where('status', '!=', 'voided')->whereHas('room', fn ($rooms) => $rooms->where('is_staff_quarters', false))
+                ->whereBetween('checked_in_at', [$weekStart, now()]);
         }])->orderByNumber()->get();
 
         return view('reports.index', compact('todayRevenue', 'weekRevenue', 'totalDiscountsGiven',

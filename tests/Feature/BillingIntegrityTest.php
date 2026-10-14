@@ -13,7 +13,9 @@ use App\Models\User;
 use App\Services\BillingService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\MessageBag;
 use Illuminate\Support\Str;
+use Illuminate\Support\ViewErrorBag;
 use PHPUnit\Framework\Attributes\TestWith;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -47,6 +49,62 @@ class BillingIntegrityTest extends TestCase
         $guest = Guest::create(['name' => 'Billing Guest', 'contact' => uniqid(), 'headcount' => 1]);
 
         return Folio::create(array_replace(['room_id' => $this->room->id, 'guest_id' => $guest->id, 'user_id' => $this->cashier->id, 'transaction_id' => Folio::generateTransactionId(), 'rate_tier' => '3h', 'checked_in_at' => now()->subHour(), 'expected_checkout_at' => now()->addHours(2), 'status' => 'active', 'room_charge' => 395, 'discount_type' => 'NONE', 'payment_method' => 'cash', 'pos_items' => []], $attributes));
+    }
+
+    public function test_workspace_layout_displays_validation_messages_for_pages_without_a_local_alert(): void
+    {
+        $this->withoutVite();
+        $errors = (new ViewErrorBag)->put('default', new MessageBag(['room_charge' => 'Use Approvals to request and execute a rate override.']));
+
+        $this->view('layouts.app', ['errors' => $errors])
+            ->assertSee('Use Approvals to request and execute a rate override.');
+    }
+
+    #[TestWith(['cash_tendered'])]
+    #[TestWith(['gcash_amount'])]
+    public function test_draft_rejects_extreme_amounts_without_saving_invalid_payment_values(string $field): void
+    {
+        $folio = $this->folio();
+
+        $this->postJson(route('folios.deposit', $folio), [$field => '1e309'])->assertUnprocessable()->assertJsonValidationErrors($field);
+
+        $this->assertSame('0.00', $folio->fresh()->{$field});
+    }
+
+    #[TestWith(['folios.billing'])]
+    #[TestWith(['folios.receipt'])]
+    public function test_active_print_previews_cannot_show_an_unapproved_room_rate(string $route): void
+    {
+        $folio = $this->folio();
+
+        $this->get(route($route, ['folio' => $folio, 'room_charge' => 1]))->assertSessionHasErrors('room_charge');
+
+        $this->assertSame('395.00', $folio->fresh()->room_charge);
+    }
+
+    #[TestWith(['folios.billing'])]
+    #[TestWith(['folios.receipt'])]
+    public function test_active_print_previews_cannot_switch_an_approved_custom_discount_without_approval(string $route): void
+    {
+        $folio = $this->folio(['discount_type' => 'DC', 'discount_override_amount' => 20]);
+        $folio->recalculate();
+
+        $this->get(route($route, ['folio' => $folio, 'discount_type' => 'senior', 'discount_id_ref' => 'QA-SENIOR']))->assertSessionHasErrors('discount_type');
+
+        $this->assertSame('DC', $folio->fresh()->discount_type);
+        $this->assertSame('20.00', $folio->fresh()->discount_override_amount);
+    }
+
+    public function test_print_previews_allow_the_approved_custom_terms_and_unrestricted_fixed_discounts(): void
+    {
+        $custom = $this->folio(['discount_type' => 'DC', 'discount_override_amount' => 20]);
+        $custom->recalculate();
+        $fixed = $this->folio();
+
+        $this->get(route('folios.billing', ['folio' => $custom, 'room_charge' => 395, 'discount_type' => 'dc']))
+            ->assertOk()->assertViewHas('totalDiscount', 20)->assertViewHas('finalBalanceToPay', 375);
+        $this->get(route('folios.billing', ['folio' => $fixed, 'discount_type' => 'senior', 'discount_id_ref' => 'QA-SENIOR']))
+            ->assertOk()->assertViewHas('totalDiscount', 79)->assertViewHas('finalBalanceToPay', 316);
     }
 
     public function test_recalculation_preserves_fixed_discount_and_all_surcharges(): void

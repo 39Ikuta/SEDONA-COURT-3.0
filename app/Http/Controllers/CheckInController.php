@@ -423,34 +423,34 @@ class CheckInController extends Controller
     private function draftRules(): array
     {
         return [
-            'payment_method' => 'nullable|in:cash,gcash,split', 'cash_tendered' => 'nullable|numeric|min:0',
-            'gcash_amount' => 'nullable|numeric|min:0', 'gcash_reference' => 'nullable|string|max:50',
+            'payment_method' => 'nullable|in:cash,gcash,split', 'cash_tendered' => 'nullable|numeric|min:0|max:99999999.99',
+            'gcash_amount' => 'nullable|numeric|min:0|max:99999999.99', 'gcash_reference' => 'nullable|string|max:50',
             'customer_name' => 'nullable|string|max:150', 'security_deposit' => 'nullable|numeric|min:0|max:100000',
             'deposit_payment_method' => 'nullable|in:cash,gcash', 'apply_deposit' => 'nullable|boolean',
             'discount_type' => 'nullable|in:none,senior,pwd,dc,NONE,SENIOR,PWD,DC', 'discount_id_ref' => 'nullable|string|max:100',
-            'checked_in_at' => 'nullable|date|before_or_equal:now', 'room_charge' => 'nullable|numeric|min:0',
+            'checked_in_at' => 'nullable|date|before_or_equal:now', 'room_charge' => 'nullable|numeric|min:0|max:99999999.99',
             'shift_override_reason' => 'nullable|string|max:500',
         ];
     }
 
-    private function applyDraft(Folio $folio, Request $request, array $data): void
+    /** @param array<string, mixed> $data */
+    private function assertApprovedPricing(Folio $folio, array $data): void
     {
-        foreach (['room_charge', 'checked_in_at'] as $restricted) {
-            if (isset($data[$restricted])) {
-                $changed = $restricted === 'room_charge'
-                    ? BillingService::cents($data[$restricted]) !== BillingService::cents($folio->room_charge)
-                    : ! Carbon::parse($data[$restricted])->equalTo(strlen($data[$restricted]) <= 16 ? $folio->checked_in_at->copy()->startOfMinute() : $folio->checked_in_at);
-                if ($changed) {
-                    throw ValidationException::withMessages([$restricted => $restricted === 'checked_in_at'
-                        ? 'Only RA (admin) can correct check-in time in Check-in Time Corrections.'
-                        : 'Use Approvals to request and execute a rate override.']);
-                }
-            }
+        if (isset($data['room_charge']) && BillingService::cents($data['room_charge']) !== BillingService::cents($folio->room_charge)) {
+            throw ValidationException::withMessages(['room_charge' => 'Use Approvals to request and execute a rate override.']);
         }
         if (isset($data['discount_type']) && strtoupper($data['discount_type']) !== strtoupper($folio->discount_type ?? 'NONE')) {
             if ($folio->discount_override_amount !== null) {
-                throw ValidationException::withMessages(['discount_type' => 'Custom discount changes require independent approval.']);
+                throw ValidationException::withMessages(['discount_type' => 'Custom discount changes require admin/owner approval.']);
             }
+        }
+    }
+
+    private function applyDraft(Folio $folio, Request $request, array $data): void
+    {
+        $this->assertApprovedPricing($folio, $data);
+        if (isset($data['checked_in_at']) && ! Carbon::parse($data['checked_in_at'])->equalTo(strlen($data['checked_in_at']) <= 16 ? $folio->checked_in_at->copy()->startOfMinute() : $folio->checked_in_at)) {
+            throw ValidationException::withMessages(['checked_in_at' => 'Only RA (admin) can correct check-in time in Check-in Time Corrections.']);
         }
         $discountType = DiscountService::normalizeDiscountType($data['discount_type'] ?? $folio->discount_type);
         if (! $discountType && ! isset($data['discount_type']) && $folio->senior_pwd_discount) {
@@ -491,6 +491,7 @@ class CheckInController extends Controller
         $at = null;
         if ($preview->isActive() && $request) {
             $data = $request->validate($this->draftRules() + ['deposit' => 'nullable|numeric|min:0', 'checked_out_at' => 'nullable|date']);
+            $this->assertApprovedPricing($preview, $data);
             foreach (['room_charge', 'discount_type', 'discount_id_ref', 'payment_method', 'cash_tendered', 'gcash_amount', 'gcash_reference'] as $field) {
                 if (isset($data[$field])) {
                     $preview->{$field} = $data[$field];

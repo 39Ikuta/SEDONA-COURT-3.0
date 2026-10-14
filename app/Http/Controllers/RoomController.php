@@ -92,12 +92,12 @@ class RoomController extends Controller
         if ($request->has('room_id')) {
             $validated = $request->validate([
                 'room_id' => 'required|exists:rooms,id',
-                'base_rate_3h' => 'required|numeric|min:0',
+                'base_rate_3h' => 'required|numeric|min:0|max:999999.99',
                 'base_rate_4h' => 'required|numeric|min:0|max:999999.99',
-                'base_rate_6h' => 'required|numeric|min:0',
-                'base_rate_12h' => 'required|numeric|min:0',
-                'base_rate_24h' => 'required|numeric|min:0',
-                'base_rate_promo' => 'required|numeric|min:0',
+                'base_rate_6h' => 'required|numeric|min:0|max:999999.99',
+                'base_rate_12h' => 'required|numeric|min:0|max:999999.99',
+                'base_rate_24h' => 'required|numeric|min:0|max:999999.99',
+                'base_rate_promo' => 'required|numeric|min:0|max:999999.99',
             ]);
 
             $room = DB::transaction(function () use ($request, $validated): Room {
@@ -116,7 +116,7 @@ class RoomController extends Controller
         if ($request->has('pos_item_id')) {
             $validated = $request->validate([
                 'pos_item_id' => 'required|exists:pos_items,id',
-                'price' => 'required|numeric|min:0',
+                'price' => 'required|numeric|min:0|max:999999.99',
                 'is_available' => 'nullable|boolean',
             ]);
 
@@ -145,7 +145,7 @@ class RoomController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:120|unique:pos_items,name',
             'category' => 'required|string|max:60',
-            'price' => 'required|numeric|min:0',
+            'price' => 'required|numeric|min:0|max:999999.99',
             'is_tracked' => 'nullable|boolean',
             'stock_quantity' => 'nullable|integer|min:0|max:100000',
             'reorder_level' => 'nullable|integer|min:0',

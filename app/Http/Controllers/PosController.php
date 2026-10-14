@@ -143,13 +143,15 @@ class PosController extends Controller
                 );
                 $totalOrderAmount = (float) $items->sum(fn (PosItem $item) => $item->price * $quantities[$item->id]);
                 $settlement = $this->resolveSettlement($validated, $totalOrderAmount);
+                $requiresKitchen = $items->contains(fn (PosItem $item): bool => $item->kitchen_hours_only);
                 $order = Order::create([
                     'user_id' => Auth::id(),
                     'folio_id' => $folio?->id,
                     'room_id' => $room?->id,
                     'transaction_id' => $orderNumber,
                     'type' => $validated['order_type'],
-                    'status' => 'new',
+                    'status' => $requiresKitchen ? 'new' : 'delivered',
+                    'dispatched_at' => $requiresKitchen ? null : now(),
                     ...$settlement,
                     'special_instructions' => $validated['special_instructions'] ?? null,
                     'total' => $totalOrderAmount,

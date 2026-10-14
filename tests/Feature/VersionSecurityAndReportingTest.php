@@ -29,6 +29,41 @@ class VersionSecurityAndReportingTest extends TestCase
         $this->travelTo(now()->setTime(12, 0));
     }
 
+    public function test_front_desk_guest_occupancy_excludes_employee_quarters(): void
+    {
+        $this->withoutVite();
+        Room::where('is_staff_quarters', false)->update(['status' => 'available']);
+        Room::where('is_staff_quarters', true)->update(['status' => 'occupied']);
+        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+
+        $this->actingAs($cashier)->get(route('dashboard'))->assertOk()->assertViewHas('totalRooms', 31)
+            ->assertViewHas('occupiedRooms', 0)->assertViewHas('occupancyRate', 0.0);
+    }
+
+    public function test_guest_check_in_report_excludes_cancelled_stays_and_employee_quarters(): void
+    {
+        $this->withoutVite();
+        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        $room = Room::where('number', '8')->firstOrFail();
+        foreach (['active', 'checked_out', 'voided'] as $status) {
+            Folio::create(['room_id' => $room->id, 'guest_id' => Guest::create(['name' => 'Report guest '.$status, 'headcount' => 2])->id,
+                'user_id' => $cashier->id, 'transaction_id' => Folio::generateTransactionId(), 'rate_tier' => '3h', 'status' => $status,
+                'checked_in_at' => now()->subHour(), 'expected_checkout_at' => now()->addHours(2),
+                'checked_out_at' => $status === 'active' ? null : now(), 'room_charge' => 395]);
+        }
+        $staffRoom = Room::where('is_staff_quarters', true)->firstOrFail();
+        Folio::create(['room_id' => $staffRoom->id, 'guest_id' => Guest::create(['name' => 'Employee quarters'])->id,
+            'user_id' => $cashier->id, 'transaction_id' => 'STAFF-REPORT-QA', 'rate_tier' => 'promo', 'status' => 'active',
+            'checked_in_at' => now(), 'expected_checkout_at' => now()->addYear(), 'room_charge' => 0]);
+        $owner = User::where('email', 'owner@sedonapms.com')->firstOrFail();
+
+        $response = $this->actingAs($owner)->get(route('reports.index'))->assertOk();
+
+        $response->assertViewHas('totalFoliosThisWeek', 2);
+        $this->assertSame(2, $response->viewData('rooms')->firstWhere('id', $room->id)->folios_count);
+        $this->assertSame(0, $response->viewData('rooms')->firstWhere('id', $staffRoom->id)->folios_count);
+    }
+
     public function test_passwordless_login_is_removed_and_failed_logins_are_limited(): void
     {
         $this->get('/quick-login/owner@sedonapms.com')->assertNotFound();

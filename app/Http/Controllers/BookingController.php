@@ -21,13 +21,13 @@ class BookingController extends Controller
     {
         $status = $request->query('status', 'scheduled');
 
-        $query = Booking::with(['room', 'createdBy'])->orderBy('arrival_at');
+        $query = Booking::with(['room', 'createdBy'])->orderBy('arrival_at')->orderBy('id');
 
         if ($status !== 'all') {
             $query->where('status', $status);
         }
 
-        $bookings = $query->paginate(15);
+        $bookings = $query->paginate(15)->withQueryString();
         $availableRooms = Room::where('is_staff_quarters', false)->orderByNumber()->get();
 
         return view('bookings.index', compact('bookings', 'availableRooms', 'status'));
@@ -56,6 +56,11 @@ class BookingController extends Controller
             $arrival = Carbon::parse($validated['arrival_at']);
             $hours = $room->getTierHours($validated['rate_tier']);
             $departure = (clone $arrival)->addHours($hours);
+
+            if ($room->folios()->where('status', 'active')->where('checked_in_at', '<', $departure)
+                ->where('expected_checkout_at', '>', $arrival)->exists()) {
+                throw ValidationException::withMessages(['arrival_at' => 'This room is occupied during the selected date/time.']);
+            }
 
             // Check for conflicting reservations on same room
             if (Booking::hasConflict($room->id, $arrival->toDateTimeString(), $departure->toDateTimeString())) {

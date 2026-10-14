@@ -24,6 +24,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('folios', function (Blueprint $table) {
+            $table->dropUnique(['loss_slip_reference']);
             $table->dropForeign(['checked_out_by']);
             $table->dropColumn(['checked_out_by', 'overtime_hours', 'loss_slip_reference']);
         });
