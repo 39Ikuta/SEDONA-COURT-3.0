@@ -11,6 +11,7 @@ use App\Services\AuditService;
 use App\Services\BillingService;
 use App\Services\DiscountService;
 use App\Services\FinancialPostingService;
+use App\Services\InventoryService;
 use App\Services\ShiftAccessService;
 use App\Services\StayCancellationService;
 use App\Services\StayRateService;
@@ -25,7 +26,7 @@ use Illuminate\View\View;
 
 class CheckInController extends Controller
 {
-    public function __construct(private FinancialPostingService $posting, private AuditService $audit, private StayRateService $stayRates) {}
+    public function __construct(private FinancialPostingService $posting, private AuditService $audit, private StayRateService $stayRates, private InventoryService $inventory) {}
 
     public function store(Request $request): RedirectResponse
     {
@@ -79,20 +80,27 @@ class CheckInController extends Controller
             ]);
             $folio->setRelation('room', $room);
             $folio->recalculate();
+            $amenityWarning = $this->inventory->issueGuestHygieneKit($folio);
             $room->update(['status' => 'occupied']);
             $booking?->update(['status' => 'checked_in']);
             $this->audit->record($request, 'folio.checked_in', $folio, ['room_id' => $room->id, 'rate_tier' => $tier,
-                'checked_in_at' => $checkedInAt->toIso8601String(), 'transaction_id' => $folio->transaction_id]);
+                'checked_in_at' => $checkedInAt->toIso8601String(), 'transaction_id' => $folio->transaction_id,
+                'complimentary_hygiene_kits' => 1, 'amenity_warning' => $amenityWarning]);
 
-            return ['folio_id' => $folio->id];
+            return ['folio_id' => $folio->id, 'amenity_warning' => $amenityWarning];
         };
         if ($request->filled('operation_key')) {
-            $this->posting->execute($request, 'folio.checkin', (int) $data['room_id'], $data, $checkIn);
+            $result = $this->posting->execute($request, 'folio.checkin', (int) $data['room_id'], $data, $checkIn);
         } else {
-            DB::transaction($checkIn, 3);
+            $result = DB::transaction($checkIn, 3);
         }
 
-        return redirect()->route('dashboard')->with('success', 'Guest checked in successfully.');
+        $response = redirect()->route('dashboard')->with('success', 'Guest checked in successfully.');
+        if (! empty($result['amenity_warning'])) {
+            $response->with('info', $result['amenity_warning']);
+        }
+
+        return $response;
     }
 
     public function showCheckout(Request $request, Folio $folio, ShiftAccessService $shiftAccess): View

@@ -280,7 +280,7 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Fresh Pillow Case', 'category' => 'Services', 'price' => 100.00, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 95],
             ['name' => 'Thermal Warm Blanket', 'category' => 'Services', 'price' => 100.00, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 96],
             ['name' => 'Plush Bath Towel', 'category' => 'Services', 'price' => 100.00, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 97],
-            ['name' => 'Guest Amenity Hygiene Kit', 'category' => 'Services', 'price' => 50.00, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 98],
+            ['name' => 'Guest Amenity Hygiene Kit', 'category' => 'Services', 'price' => 0.00, 'is_tracked' => true, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 98],
             ['name' => 'Complete Fresh Beddings Pack', 'category' => 'Services', 'price' => 200.00, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 99],
             ['name' => 'Regular Laundry Service (Per kg)', 'category' => 'Services', 'price' => 120.00, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 100],
             ['name' => 'Swedish Massage (60 mins Spa)', 'category' => 'Services', 'price' => 600.00, 'kitchen_hours_only' => false, 'is_available' => true, 'sort_order' => 101],

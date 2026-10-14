@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Folio;
 use App\Models\InventoryEvent;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -15,6 +16,34 @@ use Illuminate\Validation\ValidationException;
 
 class InventoryService
 {
+    /**
+     * Include one complimentary kit per room check-in without blocking a stay when stock needs updating.
+     */
+    public function issueGuestHygieneKit(Folio $folio): ?string
+    {
+        return DB::transaction(function () use ($folio): ?string {
+            $kit = PosItem::notRetired()->where('name', 'Guest Amenity Hygiene Kit')->orderBy('id')->lockForUpdate()->first();
+            if (! $kit) {
+                return 'The free Guest Amenity Hygiene Kit is included. Its inventory item is missing or retired; update the catalog and stock in Inventory.';
+            }
+
+            $kit->price = 0;
+            $kit->is_tracked = true;
+            $user = $folio->user_id ? User::find($folio->user_id) : Auth::user();
+            if ($kit->stock_quantity > 0) {
+                $this->decrementLockedItem($kit, 1, 'guest_amenity', $folio->transaction_id, $user,
+                    'One complimentary Guest Amenity Hygiene Kit included at room check-in.');
+
+                return null;
+            }
+
+            $this->decrementLockedItem($kit, 0, 'amenity_shortage', $folio->transaction_id, $user,
+                'One complimentary kit included at check-in, but no stock was recorded. Update the physical inventory count.');
+
+            return 'The free Guest Amenity Hygiene Kit is included, but its recorded stock is zero. Update its stock quantity in Inventory.';
+        });
+    }
+
     /**
      * @param  array<int, int>  $quantities  Aggregated quantities keyed by catalog item ID.
      * @return Collection<int, PosItem> Locked catalog items with authoritative prices.
