@@ -89,6 +89,22 @@ class InvoiceAndExportTest extends TestCase
         $invoice->update(['number' => 'CHANGED']);
     }
 
+    public function test_accounting_setup_preserves_issued_numbering_when_optional_fields_are_omitted(): void
+    {
+        $this->configure();
+        $order = $this->order(112);
+        $this->post(route('invoices.order', $order), $this->key())->assertSessionHasNoErrors();
+        $settings = $this->configuration();
+        unset($settings['invoice_series'], $settings['next_sequence']);
+
+        $this->actingAs($this->owner)->post(route('admin.finance.setup.update'), $settings)->assertRedirect()->assertSessionHasNoErrors();
+
+        $saved = app(BusinessDayService::class)->settings();
+        $this->assertSame('TEST', $saved['invoice_series']);
+        $this->assertSame(2, $saved['next_sequence']);
+        $this->assertDatabaseCount('invoices', 1);
+    }
+
     public function test_closed_period_blocks_new_invoice_issuance(): void
     {
         $this->configure();

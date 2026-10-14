@@ -36,10 +36,10 @@ class AccountingSetupController extends Controller
         DB::transaction(function () use ($request, $data, $audit, $invoices): void {
             $row = DB::table('accounting_settings')->where('id', 1)->lockForUpdate()->first();
             $before = json_decode($row->configuration, true, 512, JSON_THROW_ON_ERROR);
-            if (Invoice::exists() && ($data['invoice_series'] !== $before['invoice_series'] || (int) $data['next_sequence'] < (int) $before['next_sequence'])) {
+            $settings = array_replace($before, $data);
+            if (Invoice::exists() && ($settings['invoice_series'] !== $before['invoice_series'] || (int) $settings['next_sequence'] < (int) $before['next_sequence'])) {
                 throw ValidationException::withMessages(['next_sequence' => 'Issued numbers cannot be reused or moved to another series.']);
             }
-            $settings = array_replace($before, $data);
             $settings['cutoff_hour'] = 6;
             $settings['timezone'] = 'Asia/Manila';
             $settings['account_mappings'] = array_intersect_key($data['account_mappings'], array_flip(AccountingExportService::ACCOUNTS));

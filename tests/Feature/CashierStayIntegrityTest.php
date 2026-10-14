@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Booking;
 use App\Models\Folio;
 use App\Models\Guest;
 use App\Models\Room;
@@ -9,6 +10,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\TestWith;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -76,6 +78,47 @@ class CashierStayIntegrityTest extends TestCase
         $this->post(route('folios.extend', $folio), ['operation_key' => (string) Str::uuid(), 'hours' => '2'])->assertConflict();
         $this->assertSame(0, $folio->fresh()->extra_hours);
         $this->assertDatabaseMissing('audit_logs', ['event' => 'folio.extended']);
+    }
+
+    #[TestWith([9])]
+    #[TestWith([256])]
+    public function test_check_in_and_reservations_reject_guest_counts_above_the_form_capacity(int $headcount): void
+    {
+        $room = $this->room();
+        $data = ['room_id' => $room->id, 'headcount' => $headcount, 'guest_name' => 'Capacity test', 'rate_tier' => '3h'];
+
+        $this->post(route('checkin.store'), $data + ['operation_key' => (string) Str::uuid()])->assertSessionHasErrors('headcount');
+        $this->post(route('bookings.store'), $data + ['arrival_at' => '2026-10-15 10:00:00'])->assertSessionHasErrors('headcount');
+
+        $this->assertDatabaseCount('guests', 0);
+        $this->assertDatabaseCount('folios', 0);
+        $this->assertDatabaseCount('bookings', 0);
+        $this->assertSame('available', $room->fresh()->status);
+    }
+
+    public function test_an_old_reservation_cannot_bypass_the_guest_capacity_by_submitting_a_smaller_count(): void
+    {
+        $room = $this->room();
+        $booking = Booking::create(['room_id' => $room->id, 'user_id' => auth()->id(), 'guest_name' => 'Old reservation',
+            'headcount' => 9, 'rate_tier' => '3h', 'arrival_at' => now(), 'departure_at' => now()->addHours(3), 'status' => 'scheduled']);
+
+        $this->post(route('checkin.store'), ['room_id' => $room->id, 'booking_id' => $booking->id, 'headcount' => 2,
+            'rate_tier' => '3h', 'operation_key' => (string) Str::uuid()])->assertSessionHasErrors('headcount');
+
+        $this->assertDatabaseCount('folios', 0);
+        $this->assertSame('scheduled', $booking->fresh()->status);
+    }
+
+    #[TestWith([1])]
+    #[TestWith([8])]
+    public function test_check_in_accepts_both_ends_of_the_guest_capacity(int $headcount): void
+    {
+        $room = $this->room();
+        $this->post(route('checkin.store'), ['room_id' => $room->id, 'headcount' => $headcount,
+            'rate_tier' => '3h', 'operation_key' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('guests', ['headcount' => $headcount]);
+        $this->assertDatabaseHas('folios', ['room_id' => $room->id, 'status' => 'active']);
     }
 
     private function room(): Room

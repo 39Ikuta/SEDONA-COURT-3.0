@@ -31,7 +31,7 @@ class CheckInController extends Controller
     {
         $data = $request->validate([
             'room_id' => 'required|exists:rooms,id', 'guest_name' => 'nullable|string|max:255',
-            'guest_contact' => 'nullable|string|max:50', 'headcount' => 'required|integer|min:1',
+            'guest_contact' => 'nullable|string|max:50', 'headcount' => 'required|integer|min:1|max:8',
             'rate_tier' => 'required|in:3h,4h,6h,12h,24h'.(config('sedona.midnight_promo_enabled') ? ',promo' : ''), 'is_senior' => 'nullable|boolean',
             'is_pwd' => 'nullable|boolean', 'discount_id_ref' => 'nullable|string|max:100',
             'booking_id' => 'nullable|exists:bookings,id', 'checked_in_at' => 'prohibited',
@@ -49,6 +49,9 @@ class CheckInController extends Controller
                 $booking = Booking::whereKey($data['booking_id'])->lockForUpdate()->firstOrFail();
                 if ($booking->room_id !== $room->id || $booking->status !== 'scheduled') {
                     throw ValidationException::withMessages(['booking_id' => 'This reservation is not scheduled for this room.']);
+                }
+                if ($booking->headcount < 1 || $booking->headcount > 8) {
+                    throw ValidationException::withMessages(['headcount' => 'Reservations must contain between 1 and 8 guests. Correct the reservation before checking in.']);
                 }
             }
             $tier = $booking?->rate_tier ?? $data['rate_tier'];
