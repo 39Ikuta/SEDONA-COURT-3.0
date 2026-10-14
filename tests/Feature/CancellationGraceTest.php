@@ -45,6 +45,9 @@ class CancellationGraceTest extends TestCase
         $this->assertDatabaseHas('folios', ['id' => $folio->id, 'status' => 'voided', 'transaction_id' => 'SCTI-20261013-001', 'net_total' => 0, 'gross_total' => 0]);
         $this->assertSame('available', $folio->room->fresh()->status);
         $this->assertSame('cancelled', $booking->fresh()->status);
+        $this->get(route('admin.accounting.ledger'))
+            ->assertDontSee(route('folios.receipt', $folio), false)
+            ->assertSee(route('folios.billing', $folio), false);
         $this->assertSame('SCTI-20261013-002', Folio::generateTransactionId());
         $this->assertDatabaseCount('payment_entries', 0);
         $this->assertSame(1, DB::table('audit_logs')->where('event', 'folio.cancelled')->count());
@@ -257,6 +260,26 @@ class CancellationGraceTest extends TestCase
         $values = json_decode(DB::table('audit_logs')->where('event', 'folio.package_converted')->value('new_values'), true);
         $this->assertSame('12h', $values['before']['rate_tier']);
         $this->assertSame('2026-10-13 12:00:00', $folio->fresh()->checked_in_at->format('Y-m-d H:i:s'));
+    }
+
+    #[TestWith(['folios.receipt', false])]
+    #[TestWith(['folios.receipt.print', true])]
+    #[TestWith(['folios.gate_pass', false])]
+    public function test_cancelled_stay_cannot_issue_settlement_documents(string $route, bool $post): void
+    {
+        $actor = $this->actor('admin');
+        $folio = $this->folio($actor);
+        $this->actingAs($actor)->post(route('folios.cancel', $folio), $this->key() + ['reason' => 'Guest cancelled.'])
+            ->assertSessionHasNoErrors();
+
+        $response = $post
+            ? $this->post(route($route, $folio), $this->key())
+            : $this->get(route($route, $folio));
+
+        $response->assertStatus(409);
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'status' => 'voided', 'transaction_id' => 'SCTI-20261013-001']);
+        $this->assertDatabaseCount('payment_entries', 0);
+        $this->assertSame(0, DB::table('audit_logs')->where('event', 'receipt.print_requested')->count());
     }
 
     private function actor(string $role = 'cashier'): User

@@ -105,6 +105,21 @@ class InvoiceAndExportTest extends TestCase
         $this->assertDatabaseCount('invoices', 1);
     }
 
+    public function test_preserved_invoice_counter_cannot_be_rewound_after_history_is_cleared(): void
+    {
+        $this->configure();
+        $order = $this->order(112);
+        $this->post(route('invoices.order', $order), $this->key())->assertSessionHasNoErrors();
+        DB::table('invoices')->delete();
+        $this->assertSame(2, app(BusinessDayService::class)->settings()['next_sequence']);
+
+        $this->actingAs($this->owner)->post(route('admin.finance.setup.update'), $this->configuration())
+            ->assertSessionHasErrors('next_sequence');
+
+        $this->assertSame(2, app(BusinessDayService::class)->settings()['next_sequence']);
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
     public function test_closed_period_blocks_new_invoice_issuance(): void
     {
         $this->configure();

@@ -6,6 +6,7 @@ use App\Models\Folio;
 use App\Models\Room;
 use App\Services\AuditService;
 use App\Services\FinancialPostingService;
+use App\Services\StayRateService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Illuminate\View\View;
 
 class AdminCheckInTimeController extends Controller
 {
-    public function __construct(private FinancialPostingService $posting, private AuditService $audit) {}
+    public function __construct(private FinancialPostingService $posting, private AuditService $audit, private StayRateService $stayRates) {}
 
     public function index(Request $request): View
     {
@@ -66,10 +67,12 @@ class AdminCheckInTimeController extends Controller
                 ->where('checked_in_at', '<=', now())->where('checked_out_at', '>', $corrected)->exists()) {
                 throw ValidationException::withMessages(['checked_in_at' => 'This declaration time overlaps another recorded stay in the room.']);
             }
+            $checkout = $corrected->copy()->addHours($room->getTierHours($locked->rate_tier) + (int) $locked->extra_hours);
+            $this->stayRates->assertReservationAvailable($room, now(), $checkout, $locked->booking_id);
             $before = $this->snapshot($locked);
             $locked->setRelation('room', $room);
             $locked->checked_in_at = $corrected;
-            $locked->expected_checkout_at = $corrected->copy()->addHours($room->getTierHours($locked->rate_tier) + (int) $locked->extra_hours);
+            $locked->expected_checkout_at = $checkout;
             $locked->recalculate();
             $this->audit->record($request, 'folio.checkin_time_corrected', $locked, [
                 'transaction_id' => $locked->transaction_id, 'room_id' => $room->id,

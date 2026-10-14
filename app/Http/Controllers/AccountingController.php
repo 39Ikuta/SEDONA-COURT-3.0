@@ -131,9 +131,7 @@ class AccountingController extends Controller
             'shift_override_reason' => 'nullable|string|max:500',
         ]);
 
-        $voucherNumber = Expense::generateVoucherNumber();
-
-        app(FinancialPostingService::class)->execute($request, 'expense.record', null, $validated, function () use ($validated, $voucherNumber, $request, $shiftAccess, $audit): array {
+        $result = app(FinancialPostingService::class)->execute($request, 'expense.record', null, $validated, function () use ($validated, $request, $shiftAccess, $audit): array {
             app(BusinessDayService::class)->assertWritable($validated['expense_date']);
             $shift = null;
             if ($validated['payment_source'] === 'cash_drawer' && $validated['expense_date'] !== app(BusinessDayService::class)->date()) {
@@ -149,7 +147,7 @@ class AccountingController extends Controller
             $expense = Expense::create([
                 'user_id' => Auth::id() ?? 1,
                 'shift_id' => $shift?->id,
-                'voucher_number' => $voucherNumber,
+                'voucher_number' => Expense::generateVoucherNumber(),
                 'expense_date' => $validated['expense_date'],
                 'category' => $validated['category'],
                 'description' => $validated['description'],
@@ -168,8 +166,10 @@ class AccountingController extends Controller
             return ['expense_id' => $expense->id];
         });
 
+        $expense = Expense::findOrFail($result['expense_id']);
+
         return redirect()->route('admin.accounting.expenses')
-            ->with('success', "Expense voucher {$voucherNumber} created for ₱".number_format($validated['amount'], 2).'.');
+            ->with('success', "Expense voucher {$expense->voucher_number} created for ₱".number_format((float) $expense->amount, 2).'.');
     }
 
     /**

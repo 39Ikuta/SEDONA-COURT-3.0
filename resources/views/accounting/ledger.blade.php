@@ -63,7 +63,9 @@
                                 </span>
                             </td>
                             <td class="space-x-1 whitespace-nowrap text-right">
-                                <a href="{{ route('folios.receipt', $f->id) }}" target="_blank" class="px-2 py-0.5 bg-[#421A2B] text-white font-bold text-[10px] rounded hover:bg-[#341421]">Receipt</a>
+                                @if($f->status !== 'voided')
+                                    <a href="{{ route('folios.receipt', $f->id) }}" target="_blank" class="px-2 py-0.5 bg-[#421A2B] text-white font-bold text-[10px] rounded hover:bg-[#341421]">Receipt</a>
+                                @endif
                                 <a href="{{ route('folios.deposit_slip', $f->id) }}" target="_blank" class="px-2 py-0.5 bg-slate-700 text-white font-bold text-[10px] rounded hover:bg-slate-800">Deposit</a>
                                 <a href="{{ route('folios.billing', $f->id) }}" target="_blank" class="px-2 py-0.5 bg-blue-700 text-white font-bold text-[10px] rounded hover:bg-blue-800">Billing</a>
                             </td>

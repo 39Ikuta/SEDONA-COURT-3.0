@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ApprovalRequest;
+use App\Models\Booking;
 use App\Models\Folio;
 use App\Models\Guest;
 use App\Models\Room;
@@ -153,6 +154,30 @@ class AdminCheckInTimeTest extends TestCase
         $this->assertSame('active', $folio->fresh()->status);
         $this->assertDatabaseCount('payment_entries', 0);
         $this->assertSame('2026-10-13 12:00:00', $folio->fresh()->checked_in_at->format('Y-m-d H:i:s'));
+    }
+
+    #[TestWith(['2026-10-13 12:30:00', false])]
+    #[TestWith(['2026-10-13 13:00:00', true])]
+    public function test_time_correction_respects_a_future_reservation(string $arrival, bool $allowed): void
+    {
+        $admin = $this->actor('admin');
+        $folio = $this->folio($admin);
+        $folio->update(['checked_in_at' => '2026-10-13 09:00:00', 'expected_checkout_at' => '2026-10-13 12:00:00']);
+        Booking::create(['room_id' => $folio->room_id, 'user_id' => $admin->id, 'guest_name' => 'Reserved guest',
+            'headcount' => 1, 'rate_tier' => '3h', 'arrival_at' => $arrival,
+            'departure_at' => Carbon::parse($arrival)->addHours(3), 'status' => 'scheduled']);
+        $data = array_replace($this->correction($folio), ['checked_in_at' => '2026-10-13T10:00']);
+
+        $response = $this->actingAs($admin)->post(route('admin.check-in-times.update', $folio), $data);
+
+        if ($allowed) {
+            $response->assertSessionHasNoErrors()->assertSessionHas('success');
+            $this->assertSame('2026-10-13 13:00:00', $folio->fresh()->expected_checkout_at->format('Y-m-d H:i:s'));
+        } else {
+            $response->assertSessionHasErrors('room_id');
+            $this->assertSame('2026-10-13 09:00:00', $folio->fresh()->checked_in_at->format('Y-m-d H:i:s'));
+            $this->assertSame(0, DB::table('audit_logs')->where('event', 'folio.checkin_time_corrected')->count());
+        }
     }
 
     private function actor(string $role): User

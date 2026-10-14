@@ -40,6 +40,24 @@ class AccountingTest extends TestCase
         $responseOwner->assertStatus(200);
     }
 
+    public function test_retried_expense_confirmation_keeps_the_saved_voucher_number(): void
+    {
+        $this->travelTo('2026-10-14 12:00:00');
+        $admin = User::where('email', 'admin1@sedonapms.com')->firstOrFail();
+        $data = ['operation_key' => (string) Str::uuid(), 'expense_date' => '2026-10-14',
+            'category' => 'supplies', 'description' => 'Retry confirmation test', 'amount' => 100,
+            'payment_source' => 'petty_cash', 'receipt_reference' => 'QA-EXPENSE-RETRY'];
+        $this->actingAs($admin)->post(route('admin.accounting.expenses.store'), $data)->assertSessionHasNoErrors();
+        $expense = Expense::where('receipt_reference', $data['receipt_reference'])->firstOrFail();
+
+        $this->post(route('admin.accounting.expenses.store'), $data)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', fn (string $message): bool => str_contains($message, $expense->voucher_number));
+
+        $this->assertSame(1, Expense::where('receipt_reference', $data['receipt_reference'])->count());
+        $this->assertSame('100.00', $expense->fresh()->amount);
+    }
+
     public function test_operating_expense_lifecycle()
     {
         $admin = User::where('email', 'admin1@sedonapms.com')->first();

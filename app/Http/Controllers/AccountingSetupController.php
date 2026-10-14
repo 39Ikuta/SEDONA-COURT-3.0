@@ -37,7 +37,8 @@ class AccountingSetupController extends Controller
             $row = DB::table('accounting_settings')->where('id', 1)->lockForUpdate()->first();
             $before = json_decode($row->configuration, true, 512, JSON_THROW_ON_ERROR);
             $settings = array_replace($before, $data);
-            if (Invoice::exists() && ($settings['invoice_series'] !== $before['invoice_series'] || (int) $settings['next_sequence'] < (int) $before['next_sequence'])) {
+            if ((Invoice::exists() && $settings['invoice_series'] !== $before['invoice_series'])
+                || (int) ($settings['next_sequence'] ?? 1) < (int) ($before['next_sequence'] ?? 1)) {
                 throw ValidationException::withMessages(['next_sequence' => 'Issued numbers cannot be reused or moved to another series.']);
             }
             $settings['cutoff_hour'] = 6;

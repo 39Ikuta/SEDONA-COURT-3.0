@@ -58,17 +58,19 @@ class CheckInController extends Controller
             if ($tier === 'promo' && ! config('sedona.midnight_promo_enabled')) {
                 throw ValidationException::withMessages(['rate_tier' => 'Midnight promo is temporarily unavailable. Select a regular stay package.']);
             }
+            $checkedInAt = now();
+            $checkout = $checkedInAt->copy()->addHours($room->getTierHours($tier));
+            $this->stayRates->assertReservationAvailable($room, $checkedInAt, $checkout, $booking?->id);
             $guest = Guest::create([
                 'name' => $booking?->guest_name ?? ($data['guest_name'] ?? 'Guest Room '.$room->number),
                 'contact' => $booking?->guest_contact ?? ($data['guest_contact'] ?? 'WALKIN-'.uniqid()),
                 'headcount' => $booking?->headcount ?? $data['headcount'],
                 'is_senior' => $request->boolean('is_senior'), 'is_pwd' => $request->boolean('is_pwd'),
             ]);
-            $checkedInAt = now();
             $folio = Folio::create([
                 'room_id' => $room->id, 'guest_id' => $guest->id, 'user_id' => Auth::id(), 'booking_id' => $booking?->id,
                 'transaction_id' => Folio::generateTransactionId(), 'rate_tier' => $tier,
-                'checked_in_at' => $checkedInAt, 'expected_checkout_at' => $checkedInAt->copy()->addHours($room->getTierHours($tier)),
+                'checked_in_at' => $checkedInAt, 'expected_checkout_at' => $checkout,
                 'status' => 'active', 'room_charge' => $room->getRateForTier($tier), 'pos_items' => [],
                 'discount_type' => $guest->is_pwd ? 'PWD' : ($guest->is_senior ? 'SENIOR' : 'NONE'),
                 'discount_schedule' => DiscountService::rates(),
@@ -160,9 +162,11 @@ class CheckInController extends Controller
         $extraHours = (int) $data['hours'];
         $this->posting->execute($request, 'folio.extend', $folio->id, $data, function () use ($request, $folio, $extraHours): array {
             [$locked] = $this->lockActive($folio);
+            $checkout = $locked->expected_checkout_at->copy()->addHours($extraHours);
+            $this->stayRates->assertReservationAvailable($locked->room, now(), $checkout, $locked->booking_id);
             $before = $locked->only(['extra_hours', 'expected_checkout_at', 'net_total']);
             $locked->extra_hours += $extraHours;
-            $locked->expected_checkout_at = $locked->expected_checkout_at->copy()->addHours($extraHours);
+            $locked->expected_checkout_at = $checkout;
             $locked->recalculate();
             $this->audit->record($request, 'folio.extended', $locked, ['before' => $before,
                 'after' => $locked->only(array_keys($before)), 'operation_key' => $request->input('operation_key')]);
@@ -307,12 +311,14 @@ class CheckInController extends Controller
 
     public function showReceipt(Request $request, Folio $folio): View
     {
+        abort_if($folio->status === 'voided', 409, 'Cancelled stays cannot issue settlement receipts.');
+
         return view('checkout.receipt', $this->viewData($folio, $request));
     }
 
     public function requestReceiptPrint(Request $request, Folio $folio): View
     {
-        abort_if($folio->isActive(), 409, 'Settle the folio before issuing a receipt.');
+        abort_unless($folio->status === 'checked_out' && $folio->checked_out_at !== null, 409, 'Settle the folio before issuing a receipt.');
         $result = $this->recordPrintRequest($request, $folio, 'receipt');
 
         return view('checkout.receipt', $this->viewData($folio) + ['receiptCopy' => $result['copy_number'], 'printRequested' => true]);
@@ -368,7 +374,7 @@ class CheckInController extends Controller
 
     public function showGatePass(Folio $folio): View
     {
-        abort_if($folio->isActive(), 409, 'Settle the folio before issuing a gate pass.');
+        abort_unless($folio->status === 'checked_out' && $folio->checked_out_at !== null, 409, 'Settle the folio before issuing a gate pass.');
         $folio->load(['room', 'guest', 'cashier', 'checkedOutBy']);
         $ticketNo = 'GP-RM'.($folio->room->number ?? '00').'-'.$folio->checked_out_at->format('mdHi');
 
