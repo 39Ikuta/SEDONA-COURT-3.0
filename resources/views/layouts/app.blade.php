@@ -25,6 +25,9 @@
             ['label' => 'Kitchen KDS', 'route' => 'kitchen.view', 'patterns' => ['kitchen.view'], 'icon' => 'M4 3v7a3 3 0 0 0 6 0V3 M7 3v18 M17 3c-3 3-3 8 0 9v9 M17 3v9h3V3'],
             ['label' => 'Kitchen TV', 'route' => 'kitchen.tv', 'patterns' => ['kitchen.tv'], 'new_tab' => true, 'icon' => 'M3 4h18v13H3z M8 21h8 M12 17v4'],
         ];
+        if ($operator?->can('manage_folios')) {
+            array_splice($navigation, 1, 0, [['label' => 'Daily SCTI Register', 'route' => 'checkins.index', 'patterns' => ['checkins.*'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5']]);
+        }
         if ($operator?->canAny(['record_payments', 'post_pos_sales'])) {
             $navigation[] = ['label' => 'Approvals & Tasks', 'route' => 'approvals.index', 'patterns' => ['approvals.*'], 'icon' => 'M5 3h14v18H5z M8 8l2 2 4-4'];
             $navigation[] = ['label' => 'Transactions & Audit', 'route' => 'transactions.index', 'patterns' => ['transactions.*'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5'];

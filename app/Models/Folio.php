@@ -134,23 +134,28 @@ class Folio extends Model
     }
 
     /**
-     * Generate a unique SCTI-###### transaction ID.
+     * Allocate a daily SCTI-YYYYMMDD-NNN reference in the stay transaction.
      */
     public static function generateTransactionId(): string
     {
         return DB::transaction(function (): string {
-            $sequence = DB::table('document_sequences')->where('name', 'scti')->lockForUpdate()->first();
-            if (! $sequence) {
-                throw new \RuntimeException('The SCTI sequence is missing. Run database migrations.');
-            }
+            $date = now()->setTimezone('Asia/Manila')->format('Ymd');
+            $sequenceName = 'scti:'.$date;
+            DB::table('document_sequences')->insertOrIgnore(['name' => $sequenceName, 'last_number' => 0]);
+            $sequence = DB::table('document_sequences')->where('name', $sequenceName)->lockForUpdate()->first();
             $number = (int) $sequence->last_number;
             do {
                 $number++;
-                $id = 'SCTI-'.str_pad((string) $number, 6, '0', STR_PAD_LEFT);
+                $id = 'SCTI-'.$date.'-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT);
             } while (self::where('transaction_id', $id)->exists());
-            DB::table('document_sequences')->where('name', 'scti')->update(['last_number' => $number]);
+            DB::table('document_sequences')->where('name', $sequenceName)->update(['last_number' => $number]);
 
             return $id;
         }, 3);
+    }
+
+    public function dailySequenceNumber(): ?int
+    {
+        return preg_match('/^SCTI-\d{8}-(\d+)$/D', $this->transaction_id ?? '', $match) ? (int) $match[1] : null;
     }
 }

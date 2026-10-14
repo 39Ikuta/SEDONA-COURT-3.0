@@ -35,7 +35,7 @@ class TransactionResetTest extends TestCase
     {
         parent::setUp();
         $this->seed(DatabaseSeeder::class);
-        $this->freezeTime();
+        $this->travelTo('2026-10-14 12:00:00');
         $this->backupPath = sys_get_temp_dir().'/sedona-reset-test-'.Str::uuid().'.sqlite';
         $this->mock(MaintenanceMode::class)->shouldReceive('active')->andReturn(true);
         $user = User::where('email', 'pau@sedonapms.com')->firstOrFail();
@@ -91,7 +91,7 @@ class TransactionResetTest extends TestCase
         $this->assertDatabaseCount('audit_logs', 1);
         $this->assertDatabaseHas('audit_logs', ['event' => 'database.transactions_reset']);
         $this->assertSame([], DB::select('PRAGMA foreign_key_check'));
-        $this->assertSame('SCTI-000002', Folio::generateTransactionId());
+        $this->assertSame('SCTI-20261014-002', Folio::generateTransactionId());
 
         $backup = new PDO('sqlite:'.$this->backupPath);
         $this->assertSame('ok', $backup->query('PRAGMA integrity_check')->fetchColumn());
@@ -139,7 +139,7 @@ class TransactionResetTest extends TestCase
         $this->assertDatabaseHas('folios', ['id' => $this->folio->id, 'status' => 'active']);
         $this->assertDatabaseHas('guests', ['id' => $this->folio->guest_id, 'name' => 'Reset guest']);
         $this->assertDatabaseHas('rooms', ['id' => $this->folio->room_id, 'status' => 'occupied']);
-        $this->assertDatabaseHas('document_sequences', ['name' => 'scti', 'last_number' => 1]);
+        $this->assertDatabaseHas('document_sequences', ['name' => 'scti:20261014', 'last_number' => 1]);
         $this->assertDatabaseMissing('audit_logs', ['event' => 'database.transactions_reset']);
         $this->assertFileExists($this->backupPath);
     }

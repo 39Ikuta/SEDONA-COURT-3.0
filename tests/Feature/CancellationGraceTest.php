@@ -42,10 +42,10 @@ class CancellationGraceTest extends TestCase
         $this->actingAs($actor)->post('/folios/'.$folio->id.'/cancel', $payload)->assertSessionHasNoErrors()->assertSessionHas('success');
         $this->post('/folios/'.$folio->id.'/cancel', $payload)->assertSessionHasNoErrors();
 
-        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'status' => 'voided', 'transaction_id' => 'SCTI-000001', 'net_total' => 0, 'gross_total' => 0]);
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'status' => 'voided', 'transaction_id' => 'SCTI-20261013-001', 'net_total' => 0, 'gross_total' => 0]);
         $this->assertSame('available', $folio->room->fresh()->status);
         $this->assertSame('cancelled', $booking->fresh()->status);
-        $this->assertSame('SCTI-000002', Folio::generateTransactionId());
+        $this->assertSame('SCTI-20261013-002', Folio::generateTransactionId());
         $this->assertDatabaseCount('payment_entries', 0);
         $this->assertSame(1, DB::table('audit_logs')->where('event', 'folio.cancelled')->count());
         $audit = json_decode(DB::table('audit_logs')->where('event', 'folio.cancelled')->value('new_values'), true);
@@ -98,7 +98,7 @@ class CancellationGraceTest extends TestCase
         $this->actingAs($actor)->get(route('folios.orders.index', $folio))->assertDontSee('cancelGuestStay')->assertDontSee('Reason for cancelling stay');
         $this->post('/folios/'.$folio->id.'/cancel', $this->key() + ['reason' => 'Cancel stay'])->assertForbidden();
 
-        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'status' => 'active', 'room_charge' => 395, 'transaction_id' => 'SCTI-000001']);
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'status' => 'active', 'room_charge' => 395, 'transaction_id' => 'SCTI-20261013-001']);
         $this->assertSame('occupied', $folio->room->fresh()->status);
         $this->assertSame(0, DB::table('audit_logs')->where('event', 'folio.cancelled')->count());
     }

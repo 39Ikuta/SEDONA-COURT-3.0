@@ -33,11 +33,11 @@ class GuestStayWorkflowTest extends TestCase
         $first = $this->folio($actor);
         $second = $this->folio($actor);
 
-        $this->assertSame('SCTI-000001', $first->transaction_id);
-        $this->assertSame('SCTI-000002', $second->transaction_id);
+        $this->assertSame('SCTI-20261013-001', $first->transaction_id);
+        $this->assertSame('SCTI-20261013-002', $second->transaction_id);
         $first->update(['status' => 'voided']);
-        $this->assertSame('SCTI-000003', $this->folio($actor)->transaction_id);
-        $this->assertSame('SCTI-000001', $first->fresh()->transaction_id);
+        $this->assertSame('SCTI-20261013-003', $this->folio($actor)->transaction_id);
+        $this->assertSame('SCTI-20261013-001', $first->fresh()->transaction_id);
     }
 
     #[TestWith(['cashier', []])]
@@ -69,7 +69,7 @@ class GuestStayWorkflowTest extends TestCase
         }
     }
 
-    public function test_sequence_initialization_skips_historical_receipt_numbers(): void
+    public function test_daily_sequence_starts_fresh_without_renumbering_historical_receipts(): void
     {
         $actor = $this->actor();
         $old = $this->folio($actor);
@@ -78,7 +78,7 @@ class GuestStayWorkflowTest extends TestCase
         $migration->down();
         $migration->up();
 
-        $this->assertSame('SCTI-923457', $this->folio($actor)->transaction_id);
+        $this->assertSame('SCTI-20261013-001', $this->folio($actor)->transaction_id);
         $this->assertSame('SCTI-923456', $old->fresh()->transaction_id);
     }
 
@@ -87,21 +87,21 @@ class GuestStayWorkflowTest extends TestCase
         $actor = $this->actor();
         $folio = $this->folio($actor);
         $folio->update(['status' => 'checked_out', 'checked_out_at' => now()]);
-        $this->actingAs($actor)->post(route('folios.receipt.print', $folio), ['operation_key' => (string) Str::uuid()])->assertOk()->assertSee('SCTI-000001');
-        $this->post(route('folios.receipt.print', $folio), ['operation_key' => (string) Str::uuid()])->assertOk()->assertSee('SCTI-000001');
+        $this->actingAs($actor)->post(route('folios.receipt.print', $folio), ['operation_key' => (string) Str::uuid()])->assertOk()->assertSee('SCTI-20261013-001');
+        $this->post(route('folios.receipt.print', $folio), ['operation_key' => (string) Str::uuid()])->assertOk()->assertSee('SCTI-20261013-001');
 
-        $this->assertSame('SCTI-000002', $this->folio($actor)->transaction_id);
-        $this->assertSame('SCTI-000001', $folio->fresh()->transaction_id);
+        $this->assertSame('SCTI-20261013-002', $this->folio($actor)->transaction_id);
+        $this->assertSame('SCTI-20261013-001', $folio->fresh()->transaction_id);
     }
 
     public function test_failed_number_allocation_rolls_back_with_the_stay_transaction(): void
     {
         DB::beginTransaction();
-        $this->assertSame('SCTI-000001', Folio::generateTransactionId());
+        $this->assertSame('SCTI-20261013-001', Folio::generateTransactionId());
         DB::rollBack();
 
-        $this->assertSame('SCTI-000001', Folio::generateTransactionId());
-        $this->assertSame('SCTI-000002', Folio::generateTransactionId());
+        $this->assertSame('SCTI-20261013-001', Folio::generateTransactionId());
+        $this->assertSame('SCTI-20261013-002', Folio::generateTransactionId());
     }
 
     public function test_multi_item_addons_aggregate_duplicates_and_retries_create_one_order(): void

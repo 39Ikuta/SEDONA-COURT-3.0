@@ -7,6 +7,7 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\CheckInController;
+use App\Http\Controllers\DailyCheckInController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FinanceControlController;
@@ -55,6 +56,7 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
     // Dashboard (Exact 32-Room Visual Operations Matrix)
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('permission:view_dashboard|view_kds|view_kiosk')->name('dashboard');
     Route::middleware('permission:manage_folios')->group(function () {
+        Route::get('/check-ins', [DailyCheckInController::class, 'index'])->name('checkins.index');
         Route::post('/rooms/{room}/status', [RoomController::class, 'updateStatus'])->name('rooms.status');
         Route::post('/rooms/{room}/toggle-maintenance', [RoomController::class, 'toggleMaintenance'])->name('rooms.maintenance.toggle');
 

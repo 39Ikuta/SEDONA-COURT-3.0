@@ -37,7 +37,7 @@ class CashierStayIntegrityTest extends TestCase
         $this->post(route('checkin.store'), $payload)->assertSessionHasNoErrors()->assertSessionHas('success');
         $this->assertDatabaseCount('folios', 1);
         $this->assertDatabaseCount('guests', 1);
-        $this->assertSame('SCTI-000002', Folio::generateTransactionId());
+        $this->assertSame('SCTI-20261014-002', Folio::generateTransactionId());
     }
 
     public function test_check_in_key_cannot_be_reused_with_different_room_details(): void
