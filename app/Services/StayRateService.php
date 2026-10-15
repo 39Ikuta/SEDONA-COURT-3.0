@@ -23,8 +23,11 @@ class StayRateService
         $this->apply($folio, $folio->room, $tier, 0, $request, 'folio.package_converted');
     }
 
-    public function assertReservationAvailable(Room $room, CarbonInterface $arrival, CarbonInterface $departure, ?int $bookingId = null): void
+    public function assertReservationAvailable(Room $room, CarbonInterface $arrival, CarbonInterface $departure, ?int $bookingId = null, bool $openTime = false): void
     {
+        if ($openTime && Booking::where('room_id', $room->id)->where('status', 'scheduled')->where('departure_at', '>', $arrival)->exists()) {
+            throw ValidationException::withMessages(['room_id' => 'This room has an upcoming reservation. Choose another room or a fixed stay package for Open Time.']);
+        }
         if ($departure->gt($arrival) && Booking::hasConflict($room->id, $arrival->toDateTimeString(), $departure->toDateTimeString(), $bookingId)) {
             throw ValidationException::withMessages(['room_id' => 'This stay would overlap an existing reservation. Choose another room or a shorter stay.']);
         }
@@ -41,11 +44,13 @@ class StayRateService
     private function apply(Folio $folio, Room $room, string $tier, int $extraHours, Request $request, string $event): void
     {
         $checkout = $room->getCheckoutForTier($tier, $folio->checked_in_at, $extraHours);
-        $this->assertReservationAvailable($room, now(), $checkout, $folio->booking_id);
-        $before = $folio->only(['room_id', 'rate_tier', 'room_charge', 'extra_hours', 'expected_checkout_at', 'net_total']);
+        $openTime = $folio->isOpenTime() && $event === 'folio.room_transferred';
+        $this->assertReservationAvailable($room, now(), $checkout, $folio->booking_id, $openTime);
+        $before = $folio->only(['room_id', 'rate_tier', 'stay_mode', 'room_charge', 'extra_hours', 'expected_checkout_at', 'net_total']);
         $folio->room_id = $room->id;
         $folio->setRelation('room', $room);
         $folio->rate_tier = $tier;
+        $folio->stay_mode = $openTime ? 'open' : 'fixed';
         $folio->room_charge = $room->getRateForTier($tier);
         $folio->extra_hours = $extraHours;
         $folio->expected_checkout_at = $checkout;

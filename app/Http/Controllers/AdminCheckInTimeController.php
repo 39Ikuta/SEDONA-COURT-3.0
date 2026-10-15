@@ -69,7 +69,7 @@ class AdminCheckInTimeController extends Controller
             }
             $this->stayRates->assertPromoArrival($locked->rate_tier, $corrected, 'checked_in_at');
             $checkout = $room->getCheckoutForTier($locked->rate_tier, $corrected, (int) $locked->extra_hours);
-            $this->stayRates->assertReservationAvailable($room, now(), $checkout, $locked->booking_id);
+            $this->stayRates->assertReservationAvailable($room, now(), $checkout, $locked->booking_id, $locked->isOpenTime());
             $before = $this->snapshot($locked);
             $locked->setRelation('room', $room);
             $locked->checked_in_at = $corrected;

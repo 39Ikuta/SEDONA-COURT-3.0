@@ -13,7 +13,7 @@ class Folio extends Model
 {
     protected $fillable = [
         'room_id', 'guest_id', 'user_id', 'booking_id',
-        'transaction_id', 'receipt_number', 'receipt_issued_at', 'rate_tier',
+        'transaction_id', 'receipt_number', 'receipt_issued_at', 'rate_tier', 'stay_mode',
         'checked_in_at', 'expected_checkout_at', 'checked_out_at',
         'status',
         'extra_persons', 'extra_bedding', 'extra_towels', 'extra_hours',
@@ -97,6 +97,11 @@ class Folio extends Model
 
     // ── Helpers ──────────────────────────────────────────────────────
 
+    public function isOpenTime(): bool
+    {
+        return $this->stay_mode === 'open';
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';
@@ -110,7 +115,7 @@ class Folio extends Model
 
     public function isOverdue(): bool
     {
-        return $this->status === 'active' && now()->gt($this->expected_checkout_at);
+        return $this->status === 'active' && ! $this->isOpenTime() && now()->gt($this->expected_checkout_at);
     }
 
     public function remainingSeconds(): int

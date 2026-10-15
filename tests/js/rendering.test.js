@@ -123,17 +123,18 @@ for (const view of ['index', 'tv']) {
 test('checkin preview reads each configured rate from the HTML dataset keys', () => {
     const blade = readFileSync(new URL('../../resources/views/dashboard/partials/folio-modals.blade.php', import.meta.url), 'utf8');
     const source = blade.slice(blade.indexOf('let currentRoomRates ='), blade.indexOf('const FOLIO_EXTENSION_OPTIONS ='));
-    const document = documentWith(['checkInRoomId', 'checkInModalTitle', 'checkInDateTime', 'checkInDateTimeDisplay', 'checkInTierSelect', 'checkInRatePreview', 'checkInModal']);
+    const document = documentWith(['checkInRoomId', 'checkInModalTitle', 'checkInDateTime', 'checkInDateTimeDisplay', 'checkInTierSelect', 'checkInRatePreview', 'checkInModal', 'checkInOpenTimeNotice']);
     const context = { document, setInterval() {}, clearInterval() {} };
     runInNewContext(source, context);
     const roomDataset = { roomId: '12', roomNumber: '201', roomType: 'Classic', 'rate-3h': '395', 'rate-6h': '777', 'rate-12h': '975', 'rate-24h': '1700', ratePromo: '750' };
     context.openCheckInModal(roomDataset);
     assert.equal(document.elements.checkInTierSelect.value, '3h');
-    for (const [tier, expected] of [['6h', '₱777.00'], ['3h', '₱395.00'], ['12h', '₱975.00'], ['24h', '₱1,700.00'], ['promo', '₱750.00']]) {
+    for (const [tier, expected] of [['6h', '₱777.00'], ['3h', '₱395.00'], ['12h', '₱975.00'], ['24h', '₱1,700.00'], ['promo', '₱750.00'], ['open', '₱395.00']]) {
         document.elements.checkInTierSelect.value = tier;
         context.updateCheckInRatePreview();
         assert.equal(document.elements.checkInRatePreview.textContent, expected);
     }
+    assert.match(document.elements.checkInOpenTimeNotice.textContent, /No fixed checkout.*grace ends at.*₱130/);
 });
 
 test('walkin tender inputs require only the selected method and never invent money received', () => {
@@ -280,7 +281,7 @@ test('extend modal submits the selected twelve or twenty-four hour package with 
     const source = blade.slice(blade.indexOf('function openXtendModal('), blade.indexOf('function closeXtendModal('));
     const document = documentWith(['xtendForm', 'convertStayForm', 'xtendCurrentTier', 'xtendCurrentCheckout',
         'xtendConversionRate', 'xtendConversionCheckout', 'xtendConvert12Option', 'xtendConvertOption',
-        'xtendConversionHint', 'xtendMode', 'xtendConversionReason', 'xtendModalTitle', 'xtendModal',
+        'xtendConversionHint', 'xtendMode', 'xtendConversionReason', 'xtendModalTitle', 'xtendModal', 'xtendHoursOption',
         'xtendConversionTier', 'xtendConversionSubmit']);
     const options = { extendUrl: '/extend', convertUrl: '/convert', currentTier: '6h', currentCheckout: 'Current cutoff', canConvert: true,
         conversions: { '12h': { rate: 1195, checkout: '12-hour cutoff' }, '24h': { rate: 2100, checkout: '24-hour cutoff' } } };
@@ -297,6 +298,10 @@ test('extend modal submits the selected twelve or twenty-four hour package with 
         assert.equal(document.elements.xtendConversionRate.textContent, rate);
         assert.equal(document.elements.xtendConversionCheckout.textContent, checkout);
     }
+    options.openTime = true;
+    context.openXtendModal(1, '21');
+    assert.equal(document.elements.xtendHoursOption.disabled, true);
+    assert.equal(document.elements.xtendConversionTier.value, '12h');
 });
 
 test('midnight promo live checkout estimate keeps fractional booked hours through the full grace period', () => {

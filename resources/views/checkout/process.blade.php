@@ -140,7 +140,7 @@
                 <div class="space-y-2">
                     <div class="flex items-center">
                         <label class="w-44 font-bold text-slate-700 text-[11px]">BOOKED STAY:</label>
-                        <input type="text" value="{{ $folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' Hours ('.strtoupper($folio->rate_tier).')' }}" readonly tabindex="-1" style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" class="form-control-hms font-mono">
+                        <input type="text" value="{{ $folio->isOpenTime() ? 'Open Time (3-hour base)' : ($folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' Hours ('.strtoupper($folio->rate_tier).')') }}" readonly tabindex="-1" style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" class="form-control-hms font-mono">
                     </div>
 
                     <div class="flex items-center">
@@ -154,7 +154,7 @@
                     </div>
 
                     <div class="flex items-center">
-                        <label class="w-44 font-bold text-slate-700 text-[11px]">EXCESS OVERTIME:</label>
+                        <label class="w-44 font-bold text-slate-700 text-[11px]">{{ $folio->isOpenTime() ? 'ADDITIONAL HOURS:' : 'EXCESS OVERTIME:' }}</label>
                         <input type="text" id="inpExcessOvertime" value="{{ $excessHours }} Hours" readonly tabindex="-1" style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" class="form-control-hms font-mono font-bold text-purple-700">
                     </div>
                 </div>
@@ -263,7 +263,7 @@
 
                                 <!-- Excess Overtime if applicable -->
                                 <tr class="border-b bg-purple-50/50" id="rowExcessOvertimeItem" style="{{ $excessHours > 0 ? '' : 'display: none;' }}">
-                                    <td class="p-1.5 border-r font-medium text-purple-900" id="tdExcessHoursLabel">Excess Overtime (+<span id="tdExcessHoursQtyText">{{ $excessHours }}</span>h Overstay @ ₱130.00/hr)</td>
+                                    <td class="p-1.5 border-r font-medium text-purple-900" id="tdExcessHoursLabel">{{ $folio->isOpenTime() ? 'Additional Hours' : 'Excess Overtime' }} (+<span id="tdExcessHoursQtyText">{{ $excessHours }}</span>h @ ₱130.00/hr)</td>
                                     <td class="p-1.5 border-r text-center font-mono" id="tdExcessHoursQty">{{ $excessHours }}</td>
                                     <td class="p-1.5 border-r text-right font-mono">130.00</td>
                                     <td class="p-1.5 text-right font-mono font-bold text-purple-800" id="tdExcessHoursAmount">{{ number_format($excessHours * 130, 2) }}</td>

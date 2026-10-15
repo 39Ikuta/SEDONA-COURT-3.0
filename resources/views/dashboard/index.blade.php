@@ -180,11 +180,14 @@
                                         data-room-number="{{ $room->number }}"
                                         data-guest-name="{{ $folio->guest->name ?? 'Guest' }}"
                                         data-checkout-time="{{ $folio->expected_checkout_at->toIso8601String() }}"
+                                        data-stay-mode="{{ $folio->isOpenTime() ? 'open' : 'fixed' }}"
+                                        data-checkin-time="{{ $folio->checked_in_at->toIso8601String() }}"
+                                        data-base-rate="{{ $folio->room_charge }}"
                                         data-folio-id="{{ $folio->id }}"
                                         data-status="{{ $room->status }}">
                                         <td data-label="Room" class="font-bold font-mono text-sm">{{ $room->number }}</td>
                                         <td data-label="Check-in" class="font-mono text-[11px]">{{ $folio->checked_in_at->format('m/d/Y') }}<br>{{ $folio->checked_in_at->format('h:i A') }}</td>
-                                        <td data-label="Pax / Stay"><span class="font-bold">{{ $folio->guest->headcount ?? 2 }} pax</span><br><span class="font-mono">{{ strtoupper($folio->rate_tier) }}</span></td>
+                                        <td data-label="Pax / Stay"><span class="font-bold">{{ $folio->guest->headcount ?? 2 }} pax</span><br><span class="font-mono">{{ $folio->isOpenTime() ? 'OPEN TIME · 3H BASE' : strtoupper($folio->rate_tier) }}</span></td>
                                         <td data-label="Remaining" class="stay-countdown-timer font-mono text-[11px]">Calculating...</td>
                                         <td data-label="Status"><span class="pill pill-occupied"><span class="pill-dot"></span>OCCUPIED</span></td>
                                     </tr>
@@ -192,7 +195,7 @@
                                         <td colspan="5">
                                             <div class="occupied-room-actions" role="group" aria-label="Actions for room {{ $room->number }}">
                                                 <a href="{{ route('checkout.process', $folio->id) }}" class="btn-occupied font-bold">Occupied</a>
-                                                <button onclick="openXtendModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-xtend font-bold">Extend</button>
+                                                <button onclick="openXtendModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-xtend font-bold">{{ $folio->isOpenTime() ? 'Convert Package' : 'Extend' }}</button>
                                                 <button onclick="openDiscountModal(this.dataset.folioId, this.dataset.roomNumber, this.dataset.roomType, this.dataset.rateTier, this.dataset.discountType, this.dataset.discountRef)" data-folio-id="{{ $folio->id }}" data-room-number="{{ $room->number }}" data-room-type="{{ $room->type }}" data-rate-tier="{{ $folio->rate_tier }}" data-discount-type="{{ $folio->discount_type ?? 'NONE' }}" data-discount-ref="{{ $folio->discount_id_ref ?? '' }}" class="btn-discount font-bold">Discount</button>
                                                 <button onclick="openTransferModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-transfer font-bold">Transfer</button>
                                                 <button onclick="openAddOnModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-addon font-bold">Add On</button>

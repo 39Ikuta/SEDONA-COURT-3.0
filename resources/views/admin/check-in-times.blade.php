@@ -34,7 +34,7 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-sm">
                 <p><span class="text-slate-500">Current check-in:</span> <strong>{{ $folio->checked_in_at->format('m/d/Y h:i:s A') }}</strong></p>
-                <p><span class="text-slate-500">Current checkout:</span> <strong>{{ $folio->expected_checkout_at->format('m/d/Y h:i A') }}</strong></p>
+                <p><span class="text-slate-500">{{ $folio->isOpenTime() ? 'Open Time base ends:' : 'Current checkout:' }}</span> <strong>{{ $folio->expected_checkout_at->format('m/d/Y h:i A') }}</strong></p>
             </div>
             <form method="POST" action="{{ route('admin.check-in-times.update', $folio) }}" class="grid grid-cols-1 sm:grid-cols-2 gap-4" data-time-correction-form>
                 @csrf

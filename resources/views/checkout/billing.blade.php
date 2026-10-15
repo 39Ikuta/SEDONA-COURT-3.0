@@ -179,16 +179,16 @@
             <span>{{ ($checkInTime ?? $folio->checked_in_at)->format('m/d/Y h:i A') }}</span>
         </div>
         <div class="row">
-            <span>Expected Out:</span>
+            <span>{{ $folio->isOpenTime() ? '3-hour base ends:' : 'Expected Out:' }}</span>
             <span>{{ ($expectedCheckoutAt ?? $folio->expected_checkout_at)->format('m/d/Y h:i A') }}</span>
         </div>
         <div class="row">
-            <span>Check-Out:</span>
+            <span>{{ $folio->isOpenTime() && $folio->isActive() ? 'Bill as of:' : 'Check-Out:' }}</span>
             <span>{{ ($checkOutTime ?? now())->format('m/d/Y h:i A') }}</span>
         </div>
         <div class="row">
             <span>Declared stay:</span>
-            <span class="font-bold">{{ $folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' hours' }}</span>
+            <span class="font-bold">{{ $folio->isOpenTime() ? 'Open Time (3-hour base)' : ($folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' hours') }}</span>
         </div>
         @php
             $usedMinutes = intdiv(max(0, $checkOutTime->getTimestamp() - $checkInTime->getTimestamp()), 60);
@@ -199,7 +199,7 @@
         </div>
         @if($excessHours > 0)
         <div class="row">
-            <span>Excess Overtime:</span>
+            <span>{{ $folio->isOpenTime() ? 'Additional Hours:' : 'Excess Overtime:' }}</span>
             <span class="font-bold">{{ $excessHours }} {{ \Illuminate\Support\Str::plural('Hour', $excessHours) }}</span>
         </div>
         @endif
@@ -241,7 +241,7 @@
                 @endif
                 @if($excessHours > 0)
                 <tr>
-                    <td class="col-item">Excess Hours (+{{ $excessHours }}h Overstay)</td>
+                    <td class="col-item">{{ $folio->isOpenTime() ? 'Additional Hours' : 'Excess Hours' }} (+{{ $excessHours }}h{{ $folio->isOpenTime() ? '' : ' Overstay' }})</td>
                     <td class="col-qty font-mono">{{ $excessHours }}</td>
                     <td class="col-price font-mono">130.00</td>
                     <td class="col-total font-mono font-bold">{{ number_format($excessRate, 2) }}</td>

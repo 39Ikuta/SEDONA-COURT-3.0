@@ -33,7 +33,7 @@ class CheckInController extends Controller
         $data = $request->validate([
             'room_id' => 'required|exists:rooms,id', 'guest_name' => 'nullable|string|max:255',
             'guest_contact' => 'nullable|string|max:50', 'headcount' => 'required|integer|min:1|max:8',
-            'rate_tier' => 'required|in:3h,4h,6h,12h,24h'.(config('sedona.midnight_promo_enabled') ? ',promo' : ''), 'is_senior' => 'nullable|boolean',
+            'rate_tier' => 'required|in:3h,4h,6h,12h,24h,open'.(config('sedona.midnight_promo_enabled') ? ',promo' : ''), 'is_senior' => 'nullable|boolean',
             'is_pwd' => 'nullable|boolean', 'discount_id_ref' => 'nullable|string|max:100',
             'booking_id' => 'nullable|exists:bookings,id', 'checked_in_at' => 'prohibited',
             'record_earlier_arrival' => 'prohibited', 'actual_checked_in_at' => 'prohibited', 'late_entry_reason' => 'prohibited',
@@ -55,14 +55,18 @@ class CheckInController extends Controller
                     throw ValidationException::withMessages(['headcount' => 'Reservations must contain between 1 and 8 guests. Correct the reservation before checking in.']);
                 }
             }
-            $tier = $booking?->rate_tier ?? $data['rate_tier'];
+            $openTime = $data['rate_tier'] === 'open';
+            if ($openTime && $booking) {
+                throw ValidationException::withMessages(['rate_tier' => 'Reservations require a fixed stay package.']);
+            }
+            $tier = $booking?->rate_tier ?? ($openTime ? '3h' : $data['rate_tier']);
             if ($tier === 'promo' && ! config('sedona.midnight_promo_enabled')) {
                 throw ValidationException::withMessages(['rate_tier' => 'Midnight promo is temporarily unavailable. Select a regular stay package.']);
             }
             $checkedInAt = now();
             $this->stayRates->assertPromoArrival($tier, $checkedInAt);
             $checkout = $room->getCheckoutForTier($tier, $checkedInAt);
-            $this->stayRates->assertReservationAvailable($room, $checkedInAt, $checkout, $booking?->id);
+            $this->stayRates->assertReservationAvailable($room, $checkedInAt, $checkout, $booking?->id, $openTime);
             $guest = Guest::create([
                 'name' => $booking?->guest_name ?? ($data['guest_name'] ?? 'Guest Room '.$room->number),
                 'contact' => $booking?->guest_contact ?? ($data['guest_contact'] ?? 'WALKIN-'.uniqid()),
@@ -71,7 +75,7 @@ class CheckInController extends Controller
             ]);
             $folio = Folio::create([
                 'room_id' => $room->id, 'guest_id' => $guest->id, 'user_id' => Auth::id(), 'booking_id' => $booking?->id,
-                'transaction_id' => Folio::generateTransactionId(), 'rate_tier' => $tier,
+                'transaction_id' => Folio::generateTransactionId(), 'rate_tier' => $tier, 'stay_mode' => $openTime ? 'open' : 'fixed',
                 'checked_in_at' => $checkedInAt, 'expected_checkout_at' => $checkout,
                 'status' => 'active', 'room_charge' => $room->getRateForTier($tier), 'pos_items' => [],
                 'discount_type' => $guest->is_pwd ? 'PWD' : ($guest->is_senior ? 'SENIOR' : 'NONE'),
@@ -84,7 +88,7 @@ class CheckInController extends Controller
             $amenityWarning = $this->inventory->issueGuestHygieneKit($folio);
             $room->update(['status' => 'occupied']);
             $booking?->update(['status' => 'checked_in']);
-            $this->audit->record($request, 'folio.checked_in', $folio, ['room_id' => $room->id, 'rate_tier' => $tier,
+            $this->audit->record($request, 'folio.checked_in', $folio, ['room_id' => $room->id, 'rate_tier' => $tier, 'stay_mode' => $folio->stay_mode,
                 'checked_in_at' => $checkedInAt->toIso8601String(), 'transaction_id' => $folio->transaction_id,
                 'complimentary_hygiene_kits' => 1, 'amenity_warning' => $amenityWarning]);
 
@@ -172,6 +176,9 @@ class CheckInController extends Controller
         $extraHours = (int) $data['hours'];
         $this->posting->execute($request, 'folio.extend', $folio->id, $data, function () use ($request, $folio, $extraHours): array {
             [$locked] = $this->lockActive($folio);
+            if ($locked->isOpenTime()) {
+                throw ValidationException::withMessages(['hours' => 'Open Time already bills additional hours automatically at ₱130 per hour. Use package conversion for a 12-hour or 24-hour stay.']);
+            }
             $checkout = $locked->room->getCheckoutForTier($locked->rate_tier, $locked->checked_in_at, (int) $locked->extra_hours + $extraHours);
             $this->stayRates->assertReservationAvailable($locked->room, now(), $checkout, $locked->booking_id);
             $before = $locked->only(['extra_hours', 'expected_checkout_at', 'net_total']);

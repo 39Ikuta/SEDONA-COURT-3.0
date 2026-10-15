@@ -171,12 +171,12 @@
             <span>{{ $folio->checked_in_at->format('m/d/Y h:i A') }}</span>
         </div>
         <div class="row">
-            <span>Check-Out:</span>
+            <span>{{ $folio->isOpenTime() && $folio->isActive() ? 'Bill as of:' : 'Check-Out:' }}</span>
             <span>{{ $checkOutTime->format('m/d/Y h:i A') }}</span>
         </div>
         <div class="row">
             <span>Declared stay:</span>
-            <span class="font-bold">{{ $folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' hours' }}</span>
+            <span class="font-bold">{{ $folio->isOpenTime() ? 'Open Time (3-hour base)' : ($folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' hours') }}</span>
         </div>
         @if($xtendHours > 0)
         <div class="row">
@@ -219,7 +219,7 @@
                 @endif
                 @if($excessHours > 0)
                 <tr>
-                    <td class="col-item">Excess Hours (+{{ $excessHours }}h Overstay)</td>
+                    <td class="col-item">{{ $folio->isOpenTime() ? 'Additional Hours' : 'Excess Hours' }} (+{{ $excessHours }}h{{ $folio->isOpenTime() ? '' : ' Overstay' }})</td>
                     <td class="col-qty font-mono">{{ $excessHours }}</td>
                     <td class="col-price font-mono">130.00</td>
                     <td class="col-total font-mono font-bold">{{ number_format($excessRate, 2) }}</td>

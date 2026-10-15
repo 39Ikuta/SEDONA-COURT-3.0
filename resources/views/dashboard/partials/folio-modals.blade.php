@@ -48,6 +48,7 @@
                 <label class="block text-xs font-bold text-slate-700 mb-1">Stay Duration Tier:</label>
                 <select name="rate_tier" id="checkInTierSelect" onchange="updateCheckInRatePreview()" class="form-control-hms font-bold">
                     <option value="3h" selected>3 Hours Stay</option>
+                    <option value="open">Open Time — starts with 3 hours</option>
                     <option value="4h">4 Hours Stay</option>
                     <option value="6h">6 Hours Stay</option>
                     <option value="12h">12 Hours Stay</option>
@@ -59,9 +60,11 @@
             </div>
 
             <div class="bg-slate-50 p-2.5 border border-slate-200 text-xs flex items-center justify-between">
-                <span class="text-slate-600 font-semibold">Standard Room Rate:</span>
+                <span class="text-slate-600 font-semibold" id="checkInRateLabel">Standard Room Rate:</span>
                 <span class="font-mono font-bold text-sm text-[#421A2B]" id="checkInRatePreview">₱395.00</span>
             </div>
+
+            <p id="checkInOpenTimeNotice" class="hidden text-xs text-slate-600">No fixed checkout. The first 3 hours use the standard room rate, with 15 minutes of grace, then ₱130 per additional hour or part thereof until checkout. Hourly reminders do not add another grace period.</p>
 
             <div class="flex items-center space-x-2 pt-1">
                 <input type="checkbox" name="is_senior" id="isSenior" value="1" class="rounded text-red-700">
@@ -97,7 +100,7 @@
         <p class="text-xs text-slate-600 mb-3">Current package: <strong id="xtendCurrentTier"></strong><br>Scheduled checkout: <strong id="xtendCurrentCheckout"></strong></p>
         <label for="xtendMode" class="block text-xs font-bold text-slate-700 mb-1">How would the guest like to extend?</label>
         <select id="xtendMode" onchange="updateXtendMode()" class="form-control-hms font-bold mb-3">
-            <option value="hours">Add extra hours at ₱130 per hour</option>
+            <option value="hours" id="xtendHoursOption">Add extra hours at ₱130 per hour</option>
             <option value="12h" id="xtendConvert12Option">Convert to 12-hour package</option>
             <option value="24h" id="xtendConvertOption">Convert to 24-hour package</option>
         </select>
@@ -287,6 +290,7 @@
             const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: '2-digit', day: '2-digit', year: 'numeric' });
             displayEl.value = `${dateStr} ${timeStr}`;
         }
+        if (document.getElementById('checkInTierSelect')?.value === 'open') updateCheckInRatePreview();
     }
 
     function openCheckInModal(room) {
@@ -304,8 +308,16 @@
     }
     function updateCheckInRatePreview() {
         const tier = document.getElementById('checkInTierSelect').value;
-        const rate = currentRoomRates[tier] || 0;
+        const rate = currentRoomRates[tier === 'open' ? '3h' : tier] || 0;
         document.getElementById('checkInRatePreview').textContent = `₱${rate.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        const rateLabel = document.getElementById('checkInRateLabel');
+        if (rateLabel) rateLabel.textContent = tier === 'open' ? 'Starting Room Charge:' : 'Standard Room Rate:';
+        document.getElementById('checkInOpenTimeNotice')?.classList.toggle('hidden', tier !== 'open');
+        if (tier === 'open' && document.getElementById('checkInOpenTimeNotice')) {
+            const format = time => new Date(time).toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true });
+            const baseEnd = Date.now() + 3 * 3600000;
+            document.getElementById('checkInOpenTimeNotice').textContent = `No fixed checkout. 3-hour base ends at ${format(baseEnd)}; grace ends at ${format(baseEnd + 15 * 60000)}. Then ₱130 per additional hour or part thereof until checkout. Hourly reminders do not restart grace.`;
+        }
     }
     function closeCheckInModal() {
         if (checkInClockInterval) {
@@ -324,12 +336,13 @@
         currentExtensionOptions = options;
         document.getElementById('xtendForm').action = options.extendUrl;
         document.getElementById('convertStayForm').action = options.convertUrl;
-        document.getElementById('xtendCurrentTier').textContent = options.currentTier === 'promo' ? 'Midnight promo' : options.currentTier;
+        document.getElementById('xtendCurrentTier').textContent = options.openTime ? 'Open Time (3-hour base, then ₱130/hour)' : options.currentTier === 'promo' ? 'Midnight promo' : options.currentTier;
         document.getElementById('xtendCurrentCheckout').textContent = options.currentCheckout || 'Not set';
         document.getElementById('xtendConvert12Option').disabled = !options.conversions['12h'];
         document.getElementById('xtendConvertOption').disabled = !options.conversions['24h'];
         document.getElementById('xtendConversionHint').classList.toggle('hidden', options.canConvert);
-        document.getElementById('xtendMode').value = 'hours';
+        document.getElementById('xtendHoursOption').disabled = Boolean(options.openTime);
+        document.getElementById('xtendMode').value = options.openTime ? '12h' : 'hours';
         document.getElementById('xtendConversionReason').value = 'Guest requested a 24-hour package.';
         updateXtendMode();
         document.getElementById('xtendModalTitle').textContent = `Extend Stay - Room ${roomNumber}`;

@@ -103,7 +103,7 @@ class DashboardController extends Controller
         $boardAlmost = 0;
         foreach ($boardAll as $br) {
             $bf = $br->activeFolio;
-            if ($br->status === 'occupied' && $bf && $bf->expected_checkout_at) {
+            if ($br->status === 'occupied' && $bf && ! $bf->isOpenTime() && $bf->expected_checkout_at) {
                 if (now()->gt($bf->expected_checkout_at)) {
                     $boardLate++;
                 } elseif (now()->diffInMinutes($bf->expected_checkout_at, false) <= 30) {
@@ -131,9 +131,9 @@ class DashboardController extends Controller
                 $boardRooms = $boardRooms->where('is_staff_quarters', false);
             }
         } elseif ($bstatus === 'late') {
-            $boardRooms = $boardRooms->filter(fn ($r) => $r->status === 'occupied' && $r->activeFolio && $r->activeFolio->expected_checkout_at && now()->gt($r->activeFolio->expected_checkout_at));
+            $boardRooms = $boardRooms->filter(fn ($r) => $r->status === 'occupied' && $r->activeFolio && ! $r->activeFolio->isOpenTime() && $r->activeFolio->expected_checkout_at && now()->gt($r->activeFolio->expected_checkout_at));
         } elseif ($bstatus === 'almost') {
-            $boardRooms = $boardRooms->filter(fn ($r) => $r->status === 'occupied' && $r->activeFolio && $r->activeFolio->expected_checkout_at && now()->lte($r->activeFolio->expected_checkout_at) && now()->diffInMinutes($r->activeFolio->expected_checkout_at, false) <= 30);
+            $boardRooms = $boardRooms->filter(fn ($r) => $r->status === 'occupied' && $r->activeFolio && ! $r->activeFolio->isOpenTime() && $r->activeFolio->expected_checkout_at && now()->lte($r->activeFolio->expected_checkout_at) && now()->diffInMinutes($r->activeFolio->expected_checkout_at, false) <= 30);
         }
         if (in_array($btier, ['vip', 'premium', 'classic'], true)) {
             $boardRooms = $boardRooms->filter(fn ($r) => $this->roomTierKey($r) === $btier);
@@ -201,12 +201,13 @@ class DashboardController extends Controller
         $folioDiscountOptions = $activeFolios->mapWithKeys(fn (Folio $folio): array => [$folio->id => DiscountService::getOptionsForFolio($folio)])->all();
         $folioExtensionOptions = $activeFolios->mapWithKeys(fn (Folio $folio): array => [$folio->id => [
             'extendUrl' => route('folios.extend', $folio),
+            'openTime' => $folio->isOpenTime(),
             'convertUrl' => route('folios.convert', $folio),
             'canConvert' => ! $folio->room->is_staff_quarters && $folio->rate_tier !== '24h',
             'conversions' => collect(['12h', '24h'])->filter(fn (string $tier): bool => ! $folio->room->is_staff_quarters && $folio->room->getTierHours($tier) > $folio->room->getTierHours($folio->rate_tier))
                 ->mapWithKeys(fn (string $tier): array => [$tier => ['rate' => $folio->room->getRateForTier($tier), 'checkout' => $folio->room->getCheckoutForTier($tier, $folio->checked_in_at)->format('m/d/Y h:i A')]])->all(),
             'currentTier' => $folio->rate_tier,
-            'currentCheckout' => $folio->expected_checkout_at?->format('m/d/Y h:i A'),
+            'currentCheckout' => $folio->isOpenTime() ? 'Open — bills until checkout' : $folio->expected_checkout_at?->format('m/d/Y h:i A'),
             'conversionRate' => $folio->room->getRateForTier('24h'),
             'conversionCheckout' => $folio->checked_in_at->copy()->addHours(24)->format('m/d/Y h:i A'),
         ]])->all();

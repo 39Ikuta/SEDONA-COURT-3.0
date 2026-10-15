@@ -67,6 +67,13 @@ const STAY_ALARM_TUNES = {
             ]
         ]
     },
+    "open": {
+        "file": "open-time.wav",
+        "repeatMs": 2000,
+        "once": true,
+        "volume": 0.85,
+        "notes": [[659.25, 0, 0.18], [783.99, 0.24, 0.18], [1046.5, 0.48, 0.3], [783.99, 0.84, 0.18], [659.25, 1.08, 0.35]]
+    },
     "stage3": {
         "file": "grace-ended.wav",
         "repeatMs": 2000,
@@ -115,7 +122,7 @@ class SedonaAudioEngine {
         this.soundGeneration = 0;
         this.kitchenAudio = null;
 
-        // Current active sound mode: null | 'stage1' | 'stage2' | 'stage3'
+        // Current active sound mode: null | 'stage1' | 'stage2' | 'stage3' | 'open'
         this.currentSoundMode = null;
         this.synthAlarmInterval = null;
 
@@ -124,14 +131,16 @@ class SedonaAudioEngine {
 
         // Silenced stages: Set of `${roomId}_${checkoutTimeISO}_stage${stageNum}`
         this.silencedStages = this.loadSilencedStages();
+        this.openTimeReminders = this.loadSilencedStages('sedona_open_time_reminders');
+        this.openTimeBurstUntil = 0;
 
         this.initHtml5Audio();
         this.initAutoUnlock();
     }
 
-    loadSilencedStages() {
+    loadSilencedStages(storageKey = 'sedona_silenced_alarm_stages') {
         try {
-            const stored = sessionStorage.getItem('sedona_silenced_alarm_stages');
+            const stored = sessionStorage.getItem(storageKey);
             if (stored) {
                 return new Set(JSON.parse(stored));
             }
@@ -149,7 +158,7 @@ class SedonaAudioEngine {
         for (const [mode, tune] of Object.entries(STAY_ALARM_TUNES)) {
             try {
                 const audio = new Audio('/sounds/' + tune.file);
-                audio.loop = true;
+                audio.loop = !tune.once;
                 audio.volume = 1;
                 audio.preload = 'auto';
                 this.alarmAudios[mode] = audio;
@@ -253,6 +262,8 @@ class SedonaAudioEngine {
 
         if (mode === 'stage3') {
             this.startStage3Sound();
+        } else if (mode === 'open') {
+            this.startAlarmTune('open');
         } else if (mode === 'stage2') {
             this.startStage2Sound();
         } else if (mode === 'stage1') {
@@ -352,7 +363,7 @@ class SedonaAudioEngine {
             }
         };
         playTune();
-        this.synthAlarmInterval = setInterval(playTune, tune.repeatMs);
+        if (!tune.once) this.synthAlarmInterval = setInterval(playTune, tune.repeatMs);
     }
 
     /* -------------------------------------------------------------------------
@@ -437,6 +448,35 @@ class SedonaAudioEngine {
     /* -------------------------------------------------------------------------
      * MAIN EVALUATION LOOP (Run every 1,000ms)
      * ------------------------------------------------------------------------- */
+    evaluateOpenTime(el, now) {
+        const checkIn = new Date(el.getAttribute('data-checkin-time')).getTime();
+        const baseEnd = new Date(el.getAttribute('data-checkout-time')).getTime();
+        const baseRate = Number(el.getAttribute('data-base-rate'));
+        if (!Number.isFinite(checkIn) || !Number.isFinite(baseEnd) || !Number.isFinite(baseRate)) return null;
+        const graceEnd = baseEnd + 15 * 60000;
+        const elapsedMinutes = Math.floor(Math.max(0, now - checkIn) / 60000);
+        const additionalHours = Math.ceil(Math.max(0, now - graceEnd) / 3600000);
+        const charge = ((Math.round(baseRate * 100) + additionalHours * 13000) / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const summary = `${Math.floor(elapsedMinutes / 60)}h ${elapsedMinutes % 60}m used · Room charge ₱${charge}`;
+        const timer = el.querySelector('.stay-countdown-timer');
+        if (timer) timer.textContent = `OPEN TIME · ${summary}`;
+        if (now < baseEnd - 15 * 60000) return null;
+        const cycle = now < baseEnd ? 1 : now < graceEnd ? 2 : 3 + Math.floor((now - graceEnd) / 3600000);
+        const roomId = el.getAttribute('data-room-id');
+        const folioId = el.getAttribute('data-folio-id');
+        const checkoutTimeStr = el.getAttribute('data-checkout-time');
+        const stage = `open-${folioId}-${cycle}`;
+        return {
+            roomId, folioId, checkoutTimeStr, currentStage: stage,
+            roomNumber: el.getAttribute('data-room-number') || roomId,
+            guestName: el.getAttribute('data-guest-name') || 'Guest',
+            isOpenTime: true, notificationKey: `${folioId}_${checkoutTimeStr}_${stage}`,
+            isSnoozed: this.isRoomSnoozed(roomId), isSilenced: this.isStageSilenced(roomId, checkoutTimeStr, stage),
+            stageLabel: cycle === 1 ? 'OPEN TIME: 3H BASE ENDING SOON' : cycle === 2 ? 'OPEN TIME: 3H BASE COMPLETE' : cycle === 3 ? 'OPEN TIME: GRACE ENDED' : 'OPEN TIME: HOURLY REMINDER',
+            stageBadgeClass: 'bg-teal-700 text-white', timeSummary: summary,
+        };
+    }
+
     evaluateAlarms() {
         // Query occupied room rows or cards across table and board views
         const roomElements = document.querySelectorAll('[data-room-id][data-checkout-time]');
@@ -444,8 +484,14 @@ class SedonaAudioEngine {
 
         let highestActiveStage = null; // 3 > 2 > 1 > null
         const activeAlarmRooms = [];
+        const openTimeRooms = [];
 
         roomElements.forEach(el => {
+            if (el.getAttribute('data-stay-mode') === 'open') {
+                const room = this.evaluateOpenTime(el, now);
+                if (room) openTimeRooms.push(room);
+                return;
+            }
             const roomId = el.getAttribute('data-room-id');
             const roomNumber = el.getAttribute('data-room-number') || roomId;
             const guestName = el.getAttribute('data-guest-name') || 'Guest';
@@ -565,19 +611,32 @@ class SedonaAudioEngine {
             }
         });
 
-        // Update Audio Playback based on highest active stage
+        if (highestActiveStage === null && !this.isMuted && openTimeRooms.length > 0) {
+            const pending = openTimeRooms.filter(room => !room.isSnoozed && !room.isSilenced && !this.openTimeReminders.has(room.notificationKey));
+            if (pending.length > 0 && now >= this.openTimeBurstUntil) {
+                if (this.currentSoundMode === 'open') this.stopAllAlarms();
+                for (const room of pending) this.openTimeReminders.add(room.notificationKey);
+                try { sessionStorage.setItem('sedona_open_time_reminders', JSON.stringify([...this.openTimeReminders])); } catch (error) {}
+                this.openTimeBurstUntil = now + 5000;
+            }
+        }
+        const openTimeRinging = openTimeRooms.some(room => !room.isSnoozed && !room.isSilenced && this.openTimeReminders.has(room.notificationKey)) && now < this.openTimeBurstUntil;
+
+        // Fixed checkout alarms retain priority over brief Open Time reminders.
         if (highestActiveStage === 3) {
             this.setSoundMode('stage3');
         } else if (highestActiveStage === 2) {
             this.setSoundMode('stage2');
         } else if (highestActiveStage === 1) {
             this.setSoundMode('stage1');
+        } else if (openTimeRinging) {
+            this.setSoundMode('open');
         } else {
             this.setSoundMode(null);
         }
 
         // Update Alarm Banner UI
-        this.updateAlarmBanner(activeAlarmRooms, highestActiveStage);
+        this.updateAlarmBanner([...activeAlarmRooms, ...openTimeRooms], highestActiveStage);
     }
 
     updateAlarmBanner(activeAlarmRooms, highestActiveStage) {
@@ -604,6 +663,10 @@ class SedonaAudioEngine {
                 banner.className = 'bg-amber-950 border-2 border-amber-500 text-white p-3 mx-1 shadow-md rounded-lg';
                 if (bannerTitle) bannerTitle.textContent = '⚠️ 1ST ALARM: UPCOMING CHECKOUT REMINDER (15 MINUTES)';
                 if (bannerIcon) bannerIcon.textContent = '⏱';
+            } else if (activeAlarmRooms.some(room => room.isOpenTime)) {
+                banner.className = 'bg-teal-950 border border-teal-600 text-white p-3 mx-1 shadow rounded-lg';
+                if (bannerTitle) bannerTitle.textContent = '🔔 OPEN TIME — BASE PERIOD & HOURLY REMINDERS';
+                if (bannerIcon) bannerIcon.textContent = '🔔';
             } else {
                 // All active rooms are either snoozed or silenced
                 banner.className = 'bg-slate-900 border-2 border-slate-600 text-slate-200 p-3 mx-1 shadow rounded-lg';
@@ -630,7 +693,7 @@ class SedonaAudioEngine {
                 appendText(details, 'span', 'text-slate-400', '•');
                 appendText(details, 'span', 'font-bold font-mono text-purple-900', room.timeSummary);
                 if (room.isSnoozed || room.isSilenced) {
-                    appendText(details, 'span', `${room.isSnoozed ? 'text-amber-400' : 'text-slate-400'} font-bold ml-1.5`, room.isSnoozed ? '[Snoozed]' : '[Silenced]');
+                    appendText(details, 'span', `${room.isSnoozed ? 'text-amber-400' : 'text-slate-400'} font-bold ml-1.5`, room.isSnoozed ? '[Snoozed]' : room.isOpenTime ? '[Acknowledged]' : '[Silenced]');
                 }
 
                 const actions = appendText(row, 'div', 'flex items-center space-x-1.5 ml-auto', '');
@@ -641,10 +704,10 @@ class SedonaAudioEngine {
                     button.addEventListener('click', action);
                 };
                 if (room.folioId) {
-                    addButton('+ Xtend', 'px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] rounded shadow-sm', 'Extend Stay (Recalibrates Alarms)', () => window.openXtendModal(room.folioId, room.roomNumber));
+                    addButton(room.isOpenTime ? 'Convert Package' : '+ Xtend', 'px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] rounded shadow-sm', 'Change Stay Package', () => window.openXtendModal(room.folioId, room.roomNumber));
                 }
-                addButton('Snooze 5m', 'px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded shadow-sm', 'Snooze for 5 minutes', () => this.snoozeRoom(room.roomId, 5));
-                addButton('Silence', 'px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white font-bold text-[10px] rounded shadow-sm', 'Silence this alarm stage', () => this.silenceStage(room.roomId, room.checkoutTimeStr, room.currentStage));
+                if (!room.isOpenTime) addButton('Snooze 5m', 'px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded shadow-sm', 'Snooze for 5 minutes', () => this.snoozeRoom(room.roomId, 5));
+                addButton(room.isOpenTime ? 'Acknowledge' : 'Silence', 'px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white font-bold text-[10px] rounded shadow-sm', 'Acknowledge this alarm stage', () => this.silenceStage(room.roomId, room.checkoutTimeStr, room.currentStage));
                 if (room.folioId) {
                     const checkout = appendText(actions, 'a', 'px-2.5 py-1 bg-rose-700 hover:bg-rose-800 text-white font-black text-[11px] rounded shadow-sm', 'Checkout');
                     checkout.href = `/checkout/${encodeURIComponent(room.folioId)}`;

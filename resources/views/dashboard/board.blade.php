@@ -177,7 +177,7 @@
                         ? 'bg-[#F3E8FF] text-[#5B21B6] border-[#DDD6FE]'
                         : ($tierKey === 'premium' ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-amber-100 text-amber-800 border-amber-200');
                     $folio = $room->activeFolio;
-                    $isLate = $folio && $folio->expected_checkout_at && now()->gt($folio->expected_checkout_at);
+                    $isLate = $folio && $folio->isOverdue();
                 @endphp
 
                 @if($room->is_staff_quarters)
@@ -199,7 +199,7 @@
                     </div>
                 @elseif($room->status === 'occupied' && $folio)
                     <a href="{{ route('checkout.process', $folio->id) }}" class="bg-[#fdf1f1] rounded-xl border border-rose-300 p-3 flex flex-col justify-between min-h-[168px] hover:shadow-md hover:border-rose-400 transition"
-                       data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-folio-id="{{ $folio->id }}" data-checkout-time="{{ $folio->expected_checkout_at->toIso8601String() }}" data-guest-name="{{ $folio->guest->name ?? 'Guest' }}" data-status="occupied">
+                       data-room-id="{{ $room->id }}" data-room-number="{{ $room->number }}" data-folio-id="{{ $folio->id }}" data-checkout-time="{{ $folio->expected_checkout_at->toIso8601String() }}" data-guest-name="{{ $folio->guest->name ?? 'Guest' }}" data-status="occupied" data-stay-mode="{{ $folio->isOpenTime() ? 'open' : 'fixed' }}" data-checkin-time="{{ $folio->checked_in_at->toIso8601String() }}" data-base-rate="{{ $folio->room_charge }}">
                         <div class="flex items-start justify-between gap-1">
                             <div>
                                 <div class="font-mono font-black text-2xl text-slate-900 leading-none">{{ $room->number }}</div>
@@ -208,7 +208,7 @@
                             <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded border {{ $tierPill }}">{{ $tierLabel }}</span>
                         </div>
                         <div class="text-xs font-bold text-slate-900 mt-2 truncate">{{ $folio->guest->name ?? 'Guest' }}</div>
-                        <div class="text-[9px] tracking-widest text-slate-500 uppercase">{{ $room->type }} • until {{ $folio->expected_checkout_at->format('h:i A') }}</div>
+                        <div class="text-[9px] tracking-widest text-slate-500 uppercase">{{ $room->type }} • {{ $folio->isOpenTime() ? 'Open Time · 3H base' : 'until '.$folio->expected_checkout_at->format('h:i A') }}</div>
                         <div class="stay-countdown-timer font-mono text-[10px] mt-1.5"></div>
                         <div class="mt-2 pt-2 border-t border-rose-200/70 flex items-center justify-between">
                             <span class="text-[10px] font-mono font-black text-rose-700 uppercase">● Occupied</span>

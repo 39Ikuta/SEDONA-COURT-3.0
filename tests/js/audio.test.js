@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
 test('alarm recordings are valid, distinct and loud PCM audio with the intended repeat lengths', () => {
-    const recordings = [['stay-warning.wav', 8], ['checkout-due.wav', 4], ['grace-ended.wav', 2]];
+    const recordings = [['stay-warning.wav', 8], ['checkout-due.wav', 4], ['grace-ended.wav', 2], ['open-time.wav', 2]];
     const buffers = recordings.map(([file, seconds]) => {
         const buffer = readFileSync(new URL(`../../public/sounds/${file}`, import.meta.url));
         assert.equal(buffer.toString('ascii', 0, 4), 'RIFF');
@@ -21,17 +21,17 @@ test('alarm recordings are valid, distinct and loud PCM audio with the intended 
         assert.ok(peak >= 0.89 && peak < 1, `${file} must be audible without clipping`);
         return buffer;
     });
-    assert.equal(new Set(buffers.map(buffer => buffer.toString('base64'))).size, 3);
+    assert.equal(new Set(buffers.map(buffer => buffer.toString('base64'))).size, 4);
 });
 
-function audioHarness(play = () => Promise.resolve()) {
+function audioHarness(play = () => Promise.resolve(), clock = () => Date.now(), stored = new Map()) {
     const intervals = new Map();
     const oscillators = [];
     const gains = [];
     const listeners = {};
     class Audio {
-        constructor(src) { this.src = src; this.paused = true; this.currentTime = 0; }
-        play() { this.paused = false; return play(this); }
+        constructor(src) { this.src = src; this.paused = true; this.currentTime = 0; this.playCalls = 0; }
+        play() { this.paused = false; this.playCalls++; return play(this); }
         pause() { this.paused = true; }
     }
     class AudioContext {
@@ -53,16 +53,127 @@ function audioHarness(play = () => Promise.resolve()) {
         }
     }
     const window = { AudioContext, addEventListener(name, action) { listeners[name] = action; }, removeEventListener() {} };
-    const storage = { getItem() { return null; }, setItem() {} };
-    const document = { getElementById() { return null; } };
+    const storage = { getItem(key) { return stored.get(key) ?? null; }, setItem(key, value) { stored.set(key, value); } };
+    const document = { getElementById() { return null; }, querySelectorAll() { return []; } };
     const source = readFileSync(new URL('../../resources/js/audio.js', import.meta.url), 'utf8').split('// Global instance')[0];
     runInNewContext(`${source}\nwindow.Engine = SedonaAudioEngine;`, {
         window, document, Audio, localStorage: storage, sessionStorage: storage, console,
+        Date: class extends Date { static now() { return clock(); } },
         setInterval(action, delay) { const id = intervals.size + 1; intervals.set(id, { action, delay }); return id; },
         clearInterval(id) { intervals.delete(id); },
     });
-    return { engine: new window.Engine(), intervals, oscillators, gains, listeners };
+    return { engine: new window.Engine(), intervals, oscillators, gains, listeners, document, stored };
 }
+
+function openTimeRow() {
+    const attributes = { 'data-room-id': '8', 'data-room-number': '8', 'data-folio-id': '123', 'data-stay-mode': 'open',
+        'data-checkin-time': '2026-10-16T10:00:00+08:00', 'data-checkout-time': '2026-10-16T13:00:00+08:00', 'data-base-rate': '395.00' };
+    const timer = { textContent: '' };
+    return { attributes, timer, getAttribute: name => attributes[name], querySelector: () => timer };
+}
+
+test('Open Time rings briefly at base reminders then once hourly without changing billing grace', () => {
+    let clock = Date.parse('2026-10-16T12:44:59+08:00');
+    const { engine, document } = audioHarness(undefined, () => clock);
+    const row = openTimeRow();
+    document.querySelectorAll = () => [row];
+    const audio = engine.alarmAudios.open;
+    engine.evaluateAlarms();
+    assert.equal(audio.playCalls, 0);
+    for (const [time, count] of [['12:45:00', 1], ['13:00:00', 2], ['13:15:00', 3], ['14:15:00', 4], ['15:15:00', 5]]) {
+        clock = Date.parse(`2026-10-16T${time}+08:00`);
+        engine.evaluateAlarms();
+        assert.equal(audio.playCalls, count);
+        assert.equal(audio.loop, false);
+        clock += 2000;
+        engine.evaluateAlarms();
+        assert.equal(audio.playCalls, count);
+        clock += 4000;
+        engine.evaluateAlarms();
+        assert.equal(engine.currentSoundMode, null);
+        assert.equal(audio.paused, true);
+    }
+    assert.match(row.timer.textContent, /OPEN TIME.*5h 15m used.*₱785\.00/);
+    for (const audio of [engine.alarmAudios.stage1, engine.alarmAudios.stage2, engine.alarmAudios.stage3]) assert.equal(audio.playCalls, 0);
+});
+
+test('Open Time reminders survive refresh, respect mute and acknowledgment, and stop at checkout', () => {
+    let clock = Date.parse('2026-10-16T12:45:00+08:00');
+    const first = audioHarness(undefined, () => clock);
+    const row = openTimeRow();
+    first.document.querySelectorAll = () => [row];
+    first.engine.evaluateAlarms();
+    const reloaded = audioHarness(undefined, () => clock, first.stored);
+    reloaded.document.querySelectorAll = () => [row];
+    reloaded.engine.evaluateAlarms();
+    assert.equal(reloaded.engine.alarmAudios.open.playCalls, 0);
+    clock = Date.parse('2026-10-16T13:00:00+08:00');
+    reloaded.engine.toggleMute();
+    reloaded.engine.evaluateAlarms();
+    assert.equal(reloaded.engine.alarmAudios.open.playCalls, 0);
+    reloaded.engine.toggleMute();
+    reloaded.engine.evaluateAlarms();
+    assert.equal(reloaded.engine.alarmAudios.open.playCalls, 1);
+    reloaded.engine.silenceStage('8', row.attributes['data-checkout-time'], 'open-123-2');
+    assert.equal(reloaded.engine.currentSoundMode, null);
+    clock = Date.parse('2026-10-16T13:15:00+08:00');
+    reloaded.engine.evaluateAlarms();
+    assert.equal(reloaded.engine.alarmAudios.open.playCalls, 2);
+    assert.match(row.timer.textContent, /₱395\.00/);
+    clock += 1000;
+    reloaded.engine.evaluateAlarms();
+    assert.match(row.timer.textContent, /₱525\.00/);
+    reloaded.document.querySelectorAll = () => [];
+    reloaded.engine.evaluateAlarms();
+    assert.equal(reloaded.engine.currentSoundMode, null);
+    assert.equal(reloaded.engine.alarmAudios.open.paused, true);
+});
+
+test('Open Time converts back to normal package alarms and fixed alarms retain priority', () => {
+    let clock = Date.parse('2026-10-16T12:45:00+08:00');
+    const { engine, document } = audioHarness(undefined, () => clock);
+    const row = openTimeRow();
+    document.querySelectorAll = () => [row];
+    engine.evaluateAlarms();
+    row.attributes['data-stay-mode'] = 'fixed';
+    row.attributes['data-checkout-time'] = '2026-10-16T22:00:00+08:00';
+    engine.evaluateAlarms();
+    assert.equal(engine.currentSoundMode, null);
+    clock = Date.parse('2026-10-16T21:45:00+08:00');
+    engine.evaluateAlarms();
+    assert.equal(engine.currentSoundMode, 'stage1');
+    const open = openTimeRow();
+    open.attributes['data-room-id'] = '9';
+    document.querySelectorAll = () => [row, open];
+    engine.evaluateAlarms();
+    assert.equal(engine.currentSoundMode, 'stage1');
+});
+
+test('Open Time synthesized fallback plays its own tune once and schedules no looping interval', async () => {
+    const { engine, intervals, oscillators } = audioHarness(() => Promise.reject(new Error('Media unavailable')));
+    engine.setSoundMode('open');
+    await Promise.resolve();
+    assert.deepEqual(oscillators.map(oscillator => oscillator.frequencyValue), [659.25, 783.99, 1046.5, 783.99, 659.25]);
+    assert.equal(intervals.size, 0);
+});
+
+test('acknowledging a previous guest cannot silence or duplicate the next stay reminder in the same room', () => {
+    let clock = Date.parse('2026-10-16T12:45:00+08:00');
+    const { engine, document } = audioHarness(undefined, () => clock);
+    const row = openTimeRow();
+    document.querySelectorAll = () => [row];
+    engine.evaluateAlarms();
+    engine.silenceStage('8', row.attributes['data-checkout-time'], 'open-123-1');
+    row.attributes['data-folio-id'] = '456';
+    engine.evaluateAlarms();
+    assert.equal(engine.alarmAudios.open.playCalls, 1);
+    clock += 6000;
+    engine.evaluateAlarms();
+    assert.equal(engine.alarmAudios.open.playCalls, 2);
+    clock += 6000;
+    engine.evaluateAlarms();
+    assert.equal(engine.alarmAudios.open.playCalls, 2);
+});
 
 test('each checkout stage uses its own looping tune at full application volume', () => {
     const { engine } = audioHarness();

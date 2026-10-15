@@ -59,7 +59,7 @@ class BookingController extends Controller
             $departure = $room->getCheckoutForTier($validated['rate_tier'], $arrival);
 
             if ($room->folios()->where('status', 'active')->where('checked_in_at', '<', $departure)
-                ->where('expected_checkout_at', '>', $arrival)->exists()) {
+                ->where(fn ($query) => $query->where('stay_mode', 'open')->orWhere('expected_checkout_at', '>', $arrival))->exists()) {
                 throw ValidationException::withMessages(['arrival_at' => 'This room is occupied during the selected date/time.']);
             }
 
