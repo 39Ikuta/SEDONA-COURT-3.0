@@ -151,6 +151,7 @@
     <div class="thermal-container" id="printable-receipt">
         <div class="text-center" style="font-size: 10px; font-weight: bold;">{{ isset($receiptCopy) ? ($receiptCopy === 1 ? 'FIRST RECORDED PRINT REQUEST' : 'COPY — PRINT REQUEST #'.$receiptCopy) : 'PREVIEW — NO PRINT REQUEST RECORDED' }}</div>
         <div class="text-center">
+            <img class="receipt-logo" src="{{ asset('billing-sedona-logo.png') }}" alt="Sedona Court logo">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
             <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
             <div style="font-size: 9px;">TEL: +63 (0939) 905-2816</div>
@@ -360,7 +361,6 @@
         </div>
 
         <div class="receipt-branding" id="receipt-branding">
-            <img class="receipt-logo" src="{{ asset('billing-sedona-logo.png') }}" alt="Sedona Court logo">
             <img class="receipt-facebook-qr" src="{{ asset('billing-facebook-qr.svg') }}" alt="QR code for the Sedona Court Facebook page">
             <div class="font-bold">Scan to visit our Facebook page</div>
         </div>

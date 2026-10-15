@@ -4,26 +4,120 @@
  * 
  * 3-Stage Alarm Timeline:
  *  - 1st Alarm: 15 minutes before checkout (T - 15m) -> Ascending Harmonious Warning Chime
- *  - 2nd Alarm: Actual checkout time (T)              -> Continuous Digital Clock Alarm (alarm.mp3)
- *  - 3rd Alarm: 15 minutes after checkout (T + 15m)   -> High-Urgency Critical Overtime Alarm
+ *  - 2nd Alarm: Actual checkout time (T)              -> Repeating Two-Pitch Checkout Tune
+ *  - 3rd Alarm: 15 minutes after checkout (T + 15m)   -> Fast Alternating Grace-Ended Tune
  * 
  * Dynamic Recalibration on Xtend (Stay Extension):
  *  - Keyed by roomId/folioId + checkoutTime timestamp.
  *  - When extended, any active alarm immediately halts and all 3 stages reschedule to the new time.
  */
 
+const STAY_ALARM_TUNES = {
+    "stage1": {
+        "file": "stay-warning.wav",
+        "repeatMs": 8000,
+        "volume": 0.8,
+        "notes": [
+            [
+                523.25,
+                0,
+                0.22
+            ],
+            [
+                659.25,
+                0.26,
+                0.22
+            ],
+            [
+                783.99,
+                0.52,
+                0.22
+            ],
+            [
+                1046.5,
+                0.78,
+                0.5
+            ]
+        ]
+    },
+    "stage2": {
+        "file": "checkout-due.wav",
+        "repeatMs": 4000,
+        "volume": 0.85,
+        "notes": [
+            [
+                783.99,
+                0,
+                0.18
+            ],
+            [
+                523.25,
+                0.24,
+                0.35
+            ],
+            [
+                783.99,
+                0.7,
+                0.18
+            ],
+            [
+                523.25,
+                0.94,
+                0.45
+            ]
+        ]
+    },
+    "stage3": {
+        "file": "grace-ended.wav",
+        "repeatMs": 2000,
+        "volume": 0.9,
+        "notes": [
+            [
+                1318.51,
+                0,
+                0.14
+            ],
+            [
+                1046.5,
+                0.2,
+                0.14
+            ],
+            [
+                1318.51,
+                0.4,
+                0.14
+            ],
+            [
+                1046.5,
+                0.6,
+                0.14
+            ],
+            [
+                1318.51,
+                0.8,
+                0.14
+            ],
+            [
+                1046.5,
+                1,
+                0.14
+            ]
+        ]
+    }
+};
+
 class SedonaAudioEngine {
     constructor() {
         this.audioCtx = null;
         this.isMuted = localStorage.getItem('sedona_audio_muted') === 'true';
-        this.alarmAudio = null;
+        this.alarmAudios = {};
+        this.activeAlarmOscillators = new Set();
+        this.soundGeneration = 0;
         this.kitchenAudio = null;
 
         // Current active sound mode: null | 'stage1' | 'stage2' | 'stage3'
         this.currentSoundMode = null;
         this.synthAlarmInterval = null;
-        this.stage1ChimeInterval = null;
-        this.stage1LastChimeTime = 0;
 
         // Snoozed rooms: { [roomId]: timestampUntil }
         this.snoozedRooms = {};
@@ -52,36 +146,43 @@ class SedonaAudioEngine {
     }
 
     initHtml5Audio() {
+        for (const [mode, tune] of Object.entries(STAY_ALARM_TUNES)) {
+            try {
+                const audio = new Audio('/sounds/' + tune.file);
+                audio.loop = true;
+                audio.volume = 1;
+                audio.preload = 'auto';
+                this.alarmAudios[mode] = audio;
+            } catch (error) {
+                console.warn('[AudioEngine] Alarm audio unavailable:', error);
+            }
+        }
         try {
-            this.alarmAudio = new Audio('/sounds/alarm.mp3');
-            this.alarmAudio.loop = true;
-            this.alarmAudio.volume = 0.85;
-
             this.kitchenAudio = new Audio('/sounds/kitchen-chime.mp3');
             this.kitchenAudio.volume = 0.9;
-        } catch (e) {
-            console.warn('[AudioEngine] HTML5 Audio init error:', e);
+        } catch (error) {
+            console.warn('[AudioEngine] Kitchen audio unavailable:', error);
         }
     }
 
     initAutoUnlock() {
         const unlock = () => {
             this.ensureAudioContext();
-            if (this.audioCtx && this.audioCtx.state === 'suspended') {
-                this.audioCtx.resume();
-            }
-            // Prime HTML5 audio on first user touch/click
-            if (this.alarmAudio) {
-                this.alarmAudio.play().then(() => {
-                    this.alarmAudio.pause();
-                    this.alarmAudio.currentTime = 0;
-                }).catch(() => {});
+            for (const [mode, audio] of Object.entries(this.alarmAudios)) {
+                if (this.currentSoundMode === mode) continue;
+                audio.muted = true;
+                audio.play().then(() => {
+                    if (this.currentSoundMode !== mode) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    }
+                    audio.muted = false;
+                }).catch(() => { audio.muted = false; });
             }
             window.removeEventListener('click', unlock);
             window.removeEventListener('keydown', unlock);
             window.removeEventListener('touchstart', unlock);
         };
-
         window.addEventListener('click', unlock, { once: true });
         window.addEventListener('keydown', unlock, { once: true });
         window.addEventListener('touchstart', unlock, { once: true });
@@ -164,25 +265,21 @@ class SedonaAudioEngine {
      */
     stopAllAlarms() {
         this.currentSoundMode = null;
-
-        // Stop HTML5 audio
-        if (this.alarmAudio) {
+        this.soundGeneration++;
+        for (const audio of Object.values(this.alarmAudios)) {
             try {
-                this.alarmAudio.pause();
-                this.alarmAudio.currentTime = 0;
-            } catch (e) {}
+                audio.pause();
+                audio.currentTime = 0;
+            } catch (error) {}
         }
-
-        // Stop Synthesizer intervals
-        if (this.synthAlarmInterval) {
+        if (this.synthAlarmInterval !== null) {
             clearInterval(this.synthAlarmInterval);
             this.synthAlarmInterval = null;
         }
-
-        if (this.stage1ChimeInterval) {
-            clearInterval(this.stage1ChimeInterval);
-            this.stage1ChimeInterval = null;
+        for (const oscillator of this.activeAlarmOscillators) {
+            try { oscillator.stop(); } catch (error) {}
         }
+        this.activeAlarmOscillators.clear();
     }
 
     // Alias for legacy buttons
@@ -190,147 +287,72 @@ class SedonaAudioEngine {
         this.stopAllAlarms();
     }
 
-    /**
-     * Stage 1: 15-Minute Warning Chime
-     * Plays ascending melodic chime [C5, E5, G5, C6] and gently repeats every 30s
-     */
     startStage1Sound() {
-        this.playStage1Chime();
-        this.stage1ChimeInterval = setInterval(() => {
-            if (this.currentSoundMode === 'stage1' && !this.isMuted) {
-                this.playStage1Chime();
-            }
-        }, 30000);
+        this.startAlarmTune('stage1');
     }
 
-    playStage1Chime() {
-        if (this.isMuted) return;
-        this.ensureAudioContext();
-
-        try {
-            if (this.audioCtx) {
-                // Melodious C-Major Chime: C5 (523.25Hz), E5 (659.25Hz), G5 (783.99Hz), C6 (1046.50Hz)
-                const tones = [523.25, 659.25, 783.99, 1046.50];
-                const now = this.audioCtx.currentTime;
-
-                tones.forEach((freq, idx) => {
-                    const osc = this.audioCtx.createOscillator();
-                    const gain = this.audioCtx.createGain();
-
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(freq, now + idx * 0.15);
-
-                    gain.gain.setValueAtTime(0, now + idx * 0.15);
-                    gain.gain.linearRampToValueAtTime(0.28, now + idx * 0.15 + 0.04);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.15 + 0.55);
-
-                    osc.connect(gain);
-                    gain.connect(this.audioCtx.destination);
-
-                    osc.start(now + idx * 0.15);
-                    osc.stop(now + idx * 0.15 + 0.56);
-                });
-            }
-        } catch (e) {
-            console.warn('[AudioEngine] Stage 1 chime error:', e);
-        }
-    }
-
-    /**
-     * Stage 2: Actual Checkout Time Alarm
-     * Continuous digital clock alarm (alarm.mp3) with Web Audio fallback
-     */
     startStage2Sound() {
-        if (this.alarmAudio) {
-            this.alarmAudio.currentTime = 0;
-            const playPromise = this.alarmAudio.play();
-            if (playPromise !== undefined) {
-                playPromise.catch((err) => {
-                    console.warn('[AudioEngine] Stage 2 HTML5 alarm blocked, using Web Audio synth:', err);
-                    this.startStandardSynthAlarm();
-                });
-            }
-        } else {
-            this.startStandardSynthAlarm();
-        }
+        this.startAlarmTune('stage2');
     }
 
-    startStandardSynthAlarm() {
-        if (this.synthAlarmInterval) return;
-        this.ensureAudioContext();
-
-        const triggerBeep = () => {
-            if (this.isMuted || !this.currentSoundMode) return;
-            try {
-                this.ensureAudioContext();
-                if (!this.audioCtx) return;
-
-                const osc = this.audioCtx.createOscillator();
-                const gain = this.audioCtx.createGain();
-
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(880, this.audioCtx.currentTime); // A5
-                osc.frequency.exponentialRampToValueAtTime(1200, this.audioCtx.currentTime + 0.12);
-
-                gain.gain.setValueAtTime(0.3, this.audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + 0.15);
-
-                osc.connect(gain);
-                gain.connect(this.audioCtx.destination);
-
-                osc.start();
-                osc.stop(this.audioCtx.currentTime + 0.16);
-            } catch (e) {}
-        };
-
-        triggerBeep();
-        this.synthAlarmInterval = setInterval(triggerBeep, 450);
-    }
-
-    /**
-     * Stage 3: 15-Minute Overtime Critical Alarm
-     * Dual-layer: Continuous digital alarm + High-frequency urgent double-beep synth
-     */
     startStage3Sound() {
-        // Also run HTML5 alarm in background if available
-        if (this.alarmAudio) {
-            this.alarmAudio.currentTime = 0;
-            this.alarmAudio.play().catch(() => {});
-        }
+        this.startAlarmTune('stage3');
+    }
 
-        if (this.synthAlarmInterval) return;
-        this.ensureAudioContext();
-
-        let toggle = false;
-        const triggerUrgentTone = () => {
-            if (this.isMuted || !this.currentSoundMode) return;
-            try {
-                this.ensureAudioContext();
-                if (!this.audioCtx) return;
-
-                const now = this.audioCtx.currentTime;
-                const osc = this.audioCtx.createOscillator();
-                const gain = this.audioCtx.createGain();
-
-                // Rapid alternating dual-pitch urgent pulses: 1046Hz (C6) and 1318Hz (E6)
-                osc.type = 'sawtooth';
-                const freq = toggle ? 1318.51 : 1046.50;
-                toggle = !toggle;
-
-                osc.frequency.setValueAtTime(freq, now);
-                gain.gain.setValueAtTime(0.35, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
-
-                osc.connect(gain);
-                gain.connect(this.audioCtx.destination);
-
-                osc.start(now);
-                osc.stop(now + 0.13);
-            } catch (e) {}
+    startAlarmTune(mode) {
+        const generation = this.soundGeneration;
+        const fallback = () => {
+            if (this.currentSoundMode === mode && this.soundGeneration === generation && !this.isMuted) {
+                this.startSynthTune(mode);
+            }
         };
+        const audio = this.alarmAudios[mode];
+        if (!audio) {
+            fallback();
+            return;
+        }
+        try {
+            audio.currentTime = 0;
+            audio.muted = false;
+            const playback = audio.play();
+            if (playback) playback.catch(fallback);
+        } catch (error) {
+            fallback();
+        }
+    }
 
-        triggerUrgentTone();
-        this.synthAlarmInterval = setInterval(triggerUrgentTone, 220); // Fast 220ms cadence
+    startSynthTune(mode) {
+        if (this.synthAlarmInterval !== null) return;
+        const tune = STAY_ALARM_TUNES[mode];
+        const playTune = () => {
+            if (this.isMuted || this.currentSoundMode !== mode) return;
+            this.ensureAudioContext();
+            if (!this.audioCtx) return;
+            const now = this.audioCtx.currentTime;
+            for (const [frequency, offset, duration] of tune.notes) {
+                const oscillator = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+                const start = now + offset;
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(frequency, start);
+                gain.gain.setValueAtTime(0, start);
+                gain.gain.linearRampToValueAtTime(tune.volume, start + 0.015);
+                gain.gain.setValueAtTime(tune.volume, start + duration - 0.04);
+                gain.gain.linearRampToValueAtTime(0, start + duration);
+                oscillator.connect(gain);
+                gain.connect(this.audioCtx.destination);
+                this.activeAlarmOscillators.add(oscillator);
+                oscillator.onended = () => {
+                    oscillator.disconnect();
+                    gain.disconnect();
+                    this.activeAlarmOscillators.delete(oscillator);
+                };
+                oscillator.start(start);
+                oscillator.stop(start + duration);
+            }
+        };
+        playTune();
+        this.synthAlarmInterval = setInterval(playTune, tune.repeatMs);
     }
 
     /* -------------------------------------------------------------------------

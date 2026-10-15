@@ -61,7 +61,7 @@ class CheckoutReceiptSequenceTest extends TestCase
         $this->get(route('transactions.index', ['q' => $second->transaction_id]))->assertViewHas('transactions', fn ($rows): bool => $rows->total() === 1);
     }
 
-    public function test_guest_receipt_shows_only_scti_and_includes_the_logo_and_facebook_qr_at_the_bottom(): void
+    public function test_guest_receipt_shows_only_scti_with_the_logo_at_the_top_and_facebook_qr_at_the_bottom(): void
     {
         $actor = $this->cashier();
         $folio = $this->checkIn($actor);
@@ -70,7 +70,7 @@ class CheckoutReceiptSequenceTest extends TestCase
         $this->get(route('folios.receipt', $folio))->assertSee('SCTI-20261015-001')
             ->assertDontSee($folio->transaction_id)->assertDontSee('Stay ref:')
             ->assertSee('billing-sedona-logo.png')->assertSee('billing-facebook-qr.svg')
-            ->assertSeeInOrder(['Attending Cashier:', 'id="receipt-branding"', 'Sedona Court logo', 'QR code for the Sedona Court Facebook page'], false);
+            ->assertSeeInOrder(['Sedona Court logo', 'Receipt #:', 'Attending Cashier:', 'id="receipt-branding"', 'QR code for the Sedona Court Facebook page'], false);
     }
 
     public function test_checkout_retries_and_reprints_keep_one_receipt_number(): void
