@@ -10,7 +10,7 @@
 <body class="login-page">
     <aside class="login-brand-panel">
         <div class="app-brand">
-            <span class="brand-mark">S</span>
+            <img class="login-brand-logo" src="{{ asset('billing-sedona-logo.png') }}" alt="Sedona Court logo" width="52" height="68">
             <span><span class="brand-name">SEDONA COURT</span><span class="brand-caption">TRAVELLERS INN</span></span>
         </div>
         <div class="login-intro">

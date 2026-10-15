@@ -214,7 +214,7 @@
 .login-brand-panel { padding: clamp(32px, 5vw, 76px); background: #4a1b32; color: #fff; display: flex; flex-direction: column; justify-content: space-between; gap: 70px; overflow: hidden; position: relative; }
 .login-brand-panel::after { content: ''; position: absolute; width: 500px; height: 500px; border: 1px solid #ffffff09; border-radius: 50%; right: -250px; top: 150px; box-shadow: 0 0 0 80px #ffffff03, 0 0 0 160px #ffffff02; pointer-events: none; }
 .login-brand-panel .app-brand { color: #fff; padding: 0; }
-.login-brand-panel .brand-mark { background: #ffffff12; border: 1px solid #ffffff1f; box-shadow: none; }
+.login-brand-logo { width: 52px; height: 68px; object-fit: contain; flex-shrink: 0; }
 .login-brand-panel .brand-caption { color: #c4a4b5; }
 .login-intro { max-width: 370px; position: relative; z-index: 1; }
 .login-eyebrow { color: #c19aae; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
