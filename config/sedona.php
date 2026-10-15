@@ -4,7 +4,7 @@ $continuousShiftEnabled = env('SEDONA_CONTINUOUS_SHIFT_ENABLED', true);
 
 return [
     'hotel_name' => 'SEDONA COURT TRAVELLERS INN',
-    'midnight_promo_enabled' => env('SEDONA_MIDNIGHT_PROMO_ENABLED', false),
+    'midnight_promo_enabled' => env('SEDONA_MIDNIGHT_PROMO_ENABLED', true),
     'seed_password' => env('SEDONA_SEED_PASSWORD'),
     'continuous_shift_enabled' => $continuousShiftEnabled,
     'shift_handover_enabled' => ! $continuousShiftEnabled && env('SEDONA_SHIFT_HANDOVER_ENABLED', false),
