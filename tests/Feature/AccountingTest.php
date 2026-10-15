@@ -118,7 +118,7 @@ class AccountingTest extends TestCase
         $receiptResp = $this->actingAs($cashier)->get(route('folios.receipt', $folio->id));
         $receiptResp->assertStatus(200);
         $receiptResp->assertSee('DRAFT BILL - PAYMENT PENDING');
-        $receiptResp->assertSee($folio->transaction_id);
+        $receiptResp->assertSee('Not issued')->assertDontSee($folio->transaction_id);
 
         // 2. Security Deposit Slip
         $depositResp = $this->actingAs($cashier)->get(route('folios.deposit_slip', $folio->id));

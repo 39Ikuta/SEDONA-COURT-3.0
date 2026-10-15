@@ -31,6 +31,26 @@
             box-sizing: border-box;
         }
         .text-center { text-align: center; }
+        .receipt-branding {
+            margin-top: 10px;
+            break-inside: avoid;
+            page-break-inside: avoid;
+            text-align: center;
+            font-size: 9px;
+        }
+        .receipt-logo {
+            display: block;
+            width: 22mm;
+            height: auto;
+            margin: 0 auto 6px;
+            filter: brightness(0);
+        }
+        .receipt-facebook-qr {
+            display: block;
+            width: 32mm;
+            height: 32mm;
+            margin: 6px auto 2px;
+        }
         .text-right { text-align: right; }
         .text-left { text-align: left; }
         .font-bold { font-weight: bold; }
@@ -143,10 +163,6 @@
         <div class="row">
             <span>Receipt #:</span>
             <span class="font-bold">{{ $folio->receiptReference() ?? 'Not issued' }}</span>
-        </div>
-        <div class="row">
-            <span>Stay ref:</span>
-            <span class="font-bold">{{ $folio->transaction_id }}</span>
         </div>
         <div class="row">
             <span>Room Assigned:</span>
@@ -341,6 +357,12 @@
             <div style="margin-top: 4px; font-weight: bold;">Thank you for choosing {{ config('sedona.hotel_name') }}!</div>
             <div style="font-size: 9px; color: #444;">Please present your Exit Gate Pass upon vehicle departure.</div>
             <div style="margin-top: 6px; font-size: 8px; color: #666;">"This document serves as an Official Settlement Slip"</div>
+        </div>
+
+        <div class="receipt-branding" id="receipt-branding">
+            <img class="receipt-logo" src="{{ asset('billing-sedona-logo.png') }}" alt="Sedona Court logo">
+            <img class="receipt-facebook-qr" src="{{ asset('billing-facebook-qr.svg') }}" alt="QR code for the Sedona Court Facebook page">
+            <div class="font-bold">Scan to visit our Facebook page</div>
         </div>
 
         <div class="no-print" style="margin-top: 16px; border-top: 1px dashed #ccc; padding-top: 12px; text-align: center;">
