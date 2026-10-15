@@ -42,7 +42,7 @@
     background: #fff; border-right: 1px solid #ebe7ed; padding: 30px 16px 18px;
 }
 .app-brand { display: flex; align-items: center; gap: 12px; padding: 0 10px; color: #421a2b; text-decoration: none; }
-.brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; color: #fff; background: #572039; font-size: 24px; font-weight: 800; box-shadow: 0 5px 12px #421a2b1c; }
+.brand-mark { width: 42px; height: 54px; flex-shrink: 0; object-fit: contain; padding: 6px; border-radius: 14px; background: #572039; box-shadow: 0 5px 12px #421a2b1c; }
 .brand-name { display: block; font-size: 21px; font-weight: 800; letter-spacing: -.6px; line-height: 1.2; }
 .brand-caption { display: block; margin-top: 3px; color: #77687e; font-size: 10px; font-weight: 700; letter-spacing: 1.9px; text-transform: uppercase; }
 .nav-section-label { color: #77687e; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; padding: 0 14px 10px; }
