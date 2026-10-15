@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Folio;
 use App\Services\AuthenticationAuditService;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
@@ -16,13 +17,13 @@ class TransactionHistoryController extends Controller
         $filters = $this->filters($request);
         $propertyAccess = $this->propertyAccess($request);
         $entries = DB::table('payment_entries as p')->leftJoin('folios as f', 'f.id', '=', 'p.folio_id')->leftJoin('orders as o', 'o.id', '=', 'p.order_id')
-            ->selectRaw("p.id, p.user_id, p.shift_id, p.kind, p.cash_amount, p.gcash_amount, p.gcash_reference, p.posted_at, COALESCE(f.transaction_id, o.transaction_id, 'Unknown source') as reference, 'journal' as origin");
+            ->selectRaw("p.id, p.user_id, p.shift_id, p.kind, p.cash_amount, p.gcash_amount, p.gcash_reference, p.posted_at, COALESCE(f.receipt_number, f.transaction_id, o.transaction_id, 'Unknown source') as reference, 'journal' as origin");
         $legacyOrders = DB::table('orders as o')->where('o.type', 'walkin_pos')
             ->whereNotExists(fn (Builder $q) => $q->selectRaw('1')->from('payment_entries as p')->whereColumn('p.order_id', 'o.id')->where('p.kind', 'pos_sale'))
             ->selectRaw("o.id, o.user_id, o.shift_id, 'pos_sale' as kind, CASE WHEN o.payment_method = 'cash' THEN o.cash_tendered - o.change_due ELSE 0 END as cash_amount, o.gcash_amount, o.gcash_reference, o.created_at as posted_at, o.transaction_id as reference, 'legacy_order' as origin");
         $legacyFolios = DB::table('folios as f')->where('f.status', 'checked_out')->where('f.force_checkout', false)
             ->whereNotExists(fn (Builder $q) => $q->selectRaw('1')->from('payment_entries as p')->whereColumn('p.folio_id', 'f.id')->where('p.kind', 'settlement'))
-            ->selectRaw("f.id, COALESCE(f.checked_out_by, f.user_id) as user_id, NULL as shift_id, 'settlement' as kind, CASE WHEN f.payment_method IN ('cash', 'split') THEN f.cash_tendered - f.change_due ELSE 0 END as cash_amount, CASE WHEN f.payment_method IN ('gcash', 'split') THEN f.gcash_amount ELSE 0 END as gcash_amount, f.gcash_reference, f.checked_out_at as posted_at, f.transaction_id as reference, 'legacy_folio' as origin");
+            ->selectRaw("f.id, COALESCE(f.checked_out_by, f.user_id) as user_id, NULL as shift_id, 'settlement' as kind, CASE WHEN f.payment_method IN ('cash', 'split') THEN f.cash_tendered - f.change_due ELSE 0 END as cash_amount, CASE WHEN f.payment_method IN ('gcash', 'split') THEN f.gcash_amount ELSE 0 END as gcash_amount, f.gcash_reference, f.checked_out_at as posted_at, COALESCE(f.receipt_number, f.transaction_id) as reference, 'legacy_folio' as origin");
         $expenses = DB::table('expenses as e')->whereIn('e.status', ['approved', 'pending_review', 'rejected_paid'])->where('e.payment_source', 'cash_drawer')
             ->selectRaw("e.id, e.user_id, e.shift_id, 'drawer_expense' as kind, -e.amount as cash_amount, 0 as gcash_amount, NULL as gcash_reference, e.created_at as posted_at, e.description as reference, 'expense' as origin");
         $movements = DB::table('cash_movements as c')
@@ -40,7 +41,8 @@ class TransactionHistoryController extends Controller
         }
         if (! empty($filters['q'])) {
             $search = '%'.$filters['q'].'%';
-            $query->where(fn (Builder $q) => $q->where('t.reference', 'like', $search)->orWhere('t.gcash_reference', 'like', $search));
+            $query->where(fn (Builder $q) => $q->where('t.reference', 'like', $search)->orWhere('t.gcash_reference', 'like', $search)
+                ->orWhereIn('t.reference', Folio::select('receipt_number')->where('transaction_id', 'like', $search)->whereNotNull('receipt_number')));
         }
         $transactions = $query->orderByDesc('t.posted_at')->orderByDesc('t.id')->orderBy('t.origin')->paginate(30)->withQueryString();
         $refundLinks = DB::table('payment_refund_allocations')->whereIn('refund_entry_id', $transactions->getCollection()->where('origin', 'journal')->pluck('id'))->get()->groupBy('refund_entry_id');

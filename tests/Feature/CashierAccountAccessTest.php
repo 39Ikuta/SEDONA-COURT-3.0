@@ -29,7 +29,7 @@ class CashierAccountAccessTest extends TestCase
         @$document->loadHTML($response->getContent());
         $links = (new DOMXPath($document))->query('//nav[@aria-label="Primary"]//a/@href');
         $urls = array_map(fn ($link): string => $link->nodeValue, iterator_to_array($links));
-        foreach (['dashboard', 'checkins.index', 'bookings.index', 'inventory.index', 'approvals.index'] as $page) {
+        foreach (['dashboard', 'receipts.index', 'bookings.index', 'inventory.index', 'approvals.index'] as $page) {
             $this->assertContains(route($page), $urls);
         }
         foreach (['pos.index', 'shifts.index', 'transactions.index'] as $page) {
@@ -47,7 +47,7 @@ class CashierAccountAccessTest extends TestCase
         $this->assertNotEmpty($cashiers);
         foreach ($cashiers as $cashier) {
             $this->actingAs($cashier);
-            foreach (['dashboard', 'checkins.index', 'pos.index', 'bookings.index', 'inventory.index', 'shifts.index', 'transactions.index', 'transactions.audit', 'approvals.index'] as $page) {
+            foreach (['dashboard', 'receipts.index', 'checkins.index', 'pos.index', 'bookings.index', 'inventory.index', 'shifts.index', 'transactions.index', 'transactions.audit', 'approvals.index'] as $page) {
                 $this->get(route($page))->assertOk();
             }
             foreach (['admin.users.index', 'admin.pricing.index', 'admin.discounts.index', 'admin.check-in-times.index', 'admin.login-history.index',

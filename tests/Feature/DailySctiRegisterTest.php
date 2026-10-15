@@ -39,10 +39,10 @@ class DailySctiRegisterTest extends TestCase
                 'room_id' => $room->id, 'headcount' => 2, 'rate_tier' => '3h'])->assertRedirect()->assertSessionHasNoErrors();
         }
 
-        $this->assertSame(['SCTI-998997', 'SCTI-20261014-001', 'SCTI-20261014-002'], Folio::orderBy('id')->pluck('transaction_id')->all());
+        $this->assertSame(['SCTI-998997', 'STAY-20261014-001', 'STAY-20261014-002'], Folio::orderBy('id')->pluck('transaction_id')->all());
         $this->assertSame('SCTI-998997', $legacy->fresh()->transaction_id);
         $this->assertDatabaseHas('document_sequences', ['name' => 'scti', 'last_number' => 998997]);
-        $this->assertDatabaseHas('document_sequences', ['name' => 'scti:20261014', 'last_number' => 2]);
+        $this->assertDatabaseHas('document_sequences', ['name' => 'stay:20261014', 'last_number' => 2]);
     }
 
     public function test_daily_number_restarts_at_manila_midnight_even_when_server_timezone_is_utc(): void
@@ -50,21 +50,21 @@ class DailySctiRegisterTest extends TestCase
         config(['app.timezone' => 'UTC']);
         $this->travelTo(CarbonImmutable::parse('2026-10-14 15:59:59', 'UTC'));
 
-        $this->assertSame('SCTI-20261014-001', Folio::generateTransactionId());
+        $this->assertSame('STAY-20261014-001', Folio::generateTransactionId());
         $this->travelTo(CarbonImmutable::parse('2026-10-14 16:00:00', 'UTC'));
-        $this->assertSame('SCTI-20261015-001', Folio::generateTransactionId());
-        $this->assertSame('SCTI-20261015-002', Folio::generateTransactionId());
-        $this->assertDatabaseHas('document_sequences', ['name' => 'scti:20261014', 'last_number' => 1]);
+        $this->assertSame('STAY-20261015-001', Folio::generateTransactionId());
+        $this->assertSame('STAY-20261015-002', Folio::generateTransactionId());
+        $this->assertDatabaseHas('document_sequences', ['name' => 'stay:20261014', 'last_number' => 1]);
     }
 
     public function test_daily_counter_does_not_wrap_after_999_or_reuse_an_existing_reference(): void
     {
         $actor = $this->actor();
-        $this->folio($actor, 'SCTI-20261014-001');
-        $this->assertSame('SCTI-20261014-002', Folio::generateTransactionId());
-        DB::table('document_sequences')->where('name', 'scti:20261014')->update(['last_number' => 999]);
+        $this->folio($actor, 'STAY-20261014-001');
+        $this->assertSame('STAY-20261014-002', Folio::generateTransactionId());
+        DB::table('document_sequences')->where('name', 'stay:20261014')->update(['last_number' => 999]);
 
-        $this->assertSame('SCTI-20261014-1000', Folio::generateTransactionId());
+        $this->assertSame('STAY-20261014-1000', Folio::generateTransactionId());
     }
 
     public function test_retry_on_the_next_day_returns_the_original_stay_and_keeps_the_new_day_at_001(): void
@@ -78,8 +78,8 @@ class DailySctiRegisterTest extends TestCase
         $this->post(route('checkin.store'), $payload)->assertRedirect()->assertSessionHasNoErrors();
 
         $this->assertDatabaseCount('folios', 1);
-        $this->assertDatabaseHas('folios', ['transaction_id' => 'SCTI-20261014-001']);
-        $this->assertSame('SCTI-20261015-001', Folio::generateTransactionId());
+        $this->assertDatabaseHas('folios', ['transaction_id' => 'STAY-20261014-001']);
+        $this->assertSame('STAY-20261015-001', Folio::generateTransactionId());
     }
 
     #[TestWith(['cashier'])]
@@ -95,14 +95,14 @@ class DailySctiRegisterTest extends TestCase
         $legacy = $this->folio($actor, 'SCTI-998997', headcount: 1);
         $staff = $this->folio($actor, 'STAFF-12-TEST', headcount: 9);
         $staff->room->update(['is_staff_quarters' => true]);
-        $tomorrow = $this->folio($actor, 'SCTI-20261015-001', headcount: 8);
+        $tomorrow = $this->folio($actor, 'STAY-20261015-001', headcount: 8);
         PaymentEntry::create(['folio_id' => $active->id, 'user_id' => $actor->id, 'kind' => 'deposit', 'cash_amount' => 100, 'posted_at' => now()]);
         PaymentEntry::create(['folio_id' => $active->id, 'user_id' => $actor->id, 'kind' => 'deposit_refund', 'cash_amount' => 100, 'posted_at' => now()]);
 
         $response = $this->actingAs($actor)->get(route('checkins.index', ['date' => '2026-10-14']))->assertOk();
 
         $response->assertViewHas('counts', ['registered' => 4, 'stays' => 3, 'guests' => 6, 'cancelled' => 1])
-            ->assertViewHas('lastNumber', 3)->assertSee('SCTI-20261014-001')->assertSee('Cancelled')
+            ->assertViewHas('lastNumber', 3)->assertSee('STAY-20261014-001')->assertSee('Cancelled')
             ->assertSee($legacy->transaction_id)->assertDontSee($staff->transaction_id)->assertDontSee($tomorrow->transaction_id);
         $this->assertSame([1, 2, 3, null], $response->viewData('folios')->getCollection()->map(fn (Folio $folio): ?int => $folio->dailySequenceNumber())->all());
     }
@@ -117,9 +117,9 @@ class DailySctiRegisterTest extends TestCase
         $folio->update(['status' => 'checked_out', 'checked_out_at' => now()]);
 
         $this->actingAs($actor)->get(route('checkins.index', ['date' => '2026-10-14']))->assertOk()
-            ->assertSee('SCTI-20261014-001')->assertSee('10/13/2026 11:50 PM')->assertViewHas('counts', ['registered' => 1, 'stays' => 1, 'guests' => 1, 'cancelled' => 0]);
+            ->assertSee('STAY-20261014-001')->assertSee('10/13/2026 11:50 PM')->assertViewHas('counts', ['registered' => 1, 'stays' => 1, 'guests' => 1, 'cancelled' => 0]);
         $this->get(route('checkins.index', ['date' => '2026-10-15']))->assertOk()->assertViewHas('counts', ['registered' => 0, 'stays' => 0, 'guests' => 0, 'cancelled' => 0]);
-        $this->assertSame('SCTI-20261014-001', $folio->fresh()->transaction_id);
+        $this->assertSame('STAY-20261014-001', $folio->fresh()->transaction_id);
     }
 
     public function test_pagination_keeps_whole_day_totals_and_the_selected_date(): void
@@ -133,7 +133,7 @@ class DailySctiRegisterTest extends TestCase
         $response = $this->actingAs($actor)->get(route('checkins.index', ['date' => '2026-10-14', 'page' => 2]))->assertOk();
 
         $response->assertViewHas('counts', ['registered' => 35, 'stays' => 35, 'guests' => 35, 'cancelled' => 0])
-            ->assertSee('SCTI-20261014-031')->assertSee('SCTI-20261014-035')->assertDontSee('SCTI-20261014-001');
+            ->assertSee('STAY-20261014-031')->assertSee('STAY-20261014-035')->assertDontSee('STAY-20261014-001');
         $this->assertCount(5, $response->viewData('folios')->items());
         $this->assertStringContainsString('date=2026-10-14', $response->viewData('folios')->url(1));
     }

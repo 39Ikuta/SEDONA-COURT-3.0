@@ -56,6 +56,7 @@ class TransactionResetTest extends TestCase
     public function test_reset_backs_up_everything_clears_history_and_preserves_master_data_and_numbering(): void
     {
         $this->populateHistory();
+        DB::table('document_sequences')->insert(['name' => 'scti:20261014', 'last_number' => 25]);
         PosItem::firstOrFail()->update(['stock_quantity' => 47, 'price' => 161]);
         Room::where('number', '13')->update(['status' => 'maintenance']);
         Room::where('is_staff_quarters', true)->update(['status' => 'occupied']);
@@ -91,7 +92,8 @@ class TransactionResetTest extends TestCase
         $this->assertDatabaseCount('audit_logs', 1);
         $this->assertDatabaseHas('audit_logs', ['event' => 'database.transactions_reset']);
         $this->assertSame([], DB::select('PRAGMA foreign_key_check'));
-        $this->assertSame('SCTI-20261014-002', Folio::generateTransactionId());
+        $this->assertSame('STAY-20261014-002', Folio::generateTransactionId());
+        $this->assertDatabaseHas('document_sequences', ['name' => 'scti:20261014', 'last_number' => 25]);
 
         $backup = new PDO('sqlite:'.$this->backupPath);
         $this->assertSame('ok', $backup->query('PRAGMA integrity_check')->fetchColumn());
@@ -139,7 +141,7 @@ class TransactionResetTest extends TestCase
         $this->assertDatabaseHas('folios', ['id' => $this->folio->id, 'status' => 'active']);
         $this->assertDatabaseHas('guests', ['id' => $this->folio->guest_id, 'name' => 'Reset guest']);
         $this->assertDatabaseHas('rooms', ['id' => $this->folio->room_id, 'status' => 'occupied']);
-        $this->assertDatabaseHas('document_sequences', ['name' => 'scti:20261014', 'last_number' => 1]);
+        $this->assertDatabaseHas('document_sequences', ['name' => 'stay:20261014', 'last_number' => 1]);
         $this->assertDatabaseMissing('audit_logs', ['event' => 'database.transactions_reset']);
         $this->assertFileExists($this->backupPath);
     }

@@ -152,6 +152,7 @@ class CheckInController extends Controller
                 'force_checkout' => false, 'force_reason' => null, 'force_by' => null, 'loss_slip_reference' => null,
             ]);
             $locked->save();
+            $locked->issueReceipt();
             $this->postEntry($locked, 'settlement', ($cash - $change) / 100, $gcash / 100, $request);
             $locked->room->update(['status' => 'available']);
             if (! empty($data['customer_name'])) {

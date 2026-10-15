@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\BillingService;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,7 +13,7 @@ class Folio extends Model
 {
     protected $fillable = [
         'room_id', 'guest_id', 'user_id', 'booking_id',
-        'transaction_id', 'rate_tier',
+        'transaction_id', 'receipt_number', 'receipt_issued_at', 'rate_tier',
         'checked_in_at', 'expected_checkout_at', 'checked_out_at',
         'status',
         'extra_persons', 'extra_bedding', 'extra_towels', 'extra_hours',
@@ -34,6 +35,7 @@ class Folio extends Model
         'checked_in_at' => 'datetime',
         'expected_checkout_at' => 'datetime',
         'checked_out_at' => 'datetime',
+        'receipt_issued_at' => 'datetime',
         'deposit_collected_at' => 'datetime',
         'deposit_refunded_at' => 'datetime',
         'senior_pwd_discount' => 'boolean',
@@ -134,20 +136,51 @@ class Folio extends Model
     }
 
     /**
-     * Allocate a daily SCTI-YYYYMMDD-NNN reference in the stay transaction.
+     * Allocate a stay reference independently of the checkout receipt sequence.
      */
     public static function generateTransactionId(): string
     {
-        return DB::transaction(function (): string {
-            $date = now()->setTimezone('Asia/Manila')->format('Ymd');
-            $sequenceName = 'scti:'.$date;
+        return self::allocateDailyReference('stay', 'STAY', 'transaction_id', now());
+    }
+
+    /**
+     * Issue the receipt inside the same transaction that settles the stay.
+     */
+    public function issueReceipt(): void
+    {
+        $locked = DB::transaction(function (): self {
+            $folio = self::whereKey($this->id)->lockForUpdate()->firstOrFail();
+            abort_unless($folio->status === 'checked_out' && $folio->checked_out_at !== null && ! $folio->room->is_staff_quarters, 409, 'Complete guest checkout before issuing a receipt.');
+            if ($folio->receipt_number === null) {
+                $issuedAt = now();
+                $folio->fill([
+                    'receipt_number' => self::allocateDailyReference('scti', 'SCTI', 'receipt_number', $issuedAt),
+                    'receipt_issued_at' => $issuedAt,
+                ])->save();
+            }
+
+            return $folio;
+        }, 3);
+        $this->setRawAttributes($locked->getAttributes(), true);
+    }
+
+    public function receiptReference(): ?string
+    {
+        return $this->receipt_number ?? ($this->status === 'checked_out' && str_starts_with($this->transaction_id ?? '', 'SCTI-') ? $this->transaction_id : null);
+    }
+
+    private static function allocateDailyReference(string $namespace, string $prefix, string $column, CarbonInterface $at): string
+    {
+        return DB::transaction(function () use ($namespace, $prefix, $column, $at): string {
+            $date = $at->copy()->setTimezone('Asia/Manila')->format('Ymd');
+            $sequenceName = $namespace.':'.$date;
             DB::table('document_sequences')->insertOrIgnore(['name' => $sequenceName, 'last_number' => 0]);
             $sequence = DB::table('document_sequences')->where('name', $sequenceName)->lockForUpdate()->first();
             $number = (int) $sequence->last_number;
             do {
                 $number++;
-                $id = 'SCTI-'.$date.'-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT);
-            } while (self::where('transaction_id', $id)->exists());
+                $id = $prefix.'-'.$date.'-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT);
+            } while (self::where($column, $id)->orWhere('transaction_id', $id)->exists());
             DB::table('document_sequences')->where('name', $sequenceName)->update(['last_number' => $number]);
 
             return $id;
@@ -156,6 +189,6 @@ class Folio extends Model
 
     public function dailySequenceNumber(): ?int
     {
-        return preg_match('/^SCTI-\d{8}-(\d+)$/D', $this->transaction_id ?? '', $match) ? (int) $match[1] : null;
+        return preg_match('/^(?:STAY|SCTI)-\d{8}-(\d+)$/D', $this->transaction_id ?? '', $match) ? (int) $match[1] : null;
     }
 }

@@ -75,6 +75,7 @@ class FinancialPostingService
         ]);
         $this->audit->record($request, 'payment.'.$kind, $source, [
             'transaction_id' => $source->transaction_id,
+            'receipt_number' => $source instanceof Folio ? $source->receipt_number : null,
             'payment_entry_id' => $entry->id, 'operation_key' => $entry->operation_key,
             'shift_id' => $entry->shift_id, 'cash_amount' => $entry->cash_amount,
             'gcash_amount' => $entry->gcash_amount, 'gcash_reference' => $entry->gcash_reference,

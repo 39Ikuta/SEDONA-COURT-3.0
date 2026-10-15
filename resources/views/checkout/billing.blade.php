@@ -160,6 +160,12 @@
             <span>Folio Ref:</span>
             <span class="font-bold">{{ $folio->transaction_id }}</span>
         </div>
+        @if($folio->receiptReference())
+        <div class="row">
+            <span>Receipt #:</span>
+            <span class="font-bold">{{ $folio->receiptReference() }}</span>
+        </div>
+        @endif
         <div class="row">
             <span>Room Number:</span>
             <span class="font-bold">ROOM {{ $folio->room->number ?? 'N/A' }} ({{ $folio->room->type ?? '' }})</span>

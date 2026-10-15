@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Settlement Receipt - {{ $folio->transaction_id }}</title>
+    <title>Settlement Receipt - {{ $folio->receiptReference() ?? 'Not issued' }}</title>
     <style>
         @page {
             size: 80mm auto;
@@ -141,7 +141,11 @@
         <div class="divider"></div>
 
         <div class="row">
-            <span>Folio #:</span>
+            <span>Receipt #:</span>
+            <span class="font-bold">{{ $folio->receiptReference() ?? 'Not issued' }}</span>
+        </div>
+        <div class="row">
+            <span>Stay ref:</span>
             <span class="font-bold">{{ $folio->transaction_id }}</span>
         </div>
         <div class="row">
@@ -320,16 +324,18 @@
 
         <div class="double-divider"></div>
 
+        @if($folio->receiptReference())
         <!-- Scannable Code 128 Barcode -->
         <div style="text-align: center; margin-top: 10px;">
             <div style="height: 36px; width: 85%; margin: 0 auto;">
-                {!! \App\Services\BarcodeService::renderSvg($folio->transaction_id, 36) !!}
+                {!! \App\Services\BarcodeService::renderSvg($folio->receiptReference(), 36) !!}
             </div>
             <div style="font-size: 9px; letter-spacing: 3px; font-weight: bold; margin-top: 3px;">
-                *{{ $folio->transaction_id }}*
+                *{{ $folio->receiptReference() }}*
             </div>
         </div>
 
+        @endif
         <div class="text-center" style="font-size: 10px; margin-top: 10px;">
             <div>Attending Cashier: <strong>{{ $folio->checkedOutBy->name ?? $folio->cashier->name ?? 'Front Desk Staff' }} // FD-01</strong></div>
             <div style="margin-top: 4px; font-weight: bold;">Thank you for choosing {{ config('sedona.hotel_name') }}!</div>

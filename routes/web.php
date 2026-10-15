@@ -57,6 +57,7 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('permission:view_dashboard|view_kds|view_kiosk')->name('dashboard');
     Route::middleware('permission:manage_folios')->group(function () {
         Route::get('/check-ins', [DailyCheckInController::class, 'index'])->name('checkins.index');
+        Route::get('/receipts', [DailyCheckInController::class, 'receipts'])->name('receipts.index');
         Route::post('/rooms/{room}/status', [RoomController::class, 'updateStatus'])->name('rooms.status');
         Route::post('/rooms/{room}/toggle-maintenance', [RoomController::class, 'toggleMaintenance'])->name('rooms.maintenance.toggle');
 

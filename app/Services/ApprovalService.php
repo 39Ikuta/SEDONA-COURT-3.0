@@ -155,6 +155,7 @@ class ApprovalService
                 }
                 $source->fill($bill['attributes']);
                 $source->fill(['status' => 'checked_out', 'checked_out_at' => now(), 'checked_out_by' => $request->user()->id, 'force_checkout' => true, 'force_reason' => $approval->reason, 'force_by' => $approval->reviewed_by, 'force_requested_by' => $approval->requested_by, 'loss_slip_reference' => 'FCE-'.str_pad((string) $source->id, 6, '0', STR_PAD_LEFT), 'cash_tendered' => 0, 'gcash_amount' => 0, 'gcash_reference' => null, 'change_due' => 0])->save();
+                $source->issueReceipt();
                 $this->posting->post($request, $source, 'write_off', 0, 0, null, $approval->id);
                 $source->room->update(['status' => 'available']);
             }

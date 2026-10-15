@@ -26,7 +26,7 @@
             ['label' => 'Kitchen TV', 'route' => 'kitchen.tv', 'patterns' => ['kitchen.tv'], 'new_tab' => true, 'icon' => 'M3 4h18v13H3z M8 21h8 M12 17v4'],
         ];
         if ($operator?->can('manage_folios')) {
-            array_splice($navigation, 1, 0, [['label' => 'Daily SCTI Register', 'route' => 'checkins.index', 'patterns' => ['checkins.*'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5']]);
+            array_splice($navigation, 1, 0, [['label' => 'Daily SCTI Register', 'route' => 'receipts.index', 'patterns' => ['receipts.*', 'checkins.*'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5']]);
         }
         if ($operator?->canAny(['manage_shifts', 'manage_folios', 'post_pos_sales'])) {
             $navigation[] = ['label' => 'Approvals & Tasks', 'route' => 'approvals.index', 'patterns' => ['approvals.*'], 'icon' => 'M5 3h14v18H5z M8 8l2 2 4-4'];
@@ -38,6 +38,7 @@
             'dashboard' => $operator?->canAny(['view_dashboard', 'view_kds', 'view_kiosk']),
             'bookings.index' => $operator?->can('manage_folios'),
             'checkins.index' => $operator?->can('manage_folios'),
+            'receipts.index' => $operator?->can('manage_folios'),
             'pos.index' => $operator?->can('post_pos_sales'),
             'shifts.index' => $operator?->can('manage_shifts'),
             'inventory.index' => $operator?->hasAnyRole(['cashier', 'front_desk', 'admin', 'owner', 'manager']),
