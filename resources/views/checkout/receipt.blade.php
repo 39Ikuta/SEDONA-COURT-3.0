@@ -10,9 +10,11 @@
             margin: 0;
         }
         body {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 11px;
-            line-height: 1.35;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.25;
             color: #000;
             background-color: #f5f5f0;
             margin: 0;
@@ -22,7 +24,7 @@
             align-items: center;
         }
         .thermal-container {
-            width: 76mm;
+            width: 72mm;
             max-width: 100%;
             background-color: #fff;
             border: 1px solid #ddd;
@@ -31,25 +33,12 @@
             box-sizing: border-box;
         }
         .text-center { text-align: center; }
-        .receipt-branding {
-            margin-top: 10px;
-            break-inside: avoid;
-            page-break-inside: avoid;
-            text-align: center;
-            font-size: 9px;
-        }
         .receipt-logo {
             display: block;
-            width: 22mm;
+            width: 12mm;
             height: auto;
-            margin: 0 auto 6px;
+            margin: 0 auto 3px;
             filter: brightness(0);
-        }
-        .receipt-facebook-qr {
-            display: block;
-            width: 32mm;
-            height: 32mm;
-            margin: 6px auto 2px;
         }
         .text-right { text-align: right; }
         .text-left { text-align: left; }
@@ -65,8 +54,11 @@
         .row {
             display: flex;
             justify-content: space-between;
+            gap: 6px;
             margin-bottom: 2px;
         }
+        .row > span:first-child { flex-shrink: 0; }
+        .row > span:last-child { text-align: right; overflow-wrap: anywhere; min-width: 0; }
         .receipt-table {
             width: 100%;
             border-collapse: collapse;
@@ -74,13 +66,13 @@
             margin: 4px 0;
         }
         .receipt-table th {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             padding: 4px 0;
             border-bottom: 1px dashed #000;
         }
         .receipt-table td {
-            font-size: 11px;
+            font-size: 12px;
             padding: 3px 0;
             vertical-align: top;
         }
@@ -127,8 +119,9 @@
             border-radius: 4px;
         }
         @media print {
-            body { background-color: #fff; padding: 0; }
-            .thermal-container { border: none; box-shadow: none; padding: 4px; width: 100%; }
+            body { background-color: #fff; padding: 0; display: block; }
+            .thermal-container { border: none; box-shadow: none; padding: 2mm 1mm; width: 72mm; max-width: 100%; margin: 0 auto; }
+            .thermal-container, .thermal-container * { color: #000 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             .no-print { display: none; }
         }
     </style>
@@ -153,8 +146,8 @@
         <div class="text-center">
             <img class="receipt-logo" src="{{ asset('billing-sedona-logo.png') }}" alt="Sedona Court logo">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
-            <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
-            <div style="font-size: 9px;">TEL: +63 (0939) 905-2816</div>
+            <div style="font-size: 10px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
+            <div style="font-size: 10px;">TEL: +63 (0939) 905-2816</div>
         </div>
 
         <div class="double-divider"></div>
@@ -179,11 +172,24 @@
         </div>
         <div class="row">
             <span>Check-Out:</span>
-            <span>{{ ($folio->checked_out_at ?? now())->format('m/d/Y h:i A') }}</span>
+            <span>{{ $checkOutTime->format('m/d/Y h:i A') }}</span>
         </div>
         <div class="row">
-            <span>Rate Stay Tier:</span>
-            <span>{{ strtoupper($folio->rate_tier) }} ({{ $folio->room ? $folio->room->getTierHours($folio->rate_tier) : 3 }} Hours)</span>
+            <span>Declared stay:</span>
+            <span class="font-bold">{{ $tierHours }} hours</span>
+        </div>
+        @if($xtendHours > 0)
+        <div class="row">
+            <span>Added extension:</span>
+            <span class="font-bold">+{{ $xtendHours }} {{ $xtendHours === 1 ? 'hour' : 'hours' }}</span>
+        </div>
+        @endif
+        @php
+            $usedMinutes = intdiv(max(0, $checkOutTime->getTimestamp() - $checkInTime->getTimestamp()), 60);
+        @endphp
+        <div class="row">
+            <span>Total time used:</span>
+            <span class="font-bold">{{ intdiv($usedMinutes, 60) }}h {{ $usedMinutes % 60 }}m</span>
         </div>
 
         <div class="divider"></div>
@@ -347,7 +353,7 @@
             <div style="height: 36px; width: 85%; margin: 0 auto;">
                 {!! \App\Services\BarcodeService::renderSvg($folio->receiptReference(), 36) !!}
             </div>
-            <div style="font-size: 9px; letter-spacing: 3px; font-weight: bold; margin-top: 3px;">
+            <div style="font-size: 10px; letter-spacing: 3px; font-weight: bold; margin-top: 3px;">
                 *{{ $folio->receiptReference() }}*
             </div>
         </div>
@@ -356,13 +362,8 @@
         <div class="text-center" style="font-size: 10px; margin-top: 10px;">
             <div>Attending Cashier: <strong>{{ $folio->checkedOutBy->name ?? $folio->cashier->name ?? 'Front Desk Staff' }} // FD-01</strong></div>
             <div style="margin-top: 4px; font-weight: bold;">Thank you for choosing {{ config('sedona.hotel_name') }}!</div>
-            <div style="font-size: 9px; color: #444;">Please present your Exit Gate Pass upon vehicle departure.</div>
-            <div style="margin-top: 6px; font-size: 8px; color: #666;">"This document serves as an Official Settlement Slip"</div>
-        </div>
-
-        <div class="receipt-branding" id="receipt-branding">
-            <img class="receipt-facebook-qr" src="{{ asset('billing-facebook-qr.svg') }}" alt="QR code for the Sedona Court Facebook page">
-            <div class="font-bold">Scan to visit our Facebook page</div>
+            <div style="font-size: 10px; color: #000;">Please present your Exit Gate Pass upon vehicle departure.</div>
+            <div style="margin-top: 6px; font-size: 10px; color: #000;">"This document serves as an Official Settlement Slip"</div>
         </div>
 
         <div class="no-print" style="margin-top: 16px; border-top: 1px dashed #ccc; padding-top: 12px; text-align: center;">

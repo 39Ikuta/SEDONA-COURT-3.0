@@ -10,9 +10,11 @@
             margin: 0;
         }
         body {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 11px;
-            line-height: 1.35;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.25;
             color: #000;
             background-color: #f5f5f0;
             margin: 0;
@@ -22,7 +24,7 @@
             align-items: center;
         }
         .thermal-container {
-            width: 76mm;
+            width: 72mm;
             max-width: 100%;
             background-color: #fff;
             border: 1px solid #ddd;
@@ -33,16 +35,10 @@
         .text-center { text-align: center; }
         .billing-logo {
             display: block;
-            width: 22mm;
+            width: 12mm;
             height: auto;
-            margin: 0 auto 6px;
+            margin: 0 auto 3px;
             filter: brightness(0);
-        }
-        .billing-facebook-qr {
-            display: block;
-            width: 32mm;
-            height: 32mm;
-            margin: 6px auto 2px;
         }
         .text-right { text-align: right; }
         .text-left { text-align: left; }
@@ -58,8 +54,11 @@
         .row {
             display: flex;
             justify-content: space-between;
+            gap: 6px;
             margin-bottom: 2px;
         }
+        .row > span:first-child { flex-shrink: 0; }
+        .row > span:last-child { text-align: right; overflow-wrap: anywhere; min-width: 0; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -71,13 +70,13 @@
             margin: 4px 0;
         }
         .receipt-table th {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             padding: 4px 0;
             border-bottom: 1px dashed #000;
         }
         .receipt-table td {
-            font-size: 11px;
+            font-size: 12px;
             padding: 3px 0;
             vertical-align: top;
         }
@@ -128,8 +127,9 @@
             border-radius: 4px;
         }
         @media print {
-            body { background-color: #fff; padding: 0; }
-            .thermal-container { border: none; box-shadow: none; padding: 4px; width: 100%; }
+            body { background-color: #fff; padding: 0; display: block; }
+            .thermal-container { border: none; box-shadow: none; padding: 2mm 1mm; width: 72mm; max-width: 100%; margin: 0 auto; }
+            .thermal-container, .thermal-container * { color: #000 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             .no-print { display: none; }
         }
     </style>
@@ -146,13 +146,13 @@
         <div class="text-center">
             <img class="billing-logo" src="{{ asset('billing-sedona-logo.png') }}" alt="Sedona Court logo">
             <div class="font-bold" style="font-size: 14px; letter-spacing: 1px;">{{ config('sedona.hotel_name') }}</div>
-            <div style="font-size: 9px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
-            <div style="font-size: 9px;">TEL: +63 (0939) 905-2816 &bull; TIN: 402-881-294-000</div>
+            <div style="font-size: 10px;">Doña Remedios Trinidad Hwy, San Rafael, Bulacan</div>
+            <div style="font-size: 10px;">TEL: +63 (0939) 905-2816 &bull; TIN: 402-881-294-000</div>
         </div>
 
         <div class="double-divider"></div>
         <div class="text-center font-bold" style="font-size: 11px;">STATEMENT OF ACCOUNT / GUEST FOLIO</div>
-        <div class="text-center" style="font-size: 8px; color: #444;">*** PRE-PRINT BILLING FOR ROOM DELIVERY ***</div>
+        <div class="text-center" style="font-size: 10px; color: #000;">*** PRE-PRINT BILLING FOR ROOM DELIVERY ***</div>
         <div class="divider"></div>
 
         <!-- Meta -->
@@ -187,12 +187,15 @@
             <span>{{ ($checkOutTime ?? now())->format('m/d/Y h:i A') }}</span>
         </div>
         <div class="row">
-            <span>Stay Tier:</span>
-            <span>{{ strtoupper($folio->rate_tier) }} ({{ $tierHours }} Hours)</span>
+            <span>Declared stay:</span>
+            <span class="font-bold">{{ $tierHours }} hours</span>
         </div>
+        @php
+            $usedMinutes = intdiv(max(0, $checkOutTime->getTimestamp() - $checkInTime->getTimestamp()), 60);
+        @endphp
         <div class="row">
-            <span>Actual Stay:</span>
-            <span class="font-bold">{{ $actualHoursDiff }} {{ \Illuminate\Support\Str::plural('Hour', $actualHoursDiff) }}</span>
+            <span>Total time used:</span>
+            <span class="font-bold">{{ intdiv($usedMinutes, 60) }}h {{ $usedMinutes % 60 }}m</span>
         </div>
         @if($excessHours > 0)
         <div class="row">
@@ -374,21 +377,17 @@
             <div style="height: 36px; width: 85%; margin: 0 auto;">
                 {!! \App\Services\BarcodeService::renderSvg($folio->transaction_id, 36) !!}
             </div>
-            <div style="font-size: 9px; letter-spacing: 3px; font-weight: bold; margin-top: 3px;">
+            <div style="font-size: 10px; letter-spacing: 3px; font-weight: bold; margin-top: 3px;">
                 *{{ $folio->transaction_id }}*
             </div>
         </div>
 
-        <div class="text-center" style="font-size: 9px; margin-top: 10px; color: #333;">
+        <div class="text-center" style="font-size: 10px; margin-top: 10px; color: #333;">
             <div>Please review charges before checkout.</div>
             <div>Settle your balance at Frontdesk Reception.</div>
-            <div style="margin-top: 4px; font-size: 8px; color: #666;">
+            <div style="margin-top: 4px; font-size: 10px; color: #000;">
                 "Interim Billing Folio &bull; {{ config('sedona.hotel_name') }}"
             </div>
-        </div>
-        <div class="text-center" style="margin-top: 8px; font-size: 9px;">
-            <img class="billing-facebook-qr" src="{{ asset('billing-facebook-qr.svg') }}" alt="QR code for the Sedona Court Facebook page">
-            <div class="font-bold">Scan to visit our Facebook page</div>
         </div>
     </div>
 

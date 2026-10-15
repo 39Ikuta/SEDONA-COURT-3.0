@@ -61,7 +61,7 @@ class CheckoutReceiptSequenceTest extends TestCase
         $this->get(route('transactions.index', ['q' => $second->transaction_id]))->assertViewHas('transactions', fn ($rows): bool => $rows->total() === 1);
     }
 
-    public function test_guest_receipt_shows_only_scti_with_the_logo_at_the_top_and_facebook_qr_at_the_bottom(): void
+    public function test_guest_receipt_shows_only_scti_with_the_logo_at_the_top_without_the_facebook_qr(): void
     {
         $actor = $this->cashier();
         $folio = $this->checkIn($actor);
@@ -69,8 +69,37 @@ class CheckoutReceiptSequenceTest extends TestCase
 
         $this->get(route('folios.receipt', $folio))->assertSee('SCTI-20261015-001')
             ->assertDontSee($folio->transaction_id)->assertDontSee('Stay ref:')
-            ->assertSee('billing-sedona-logo.png')->assertSee('billing-facebook-qr.svg')
-            ->assertSeeInOrder(['Sedona Court logo', 'Receipt #:', 'Attending Cashier:', 'id="receipt-branding"', 'QR code for the Sedona Court Facebook page'], false);
+            ->assertSee('billing-sedona-logo.png')->assertDontSee('billing-facebook-qr.svg')
+            ->assertDontSee('Scan to visit our Facebook page')
+            ->assertSeeInOrder(['Sedona Court logo', 'Receipt #:', 'Attending Cashier:'], false);
+        $this->get(route('folios.billing', $folio))->assertSee('billing-sedona-logo.png')
+            ->assertDontSee('billing-facebook-qr.svg')->assertDontSee('Scan to visit our Facebook page');
+    }
+
+    public function test_receipt_and_statement_show_declared_hours_and_exact_elapsed_time_after_an_overnight_stay(): void
+    {
+        $this->travelTo('2026-10-14 22:04:00');
+        $actor = $this->cashier();
+        $folio = $this->checkIn($actor);
+        $this->travelTo('2026-10-15 03:14:00');
+        $this->checkout($folio);
+        $this->travelTo('2026-10-16 12:00:00');
+
+        foreach (['folios.receipt', 'folios.billing'] as $route) {
+            $this->get(route($route, $folio))->assertSeeInOrder(['Declared stay:', '3 hours', 'Total time used:', '5h 10m'])
+                ->assertSee('260.00')->assertSee('655.00');
+        }
+    }
+
+    public function test_active_receipt_preview_separates_the_declared_package_from_extensions_and_elapsed_minutes(): void
+    {
+        $actor = $this->cashier();
+        $folio = $this->checkIn($actor);
+        $folio->update(['extra_hours' => 1, 'expected_checkout_at' => now()->addHours(4)]);
+        $this->travelTo('2026-10-15 12:10:59');
+
+        $this->get(route('folios.receipt', $folio))
+            ->assertSeeInOrder(['Declared stay:', '3 hours', 'Added extension:', '+1 hour', 'Total time used:', '0h 10m']);
     }
 
     public function test_checkout_retries_and_reprints_keep_one_receipt_number(): void

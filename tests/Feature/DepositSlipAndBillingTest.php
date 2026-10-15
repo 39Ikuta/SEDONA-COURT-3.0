@@ -107,7 +107,7 @@ class DepositSlipAndBillingTest extends TestCase
         $response->assertDontSee($newCheckIn->format('m/d/Y h:i A'));
         $response->assertSee($newExpectedOut->format('m/d/Y h:i A'));
         $response->assertSee('Check-Out:');
-        $response->assertSee('Actual Stay:');
+        $response->assertSee('Total time used:');
         $response->assertSee('Excess Overtime:');
         $response->assertSee('500.00');
         $response->assertSee('Less: Security Deposit:');
