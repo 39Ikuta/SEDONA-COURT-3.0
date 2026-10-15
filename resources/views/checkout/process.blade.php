@@ -140,7 +140,7 @@
                 <div class="space-y-2">
                     <div class="flex items-center">
                         <label class="w-44 font-bold text-slate-700 text-[11px]">BOOKED STAY:</label>
-                        <input type="text" value="{{ $tierHours }} Hours ({{ strtoupper($folio->rate_tier) }})" readonly tabindex="-1" style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" class="form-control-hms font-mono">
+                        <input type="text" value="{{ $folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' Hours ('.strtoupper($folio->rate_tier).')' }}" readonly tabindex="-1" style="pointer-events: none; background-color: #f1f5f9; user-select: none; border-color: #cbd5e1;" class="form-control-hms font-mono">
                     </div>
 
                     <div class="flex items-center">
@@ -449,7 +449,7 @@
     let currentRoomRate = {{ (float)$roomRate }};
     let tierHours = {{ (int)$tierHours }};
     let xtendHours = {{ (int)$xtendHours }};
-    let totalBookedHours = {{ (int)$totalBookedHours }};
+    let totalBookedHours = {{ (float)$totalBookedHours }};
     const overstayGraceMs = {{ max(0, (int) config('sedona.overstay_grace_minutes', 15)) }} * 60 * 1000;
     let checkOutTimestamp = new Date("{{ $checkOutTime->toIso8601String() }}").getTime();
     let updatingStayEstimate = false;
@@ -551,7 +551,7 @@
 
         const diffMs = Math.max(0, checkOutTimestamp - cInDate.getTime());
         const actualHoursDiff = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
-        const billableOverstayMs = Math.max(0, diffMs - totalBookedHours * 60 * 60 * 1000 - overstayGraceMs);
+        const billableOverstayMs = Math.max(0, diffMs - Math.round(totalBookedHours * 60 * 60 * 1000) - overstayGraceMs);
         const excessHours = Math.ceil(billableOverstayMs / (60 * 60 * 1000));
         addHoursRate = (xtendHours + excessHours) * addHourUnitPrice;
 

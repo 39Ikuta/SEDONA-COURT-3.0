@@ -60,7 +60,8 @@ class CheckInController extends Controller
                 throw ValidationException::withMessages(['rate_tier' => 'Midnight promo is temporarily unavailable. Select a regular stay package.']);
             }
             $checkedInAt = now();
-            $checkout = $checkedInAt->copy()->addHours($room->getTierHours($tier));
+            $this->stayRates->assertPromoArrival($tier, $checkedInAt);
+            $checkout = $room->getCheckoutForTier($tier, $checkedInAt);
             $this->stayRates->assertReservationAvailable($room, $checkedInAt, $checkout, $booking?->id);
             $guest = Guest::create([
                 'name' => $booking?->guest_name ?? ($data['guest_name'] ?? 'Guest Room '.$room->number),
@@ -171,7 +172,7 @@ class CheckInController extends Controller
         $extraHours = (int) $data['hours'];
         $this->posting->execute($request, 'folio.extend', $folio->id, $data, function () use ($request, $folio, $extraHours): array {
             [$locked] = $this->lockActive($folio);
-            $checkout = $locked->expected_checkout_at->copy()->addHours($extraHours);
+            $checkout = $locked->room->getCheckoutForTier($locked->rate_tier, $locked->checked_in_at, (int) $locked->extra_hours + $extraHours);
             $this->stayRates->assertReservationAvailable($locked->room, now(), $checkout, $locked->booking_id);
             $before = $locked->only(['extra_hours', 'expected_checkout_at', 'net_total']);
             $locked->extra_hours += $extraHours;
@@ -518,7 +519,7 @@ class CheckInController extends Controller
             if ($request->has('apply_deposit')) {
                 $preview->deposit_status = $request->boolean('apply_deposit') ? 'applied_to_bill' : 'not_applied';
             }
-            $preview->expected_checkout_at = $preview->checked_in_at->copy()->addHours($preview->room->getTierHours($preview->rate_tier) + $preview->extra_hours);
+            $preview->expected_checkout_at = $preview->room->getCheckoutForTier($preview->rate_tier, $preview->checked_in_at, (int) $preview->extra_hours);
             $at = isset($data['checked_out_at']) ? Carbon::parse($data['checked_out_at']) : null;
         }
         $bill = app(BillingService::class)->calculate($preview, $at);

@@ -130,7 +130,7 @@ class ReceiptTableFormattingTest extends TestCase
 
         $response->assertSee('receipt-table');
         $response->assertSee('Item / Charge');
-        $response->assertSee('Room Lodging Charge');
+        $response->assertSee('Room Base');
         $response->assertSee('Excess Hours');
         $response->assertSee('Porksilog');
 

@@ -92,7 +92,7 @@ class MidnightPromoDisabledTest extends TestCase
             $folio = Folio::where('room_id', $room->id)->sole();
             $this->assertSame('promo', $folio->rate_tier);
             $this->assertSame(number_format($rate, 2, '.', ''), $folio->room_charge);
-            $this->assertSame('2026-10-15 08:00:00', $folio->expected_checkout_at->toDateTimeString());
+            $this->assertSame('2026-10-15 06:00:00', $folio->expected_checkout_at->toDateTimeString());
         }
     }
 

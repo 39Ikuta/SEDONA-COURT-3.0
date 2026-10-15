@@ -233,6 +233,7 @@ class ApprovalAndCustodyTest extends TestCase
     public function test_admin_corrected_arrival_time_preserves_the_manila_hour_with_or_without_an_explicit_offset(bool $withOffset): void
     {
         $folio = $this->folio();
+        $folio->update(['rate_tier' => '12h']);
         $arrival = now()->subHours(2);
         $input = $withOffset ? $arrival->setTimezone('UTC')->toIso8601String() : $arrival->format('Y-m-d H:i:s');
         $this->actingAs($this->reviewer)->post('/admin/check-in-times/'.$folio->id, $this->key() + [

@@ -161,7 +161,7 @@
                         <option value="12h">12 Hours Stay</option>
                         <option value="24h" selected>24 Hours Stay</option>
                         @if(config('sedona.midnight_promo_enabled'))
-                            <option value="promo">Midnight Promo (12 hours)</option>
+                            <option value="promo">Midnight Promo (8 PM–6 AM)</option>
                         @endif
                     </select>
                 </div>

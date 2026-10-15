@@ -130,7 +130,7 @@ class AccountingTest extends TestCase
         $billingResp = $this->actingAs($cashier)->get(route('folios.billing', $folio->id));
         $billingResp->assertStatus(200);
         $billingResp->assertSee('STATEMENT OF ACCOUNT / GUEST FOLIO');
-        $billingResp->assertSee('Room Lodging Charge');
+        $billingResp->assertSee('Room Base');
 
         // 4. Kitchen Order Slip
         $orderSlipResp = $this->actingAs($cashier)->get(route('folios.orderslip', $folio->id));

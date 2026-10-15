@@ -262,6 +262,49 @@ class CancellationGraceTest extends TestCase
         $this->assertSame('2026-10-13 12:00:00', $folio->fresh()->checked_in_at->format('Y-m-d H:i:s'));
     }
 
+    #[TestWith(['3h'])]
+    #[TestWith(['4h'])]
+    #[TestWith(['6h'])]
+    public function test_short_stays_offer_and_apply_twelve_hour_conversion_with_discounts_and_add_ons(string $tier): void
+    {
+        $actor = $this->actor();
+        $folio = $this->folio($actor);
+        $folio->update(['rate_tier' => $tier, 'extra_hours' => 2, 'discount_type' => 'DC',
+            'pos_items' => [['name' => 'Meal', 'qty' => 1, 'price' => 150, 'subtotal' => 150]]]);
+        $this->actingAs($actor)->get(route('dashboard'))->assertViewHas('folioExtensionOptions', function (array $options) use ($folio): bool {
+            return $options[$folio->id]['conversions']['12h']['rate'] === 1195.0
+                && $options[$folio->id]['conversions']['12h']['checkout'] === '10/14/2026 12:00 AM';
+        });
+
+        $this->post(route('folios.convert', $folio), $this->key() + ['rate_tier' => '12h', 'reason' => 'Guest requested twelve-hour package.'])
+            ->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'rate_tier' => '12h', 'room_charge' => 1195,
+            'extra_hours' => 0, 'discount_amount' => 55, 'net_total' => 1290, 'expected_checkout_at' => '2026-10-14 00:00:00']);
+        $this->assertSame('Meal', $folio->fresh()->pos_items[0]['name']);
+        $this->actingAs($actor)->get(route('dashboard'))->assertViewHas('folioExtensionOptions', fn (array $options): bool => ! isset($options[$folio->id]['conversions']['12h']) && isset($options[$folio->id]['conversions']['24h']));
+        $this->assertDatabaseHas('audit_logs', ['event' => 'folio.package_converted', 'auditable_id' => $folio->id]);
+    }
+
+    #[TestWith(['3h'])]
+    #[TestWith(['4h'])]
+    #[TestWith(['6h'])]
+    #[TestWith(['promo'])]
+    public function test_short_stays_can_convert_directly_to_twenty_four_hours(string $tier): void
+    {
+        $actor = $this->actor();
+        $folio = $this->folio($actor);
+        $folio->update(['rate_tier' => $tier]);
+
+        $this->actingAs($actor)->get(route('dashboard'))->assertViewHas('folioExtensionOptions', fn (array $options): bool => isset($options[$folio->id]['conversions']['12h'], $options[$folio->id]['conversions']['24h']));
+        $this->post(route('folios.convert', $folio), $this->key() + ['rate_tier' => '24h', 'reason' => 'Guest requested a day package.'])
+            ->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'rate_tier' => '24h', 'room_charge' => 2100,
+            'expected_checkout_at' => '2026-10-14 12:00:00']);
+        $this->get(route('dashboard'))->assertViewHas('folioExtensionOptions', fn (array $options): bool => $options[$folio->id]['conversions'] === []);
+    }
+
     #[TestWith(['folios.receipt', false])]
     #[TestWith(['folios.receipt.print', true])]
     #[TestWith(['folios.gate_pass', false])]

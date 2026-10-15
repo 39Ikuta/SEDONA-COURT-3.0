@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -87,9 +88,24 @@ class Room extends Model
             '6h' => 6,
             '12h' => 12,
             '24h' => 24,
-            'promo' => 12,
+            'promo' => 10,
             default => 0,
         };
+    }
+
+    public function getCheckoutForTier(string $tier, CarbonInterface $arrival, int $extraHours = 0): CarbonInterface
+    {
+        if ($tier !== 'promo' || $this->is_staff_quarters) {
+            return $arrival->copy()->addHours($this->getTierHours($tier) + $extraHours);
+        }
+
+        $hotelArrival = $arrival->copy()->setTimezone('Asia/Manila');
+        $checkout = $hotelArrival->copy()->startOfDay()->setHour(6);
+        if ($hotelArrival->hour >= 6) {
+            $checkout = $checkout->addDay();
+        }
+
+        return $checkout->addHours($extraHours)->setTimezone($arrival->getTimezone());
     }
 
     // ── Scopes ──────────────────────────────────────────────────────

@@ -30,9 +30,17 @@ class StayRateService
         }
     }
 
+    public function assertPromoArrival(string $tier, CarbonInterface $arrival, string $field = 'rate_tier'): void
+    {
+        $hour = $arrival->copy()->setTimezone('Asia/Manila')->hour;
+        if ($tier === 'promo' && $hour >= 6 && $hour < 20) {
+            throw ValidationException::withMessages([$field => 'Midnight promo check-in is available from 8 PM until before 6 AM, with checkout at 6 AM.']);
+        }
+    }
+
     private function apply(Folio $folio, Room $room, string $tier, int $extraHours, Request $request, string $event): void
     {
-        $checkout = $folio->checked_in_at->copy()->addHours($room->getTierHours($tier) + $extraHours);
+        $checkout = $room->getCheckoutForTier($tier, $folio->checked_in_at, $extraHours);
         $this->assertReservationAvailable($room, now(), $checkout, $folio->booking_id);
         $before = $folio->only(['room_id', 'rate_tier', 'room_charge', 'extra_hours', 'expected_checkout_at', 'net_total']);
         $folio->room_id = $room->id;

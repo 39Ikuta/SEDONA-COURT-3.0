@@ -188,7 +188,7 @@
         </div>
         <div class="row">
             <span>Declared stay:</span>
-            <span class="font-bold">{{ $tierHours }} hours</span>
+            <span class="font-bold">{{ $folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' hours' }}</span>
         </div>
         @php
             $usedMinutes = intdiv(max(0, $checkOutTime->getTimestamp() - $checkInTime->getTimestamp()), 60);
@@ -226,7 +226,7 @@
             </thead>
             <tbody>
                 <tr>
-                    <td class="col-item">Room Lodging Charge ({{ strtoupper($folio->rate_tier) }})</td>
+                    <td class="col-item">{{ $folio->rate_tier === 'promo' ? 'Midnight Promo' : 'Room Base ('.strtoupper($folio->rate_tier).')' }}</td>
                     <td class="col-qty font-mono">1</td>
                     <td class="col-price font-mono">{{ number_format($roomRate, 2) }}</td>
                     <td class="col-total font-mono font-bold">{{ number_format($roomRate, 2) }}</td>
@@ -371,16 +371,6 @@
         @endif
 
         <div class="divider"></div>
-
-        <!-- Scannable Code 128 Barcode -->
-        <div style="text-align: center; margin-top: 8px;">
-            <div style="height: 36px; width: 85%; margin: 0 auto;">
-                {!! \App\Services\BarcodeService::renderSvg($folio->transaction_id, 36) !!}
-            </div>
-            <div style="font-size: 10px; letter-spacing: 3px; font-weight: bold; margin-top: 3px;">
-                *{{ $folio->transaction_id }}*
-            </div>
-        </div>
 
         <div class="text-center" style="font-size: 10px; margin-top: 10px; color: #333;">
             <div>Please review charges before checkout.</div>

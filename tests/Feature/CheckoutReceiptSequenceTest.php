@@ -61,7 +61,7 @@ class CheckoutReceiptSequenceTest extends TestCase
         $this->get(route('transactions.index', ['q' => $second->transaction_id]))->assertViewHas('transactions', fn ($rows): bool => $rows->total() === 1);
     }
 
-    public function test_guest_receipt_shows_only_scti_with_the_logo_at_the_top_without_the_facebook_qr(): void
+    public function test_guest_receipt_keeps_scti_and_the_top_logo_without_barcodes_or_facebook_qr(): void
     {
         $actor = $this->cashier();
         $folio = $this->checkIn($actor);
@@ -71,9 +71,11 @@ class CheckoutReceiptSequenceTest extends TestCase
             ->assertDontSee($folio->transaction_id)->assertDontSee('Stay ref:')
             ->assertSee('billing-sedona-logo.png')->assertDontSee('billing-facebook-qr.svg')
             ->assertDontSee('Scan to visit our Facebook page')
+            ->assertDontSee('<svg', false)
             ->assertSeeInOrder(['Sedona Court logo', 'Receipt #:', 'Attending Cashier:'], false);
         $this->get(route('folios.billing', $folio))->assertSee('billing-sedona-logo.png')
-            ->assertDontSee('billing-facebook-qr.svg')->assertDontSee('Scan to visit our Facebook page');
+            ->assertDontSee('billing-facebook-qr.svg')->assertDontSee('Scan to visit our Facebook page')
+            ->assertSee('SCTI-20261015-001')->assertDontSee('<svg', false);
     }
 
     public function test_receipt_and_statement_show_declared_hours_and_exact_elapsed_time_after_an_overnight_stay(): void

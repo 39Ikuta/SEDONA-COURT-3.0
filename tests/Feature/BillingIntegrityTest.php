@@ -369,9 +369,10 @@ class BillingIntegrityTest extends TestCase
         $this->get(route('folios.deposit_refund', $folio))->assertOk()->assertSee('Refund Operator')->assertSee('TOTAL DEPOSIT REFUNDED')->assertSee('REFUNDED &amp; CLEARED', false);
     }
 
-    public function test_promo_remains_twelve_hours_and_legacy_senior_flag_uses_fixed_table(): void
+    public function test_promo_ends_at_six_am_and_legacy_senior_flag_uses_fixed_table(): void
     {
-        $folio = $this->folio(['rate_tier' => 'promo', 'room_charge' => 995, 'checked_in_at' => now()->subHours(12)]);
+        $this->travelTo('2026-10-14 06:00:00');
+        $folio = $this->folio(['rate_tier' => 'promo', 'room_charge' => 995, 'checked_in_at' => '2026-10-13 20:00:00', 'expected_checkout_at' => now()]);
         $this->assertEquals(0, app(BillingService::class)->calculate($folio)['excessHours']);
         $this->travel(1)->seconds();
         $this->assertEquals(0, app(BillingService::class)->calculate($folio)['excessHours']);

@@ -275,6 +275,70 @@ test('checkout estimate follows the live clock and keeps the full fifteen minute
     assert.equal(saves, 0, 'Live estimates must not continually submit settlement drafts');
 });
 
+test('extend modal submits the selected twelve or twenty-four hour package with its matching rate and checkout', () => {
+    const blade = readFileSync(new URL('../../resources/views/dashboard/partials/folio-modals.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf('function openXtendModal('), blade.indexOf('function closeXtendModal('));
+    const document = documentWith(['xtendForm', 'convertStayForm', 'xtendCurrentTier', 'xtendCurrentCheckout',
+        'xtendConversionRate', 'xtendConversionCheckout', 'xtendConvert12Option', 'xtendConvertOption',
+        'xtendConversionHint', 'xtendMode', 'xtendConversionReason', 'xtendModalTitle', 'xtendModal',
+        'xtendConversionTier', 'xtendConversionSubmit']);
+    const options = { extendUrl: '/extend', convertUrl: '/convert', currentTier: '6h', currentCheckout: 'Current cutoff', canConvert: true,
+        conversions: { '12h': { rate: 1195, checkout: '12-hour cutoff' }, '24h': { rate: 2100, checkout: '24-hour cutoff' } } };
+    const context = { document, FOLIO_EXTENSION_OPTIONS: { 1: options }, currentExtensionOptions: null };
+    runInNewContext(source, context);
+    context.openXtendModal(1, '21');
+    assert.equal(document.elements.xtendConvert12Option.disabled, false);
+    assert.equal(document.elements.xtendConvertOption.disabled, false);
+    for (const [tier, rate, checkout] of [['12h', '₱1,195.00', '12-hour cutoff'], ['24h', '₱2,100.00', '24-hour cutoff']]) {
+        document.elements.xtendMode.value = tier;
+        context.updateXtendMode();
+        assert.equal(document.elements.convertStayForm.action, '/convert');
+        assert.equal(document.elements.xtendConversionTier.value, tier);
+        assert.equal(document.elements.xtendConversionRate.textContent, rate);
+        assert.equal(document.elements.xtendConversionCheckout.textContent, checkout);
+    }
+});
+
+test('midnight promo live checkout estimate keeps fractional booked hours through the full grace period', () => {
+    const blade = readFileSync(new URL('../../resources/views/checkout/process.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf('function onCheckInTimeChange('), blade.indexOf('function onRoomRateChange('));
+    const document = documentWith(['inpActualStayDiff', 'inpExcessOvertime', 'inpAddHoursRate']);
+    const checkIn = '2026-10-15T23:15:37+08:00';
+    const cutoff = Date.parse('2026-10-16T06:00:00+08:00');
+    let clock = cutoff + 900000;
+    const context = { document, Date: class extends Date { static now() { return clock; } }, checkOutTimestamp: cutoff,
+        totalBookedHours: (cutoff - Date.parse(checkIn)) / 3600000, overstayGraceMs: 900000, xtendHours: 0, addHourUnitPrice: 130,
+        checkInSaveTimer: null, recalcGrossAndSettlement() {}, clearTimeout() {}, setTimeout() {} };
+    runInNewContext(source, context);
+    context.onCheckInTimeChange(checkIn);
+    assert.equal(document.elements.inpExcessOvertime.value, '0 Hours');
+    clock += 1000;
+    context.onCheckInTimeChange(checkIn);
+    assert.equal(document.elements.inpExcessOvertime.value, '1 Hours');
+    assert.equal(context.addHoursRate, 130);
+});
+
+test('admin time correction preview uses the fixed midnight cutoff and flags daytime arrivals', () => {
+    const blade = readFileSync(new URL('../../resources/views/admin/check-in-times.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf("document.querySelectorAll('[data-time-correction-form]')"), blade.indexOf('</script>'));
+    const listeners = {};
+    const input = { value: '2026-10-15T23:30', checkValidity: () => true, addEventListener: (name, callback) => { listeners[name] = callback; } };
+    const preview = { dataset: { midnightPromo: 'true', extraHours: '1', packageHours: '11' } };
+    const form = { querySelector: selector => selector === '[data-corrected-time]' ? input : preview };
+    runInNewContext(source, { document: { querySelectorAll: () => [form] }, Date, Intl });
+    assert.match(preview.textContent, /10\/16\/2026.*07:00 AM/);
+    input.value = '2026-10-16T01:30';
+    listeners.input();
+    assert.match(preview.textContent, /10\/16\/2026.*07:00 AM/);
+    input.value = '2026-10-16T12:00';
+    listeners.input();
+    assert.match(preview.textContent, /must be between 8 PM and 6 AM/);
+    preview.dataset.midnightPromo = 'false';
+    preview.dataset.packageHours = '3';
+    listeners.input();
+    assert.match(preview.textContent, /10\/16\/2026.*03:00 PM/);
+});
+
 test('mobile navigation restores page interaction on dismissal and desktop resize', () => {
     const blade = readFileSync(new URL('../../resources/views/layouts/app.blade.php', import.meta.url), 'utf8');
     const source = blade.slice(blade.indexOf('function togglePrimaryNav()'), blade.indexOf('function toggleNavDropdown(event)'));

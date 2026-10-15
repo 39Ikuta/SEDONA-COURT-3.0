@@ -67,7 +67,8 @@ class AdminCheckInTimeController extends Controller
                 ->where('checked_in_at', '<=', now())->where('checked_out_at', '>', $corrected)->exists()) {
                 throw ValidationException::withMessages(['checked_in_at' => 'This declaration time overlaps another recorded stay in the room.']);
             }
-            $checkout = $corrected->copy()->addHours($room->getTierHours($locked->rate_tier) + (int) $locked->extra_hours);
+            $this->stayRates->assertPromoArrival($locked->rate_tier, $corrected, 'checked_in_at');
+            $checkout = $room->getCheckoutForTier($locked->rate_tier, $corrected, (int) $locked->extra_hours);
             $this->stayRates->assertReservationAvailable($room, now(), $checkout, $locked->booking_id);
             $before = $this->snapshot($locked);
             $locked->setRelation('room', $room);

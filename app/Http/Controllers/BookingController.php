@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Room;
+use App\Services\StayRateService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,8 +55,8 @@ class BookingController extends Controller
                 throw ValidationException::withMessages(['room_id' => 'This room cannot be reserved.']);
             }
             $arrival = Carbon::parse($validated['arrival_at']);
-            $hours = $room->getTierHours($validated['rate_tier']);
-            $departure = (clone $arrival)->addHours($hours);
+            app(StayRateService::class)->assertPromoArrival($validated['rate_tier'], $arrival, 'arrival_at');
+            $departure = $room->getCheckoutForTier($validated['rate_tier'], $arrival);
 
             if ($room->folios()->where('status', 'active')->where('checked_in_at', '<', $departure)
                 ->where('expected_checkout_at', '>', $arrival)->exists()) {

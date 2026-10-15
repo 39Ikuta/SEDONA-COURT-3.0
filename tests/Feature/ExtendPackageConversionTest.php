@@ -40,7 +40,7 @@ class ExtendPackageConversionTest extends TestCase
         $folio->update(['extra_hours' => 2, 'expected_checkout_at' => now()->addHours(14), 'extra_persons' => 1,
             'pos_items' => [['name' => 'Water', 'qty' => 2, 'price' => 25, 'subtotal' => 50]], 'security_deposit' => 100, 'deposit_status' => 'applied_to_bill']);
         $folio->recalculate();
-        $this->get(route('dashboard'))->assertSee('Convert 12-hour stay to 24-hour package')
+        $this->get(route('dashboard'))->assertSee('Convert to 24-hour package')
             ->assertViewHas('folioExtensionOptions', fn (array $options): bool => $options[$folio->id]['canConvert'] === true && $options[$folio->id]['conversionRate'] === (float) $rate && $options[$folio->id]['conversionCheckout'] === '10/14/2026 08:00 AM');
         $data = ['operation_key' => (string) Str::uuid(), 'rate_tier' => '24h', 'reason' => 'Guest requested a 24-hour package.'];
 

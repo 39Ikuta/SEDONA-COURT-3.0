@@ -176,7 +176,7 @@
         </div>
         <div class="row">
             <span>Declared stay:</span>
-            <span class="font-bold">{{ $tierHours }} hours</span>
+            <span class="font-bold">{{ $folio->rate_tier === 'promo' ? 'Midnight promo (6 AM checkout)' : $tierHours.' hours' }}</span>
         </div>
         @if($xtendHours > 0)
         <div class="row">
@@ -204,7 +204,7 @@
             </thead>
             <tbody>
                 <tr>
-                    <td class="col-item">Room Base ({{ $tierHours }}h)</td>
+                    <td class="col-item">{{ $folio->rate_tier === 'promo' ? 'Midnight Promo' : 'Room Base ('.$tierHours.'h)' }}</td>
                     <td class="col-qty font-mono">1</td>
                     <td class="col-price font-mono">{{ number_format($roomRate, 2) }}</td>
                     <td class="col-total font-mono font-bold">{{ number_format($roomRate, 2) }}</td>
@@ -345,20 +345,6 @@
 
         <div class="double-divider"></div>
 
-        <div class="double-divider"></div>
-
-        @if($folio->receiptReference())
-        <!-- Scannable Code 128 Barcode -->
-        <div style="text-align: center; margin-top: 10px;">
-            <div style="height: 36px; width: 85%; margin: 0 auto;">
-                {!! \App\Services\BarcodeService::renderSvg($folio->receiptReference(), 36) !!}
-            </div>
-            <div style="font-size: 10px; letter-spacing: 3px; font-weight: bold; margin-top: 3px;">
-                *{{ $folio->receiptReference() }}*
-            </div>
-        </div>
-
-        @endif
         <div class="text-center" style="font-size: 10px; margin-top: 10px;">
             <div>Attending Cashier: <strong>{{ $folio->checkedOutBy->name ?? $folio->cashier->name ?? 'Front Desk Staff' }} // FD-01</strong></div>
             <div style="margin-top: 4px; font-weight: bold;">Thank you for choosing {{ config('sedona.hotel_name') }}!</div>

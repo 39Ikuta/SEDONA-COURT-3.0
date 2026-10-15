@@ -47,7 +47,7 @@
                 <label class="block text-sm font-bold">Reason for correction
                     <input type="text" name="reason" required maxlength="500" placeholder="Cashier entered the stay after RA declared the guest" value="{{ old('folio_id') == $folio->id ? old('reason') : '' }}" class="form-control-hms block mt-1">
                 </label>
-                <p class="text-sm text-slate-600 self-center">New checkout: <strong data-corrected-checkout data-package-hours="{{ $folio->room->getTierHours($folio->rate_tier) + (int) $folio->extra_hours }}"></strong></p>
+                <p class="text-sm text-slate-600 self-center">New checkout: <strong data-corrected-checkout data-package-hours="{{ $folio->room->getTierHours($folio->rate_tier) + (int) $folio->extra_hours }}" data-midnight-promo="{{ $folio->rate_tier === 'promo' ? 'true' : 'false' }}" data-extra-hours="{{ (int) $folio->extra_hours }}"></strong></p>
                 <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-hover justify-self-start sm:justify-self-end">Save corrected time</button>
             </form>
         </section>
@@ -88,7 +88,17 @@
                 return;
             }
             const next = new Date(input.value + ':00Z');
-            next.setUTCHours(next.getUTCHours() + Number(preview.dataset.packageHours));
+            if (preview.dataset.midnightPromo === 'true') {
+                const hour = next.getUTCHours();
+                if (hour >= 6 && hour < 20) {
+                    preview.textContent = 'Midnight promo check-in must be between 8 PM and 6 AM';
+                    return;
+                }
+                if (hour >= 20) next.setUTCDate(next.getUTCDate() + 1);
+                next.setUTCHours(6 + Number(preview.dataset.extraHours), 0, 0, 0);
+            } else {
+                next.setUTCHours(next.getUTCHours() + Number(preview.dataset.packageHours));
+            }
             preview.textContent = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(next);
         };
         input.addEventListener('input', updatePreview);

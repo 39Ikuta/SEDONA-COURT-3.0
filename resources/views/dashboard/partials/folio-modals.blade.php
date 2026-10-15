@@ -53,7 +53,7 @@
                     <option value="12h">12 Hours Stay</option>
                     <option value="24h">24 Hours Stay</option>
                     @if(config('sedona.midnight_promo_enabled'))
-                        <option value="promo">Midnight Promo (12 hours)</option>
+                        <option value="promo">Midnight Promo (8 PM–6 AM)</option>
                     @endif
                 </select>
             </div>
@@ -98,9 +98,10 @@
         <label for="xtendMode" class="block text-xs font-bold text-slate-700 mb-1">How would the guest like to extend?</label>
         <select id="xtendMode" onchange="updateXtendMode()" class="form-control-hms font-bold mb-3">
             <option value="hours">Add extra hours at ₱130 per hour</option>
-            <option value="convert" id="xtendConvertOption">Convert 12-hour stay to 24-hour package</option>
+            <option value="12h" id="xtendConvert12Option">Convert to 12-hour package</option>
+            <option value="24h" id="xtendConvertOption">Convert to 24-hour package</option>
         </select>
-        <p id="xtendConversionHint" class="text-xs text-slate-500 mb-3">Package conversion is available for a 12-hour stay.</p>
+        <p id="xtendConversionHint" class="text-xs text-slate-500 mb-3">This stay is already on the longest package. Extra hours can still be added.</p>
         <form method="POST" id="xtendForm" class="space-y-3">
             @csrf
             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
@@ -123,18 +124,18 @@
         <form method="POST" id="convertStayForm" class="hidden space-y-3">
             @csrf
             <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
-            <input type="hidden" name="rate_tier" value="24h">
+            <input type="hidden" name="rate_tier" id="xtendConversionTier" value="24h">
             <div class="rounded-lg border border-rose-100 bg-rose-50 p-3 text-xs space-y-2">
-                <p>24-hour base rate: <strong id="xtendConversionRate"></strong></p>
+                <p>New package base rate: <strong id="xtendConversionRate"></strong></p>
                 <p>New checkout: <strong id="xtendConversionCheckout"></strong></p>
-                <p>This replaces the 12-hour room charge and any separate extra-hour extension. The 24 hours run from the original check-in time. Existing discounts and add-ons are included when the bill is recalculated.</p>
+                <p>This replaces the current room package and any separate extra-hour extension. The new package runs from the original check-in time. Existing discounts and add-ons are included when the bill is recalculated.</p>
                 <p>The 15-minute checkout grace period starts after the new checkout time.</p>
             </div>
             <label for="xtendConversionReason" class="block text-xs font-bold text-slate-700">Reason</label>
             <input id="xtendConversionReason" name="reason" value="Guest requested a 24-hour package." required maxlength="500" class="form-control-hms">
             <div class="border-t pt-3 flex justify-end gap-2">
                 <button type="button" onclick="closeXtendModal()" class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded">Cancel</button>
-                <button type="submit" class="btn-occupied">Convert to 24 Hours</button>
+                <button type="submit" id="xtendConversionSubmit" class="btn-occupied">Convert Package</button>
             </div>
         </form>
     </div>
@@ -315,17 +316,18 @@
     }
 
     const FOLIO_EXTENSION_OPTIONS = {{ \Illuminate\Support\Js::from($folioExtensionOptions) }};
+    let currentExtensionOptions = null;
 
     function openXtendModal(folioId, roomNumber) {
         const options = FOLIO_EXTENSION_OPTIONS[folioId];
         if (!options) return;
+        currentExtensionOptions = options;
         document.getElementById('xtendForm').action = options.extendUrl;
         document.getElementById('convertStayForm').action = options.convertUrl;
         document.getElementById('xtendCurrentTier').textContent = options.currentTier === 'promo' ? 'Midnight promo' : options.currentTier;
         document.getElementById('xtendCurrentCheckout').textContent = options.currentCheckout || 'Not set';
-        document.getElementById('xtendConversionRate').textContent = `₱${Number(options.conversionRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        document.getElementById('xtendConversionCheckout').textContent = options.conversionCheckout;
-        document.getElementById('xtendConvertOption').disabled = !options.canConvert;
+        document.getElementById('xtendConvert12Option').disabled = !options.conversions['12h'];
+        document.getElementById('xtendConvertOption').disabled = !options.conversions['24h'];
         document.getElementById('xtendConversionHint').classList.toggle('hidden', options.canConvert);
         document.getElementById('xtendMode').value = 'hours';
         document.getElementById('xtendConversionReason').value = 'Guest requested a 24-hour package.';
@@ -334,7 +336,16 @@
         document.getElementById('xtendModal').classList.remove('hidden');
     }
     function updateXtendMode() {
-        const converting = document.getElementById('xtendMode').value === 'convert';
+        const tier = document.getElementById('xtendMode').value;
+        const conversion = currentExtensionOptions?.conversions[tier];
+        const converting = Boolean(conversion);
+        if (converting) {
+            document.getElementById('xtendConversionTier').value = tier;
+            document.getElementById('xtendConversionRate').textContent = `₱${Number(conversion.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('xtendConversionCheckout').textContent = conversion.checkout;
+            document.getElementById('xtendConversionReason').value = `Guest requested a ${tier === '12h' ? 12 : 24}-hour package.`;
+            document.getElementById('xtendConversionSubmit').textContent = `Convert to ${tier === '12h' ? 12 : 24} Hours`;
+        }
         document.getElementById('xtendForm').classList.toggle('hidden', converting);
         document.getElementById('convertStayForm').classList.toggle('hidden', !converting);
     }

@@ -202,7 +202,9 @@ class DashboardController extends Controller
         $folioExtensionOptions = $activeFolios->mapWithKeys(fn (Folio $folio): array => [$folio->id => [
             'extendUrl' => route('folios.extend', $folio),
             'convertUrl' => route('folios.convert', $folio),
-            'canConvert' => ! $folio->room->is_staff_quarters && $folio->rate_tier === '12h',
+            'canConvert' => ! $folio->room->is_staff_quarters && $folio->rate_tier !== '24h',
+            'conversions' => collect(['12h', '24h'])->filter(fn (string $tier): bool => ! $folio->room->is_staff_quarters && $folio->room->getTierHours($tier) > $folio->room->getTierHours($folio->rate_tier))
+                ->mapWithKeys(fn (string $tier): array => [$tier => ['rate' => $folio->room->getRateForTier($tier), 'checkout' => $folio->room->getCheckoutForTier($tier, $folio->checked_in_at)->format('m/d/Y h:i A')]])->all(),
             'currentTier' => $folio->rate_tier,
             'currentCheckout' => $folio->expected_checkout_at?->format('m/d/Y h:i A'),
             'conversionRate' => $folio->room->getRateForTier('24h'),
