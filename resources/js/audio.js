@@ -133,6 +133,8 @@ class SedonaAudioEngine {
         this.silencedStages = this.loadSilencedStages();
         this.openTimeReminders = this.loadSilencedStages('sedona_open_time_reminders');
         this.openTimeBurstUntil = 0;
+        this.openTimePendingKeys = [];
+        this.openTimeAwaitingUnlock = false;
 
         this.initHtml5Audio();
         this.initAutoUnlock();
@@ -176,7 +178,7 @@ class SedonaAudioEngine {
 
     initAutoUnlock() {
         const unlock = () => {
-            this.ensureAudioContext();
+            const resumed = this.ensureAudioContext();
             for (const [mode, audio] of Object.entries(this.alarmAudios)) {
                 if (this.currentSoundMode === mode) continue;
                 audio.muted = true;
@@ -191,6 +193,13 @@ class SedonaAudioEngine {
             window.removeEventListener('click', unlock);
             window.removeEventListener('keydown', unlock);
             window.removeEventListener('touchstart', unlock);
+            Promise.resolve(resumed).then(() => {
+                if (this.openTimeAwaitingUnlock) {
+                    this.openTimeAwaitingUnlock = false;
+                    this.openTimeBurstUntil = 0;
+                    this.evaluateAlarms();
+                }
+            });
         };
         window.addEventListener('click', unlock, { once: true });
         window.addEventListener('keydown', unlock, { once: true });
@@ -205,7 +214,7 @@ class SedonaAudioEngine {
             }
         }
         if (this.audioCtx && this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
+            return this.audioCtx.resume();
         }
     }
 
@@ -326,7 +335,7 @@ class SedonaAudioEngine {
             audio.currentTime = 0;
             audio.muted = false;
             const playback = audio.play();
-            if (playback) playback.catch(fallback);
+            if (playback) playback.then(() => this.markOpenTimeDelivered(mode, generation), fallback);
         } catch (error) {
             fallback();
         }
@@ -339,6 +348,11 @@ class SedonaAudioEngine {
             if (this.isMuted || this.currentSoundMode !== mode) return;
             this.ensureAudioContext();
             if (!this.audioCtx) return;
+            if (mode === 'open' && this.audioCtx.state !== 'running') {
+                this.openTimeAwaitingUnlock = true;
+                return;
+            }
+            this.markOpenTimeDelivered(mode, this.soundGeneration);
             const now = this.audioCtx.currentTime;
             for (const [frequency, offset, duration] of tune.notes) {
                 const oscillator = this.audioCtx.createOscillator();
@@ -364,6 +378,12 @@ class SedonaAudioEngine {
         };
         playTune();
         if (!tune.once) this.synthAlarmInterval = setInterval(playTune, tune.repeatMs);
+    }
+
+    markOpenTimeDelivered(mode, generation) {
+        if (mode !== 'open' || this.currentSoundMode !== mode || this.soundGeneration !== generation || this.isMuted) return;
+        for (const key of this.openTimePendingKeys) this.openTimeReminders.add(key);
+        try { sessionStorage.setItem('sedona_open_time_reminders', JSON.stringify([...this.openTimeReminders])); } catch (error) {}
     }
 
     /* -------------------------------------------------------------------------
@@ -611,16 +631,15 @@ class SedonaAudioEngine {
             }
         });
 
-        if (highestActiveStage === null && !this.isMuted && openTimeRooms.length > 0) {
+        if (highestActiveStage === null && !this.isMuted && !this.openTimeAwaitingUnlock && openTimeRooms.length > 0) {
             const pending = openTimeRooms.filter(room => !room.isSnoozed && !room.isSilenced && !this.openTimeReminders.has(room.notificationKey));
             if (pending.length > 0 && now >= this.openTimeBurstUntil) {
                 if (this.currentSoundMode === 'open') this.stopAllAlarms();
-                for (const room of pending) this.openTimeReminders.add(room.notificationKey);
-                try { sessionStorage.setItem('sedona_open_time_reminders', JSON.stringify([...this.openTimeReminders])); } catch (error) {}
+                this.openTimePendingKeys = pending.map(room => room.notificationKey);
                 this.openTimeBurstUntil = now + 5000;
             }
         }
-        const openTimeRinging = openTimeRooms.some(room => !room.isSnoozed && !room.isSilenced && this.openTimeReminders.has(room.notificationKey)) && now < this.openTimeBurstUntil;
+        const openTimeRinging = !this.openTimeAwaitingUnlock && openTimeRooms.some(room => !room.isSnoozed && !room.isSilenced && this.openTimePendingKeys.includes(room.notificationKey)) && now < this.openTimeBurstUntil;
 
         // Fixed checkout alarms retain priority over brief Open Time reminders.
         if (highestActiveStage === 3) {

@@ -54,6 +54,45 @@ class ExtendPackageConversionTest extends TestCase
         $this->get(route('folios.receipt', $folio))->assertViewHas('totalDiscount', (float) $discount)->assertViewHas('finalBalanceToPay', (float) ($rate - $discount + 100));
     }
 
+    #[TestWith(['12h', '12h'])]
+    #[TestWith(['24h', '12h'])]
+    #[TestWith(['24h', '24h'])]
+    public function test_same_or_shorter_package_conversion_preserves_extensions_and_pricing(string $currentTier, string $targetTier): void
+    {
+        $this->withoutVite();
+        $this->travelTo('2026-10-13 08:00:00');
+        $this->seed(DatabaseSeeder::class);
+        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        $room = Room::where('number', '6')->firstOrFail();
+        $this->actingAs($cashier)->post(route('checkin.store'), ['room_id' => $room->id, 'headcount' => 1, 'rate_tier' => $currentTier])->assertSessionHasNoErrors();
+        $folio = Folio::where('room_id', $room->id)->sole();
+        $this->post(route('folios.extend', $folio), ['hours' => 2, 'operation_key' => (string) Str::uuid()])->assertSessionHasNoErrors();
+        $before = $folio->fresh()->getAttributes();
+
+        $this->post(route('folios.convert', $folio), ['operation_key' => (string) Str::uuid(), 'rate_tier' => $targetTier, 'reason' => 'Guest requested a package change'])
+            ->assertSessionHasErrors(['rate_tier' => 'Choose a package longer than the current stay package.']);
+
+        $this->assertSame($before, $folio->fresh()->getAttributes());
+        $this->assertSame(0, DB::table('audit_logs')->where('event', 'folio.package_converted')->count());
+    }
+
+    public function test_midnight_promo_can_convert_to_twelve_hours_from_original_arrival(): void
+    {
+        $this->withoutVite();
+        $this->travelTo('2026-10-13 20:00:00');
+        $this->seed(DatabaseSeeder::class);
+        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        $room = Room::where('number', '6')->firstOrFail();
+        $this->actingAs($cashier)->post(route('checkin.store'), ['room_id' => $room->id, 'headcount' => 1, 'rate_tier' => 'promo'])->assertSessionHasNoErrors();
+        $folio = Folio::where('room_id', $room->id)->sole();
+
+        $this->post(route('folios.convert', $folio), ['operation_key' => (string) Str::uuid(), 'rate_tier' => '12h', 'reason' => 'Guest requested a twelve-hour package'])
+            ->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $this->assertDatabaseHas('folios', ['id' => $folio->id, 'rate_tier' => '12h', 'room_charge' => 1195,
+            'checked_in_at' => '2026-10-13 20:00:00', 'expected_checkout_at' => '2026-10-14 08:00:00']);
+    }
+
     #[TestWith([null, 340.0])]
     #[TestWith([40.0, 40.0])]
     public function test_conversion_preserves_the_recorded_schedule_and_existing_custom_discount(?float $customDiscount, float $expectedDiscount): void

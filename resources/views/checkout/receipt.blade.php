@@ -57,8 +57,9 @@
             gap: 6px;
             margin-bottom: 2px;
         }
-        .row > span:first-child { flex-shrink: 0; }
+        .row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
         .row > span:last-child { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+        .discount-row > span:last-child { flex-shrink: 0; white-space: nowrap; }
         .receipt-table {
             width: 100%;
             border-collapse: collapse;
@@ -248,7 +249,7 @@
             $dep = $deposit ?? (float)($folio->security_deposit ?? 0);
         @endphp
         @if($disc > 0)
-            <div class="row font-bold">
+            <div class="row font-bold discount-row">
                 <span>
                     Less: {{ $dType === 'DC' ? 'Sedona Discount Card' : ($dType === 'PWD' ? 'PWD Statutory Table' : 'Senior Statutory Table') }}{{ $dRef ? ' (' . $dRef . ')' : '' }}:
                 </span>

@@ -27,7 +27,7 @@ class ApprovalService
     {
         $data = $this->validatePayload($kind, $payload);
         abort_unless(match ($kind) {
-            'stock_adjustment', 'stock_recount' => $request->user()->hasAnyRole(['cashier', 'front_desk', 'admin', 'owner', 'manager']),
+            'stock_adjustment', 'stock_recount' => $request->user()->hasAnyRole(['admin', 'owner']),
             'cash_drop', 'float_addition', 'bank_deposit', 'handover_variance', 'shift_variance' => $request->user()->can('manage_shifts'),
             'expense_review', 'expense_reversal' => $request->user()->can('manage_shifts'),
             'pos_refund' => $request->user()->can('post_pos_sales'),
@@ -89,7 +89,7 @@ class ApprovalService
     {
         abort_unless($approval->requested_by === $request->user()->id || $request->user()->can('review-financial'), 403);
         if ($approval->isStockChange()) {
-            abort_unless($request->user()->hasAnyRole(['cashier', 'front_desk', 'admin', 'owner', 'manager']), 403);
+            abort_unless($request->user()->hasAnyRole(['admin', 'owner']), 403);
         }
 
         return $this->posting->execute($request, 'approval.execute', $approval->id, ['approval_id' => $approval->id, 'shift_override_reason' => $request->input('shift_override_reason')], function () use ($request, $approval): array {

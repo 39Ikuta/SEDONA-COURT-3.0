@@ -1,14 +1,16 @@
 @extends('layouts.app')
 
 @section('title', 'Pantry & POS Inventory Control')
-@section('subtitle', 'Front Desk Stock Tracking, Low Level Alerts & Shift Recounts')
+@section('subtitle', 'Stock Deliveries, On-Hand Quantities & Low Stock Alerts')
 
 @section('top_action')
     <div class="flex items-center space-x-2">
+        @if($canAdjustStock)
         <button type="button" onclick="openRecountModal()" class="bg-[#0284c7] hover:bg-[#0369a1] text-white text-[11px] font-bold px-3 py-1.5 rounded shadow-sm flex items-center space-x-1">
             <span>📋</span>
-            <span>Cashier Shift Recount</span>
+            <span>Stock Recount</span>
         </button>
+        @endif
         <a href="{{ route('inventory.export-csv') }}" class="bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow-sm flex items-center space-x-1">
             <span>📥</span>
             <span>Export Movement CSV</span>
@@ -148,7 +150,7 @@
                                 <button type="button" 
                                     onclick="openStockModal(this.dataset.itemId, this.dataset.itemName, this.dataset.stockQuantity)" data-item-id="{{ $item->id }}" data-item-name="{{ $item->name }}" data-stock-quantity="{{ $item->stock_quantity ?? 0 }}"
                                     class="px-2.5 py-1 bg-slate-800 hover:bg-black text-white text-[10px] font-bold rounded shadow-sm">
-                                    + Adjust / Restock
+                                    {{ $canAdjustStock ? '+ Restock / Adjust' : '+ Add Stock' }}
                                 </button>
                             </td>
                         </tr>
@@ -222,7 +224,7 @@
 <div id="stockModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full border border-slate-300 overflow-hidden">
         <div class="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between font-bold text-xs uppercase tracking-wider">
-            <span id="stockModalTitle">Adjust Stock Count</span>
+            <span id="stockModalTitle">Add Stock</span>
             <button type="button" onclick="closeStockModal()" class="text-white hover:text-slate-200 text-base leading-none">&times;</button>
         </div>
 
@@ -236,20 +238,25 @@
             </div>
 
             <div>
-                <label class="block text-[11px] font-bold text-slate-700 mb-1">New Exact Physical Count: <span class="text-rose-600">*</span></label>
-                <input type="number" name="stock_quantity" id="stockModalQty" required min="0" max="100000" class="form-control-hms font-mono font-bold text-center text-base">
-                <p class="mt-1 text-slate-500">Enter the final total on hand. For example, 50 on hand plus 10 delivered means enter 60. Saving updates stock immediately without approval.</p>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1"><span id="stockQuantityLabel">Units to Add</span>: <span class="text-rose-600">*</span></label>
+                <input type="number" name="stock_quantity" id="stockModalQty" required min="1" max="100000" oninput="updateStockBalancePreview()" class="form-control-hms font-mono font-bold text-center text-base">
+                <p id="stockQuantityHelp" class="mt-1 text-slate-500">Enter only the delivery quantity. Stock 3 + delivery 30 = 33. Stock is added immediately without approval.</p>
+                <p class="mt-1 font-bold text-slate-700">Resulting balance: <span id="stockBalancePreview">—</span></p>
             </div>
 
+            @if($canAdjustStock)
             <div>
                 <label class="block text-[11px] font-bold text-slate-700 mb-1">Adjustment Reason: <span class="text-rose-600">*</span></label>
-                <select name="reason" required class="form-control-hms">
+                <select name="reason" id="stockReason" required onchange="updateStockMode()" class="form-control-hms">
                     <option value="restock">New Stock Inflow (Restock)</option>
                     <option value="adjustment">Count Correction (Recount)</option>
                     <option value="damage_spoilage">Damage / Spoilage / Expired</option>
                     <option value="return">Returned Stock</option>
                 </select>
             </div>
+            @else
+                <input type="hidden" name="reason" id="stockReason" value="restock">
+            @endif
 
             <div>
                 <label class="block text-[11px] font-bold text-slate-700 mb-1">Notes / Supplier Invoice #:</label>
@@ -260,15 +267,16 @@
                 <button type="button" onclick="closeStockModal()" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded text-xs">
                     Cancel
                 </button>
-                <button type="submit" class="px-4 py-1.5 bg-slate-900 hover:bg-black text-white font-bold rounded text-xs shadow">
-                    Save Stock Adjustment
+                <button type="submit" id="stockSubmitButton" class="px-4 py-1.5 bg-slate-900 hover:bg-black text-white font-bold rounded text-xs shadow">
+                    Add Stock
                 </button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Modal 2: Cashier Shift Recount (Matching CashierInventoryModal.tsx) -->
+<!-- Admin/owner stock recount -->
+@if($canAdjustStock)
 <div id="recountModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-3">
     <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full border border-slate-300 max-h-[90vh] flex flex-col overflow-hidden">
         <div class="bg-[#0284c7] text-white px-4 py-3 flex items-center justify-between font-bold text-xs uppercase tracking-wider">
@@ -320,7 +328,7 @@
                 </table>
 
                 <div class="pt-2">
-                    <label class="block text-[11px] font-bold text-slate-700 mb-1">Shift Recount Audit Notes:</label>
+                    <label class="block text-[11px] font-bold text-slate-700 mb-1">Stock Recount Audit Notes:</label>
                     <input type="text" name="notes" placeholder="e.g. End of Day Shift drawer and pantry verification" class="form-control-hms text-xs">
                 </div>
             </div>
@@ -332,23 +340,44 @@
                         Cancel
                     </button>
                     <button type="submit" class="px-4 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold rounded text-xs shadow">
-                        Submit Shift Recount
+                        Save Stock Recount
                     </button>
                 </div>
             </div>
         </form>
     </div>
 </div>
+@endif
 
 @push('scripts')
 <script>
     function openStockModal(itemId, itemName, currentCount) {
-        document.getElementById('stockModalTitle').textContent = `Adjust Stock: ${itemName}`;
+        document.getElementById('stockModalTitle').textContent = `Stock: ${itemName}`;
         document.getElementById('stockModalItemName').textContent = itemName;
         document.getElementById('stockModalCurrentCount').textContent = currentCount;
-        document.getElementById('stockModalQty').value = currentCount;
+        document.getElementById('stockReason').value = 'restock';
+        updateStockMode();
         document.getElementById('stockForm').action = `/inventory/${itemId}/stock`;
         document.getElementById('stockModal').classList.remove('hidden');
+    }
+
+    function updateStockMode() {
+        const adding = document.getElementById('stockReason').value === 'restock';
+        const quantity = document.getElementById('stockModalQty');
+        quantity.min = adding ? '1' : '0';
+        quantity.value = adding ? '' : document.getElementById('stockModalCurrentCount').textContent;
+        document.getElementById('stockQuantityLabel').textContent = adding ? 'Units to Add' : 'New Exact Physical Count';
+        document.getElementById('stockQuantityHelp').textContent = adding ? 'Enter only the delivery quantity. Stock 3 + delivery 30 = 33. Added immediately without approval.' : 'Admin/owner adjustment: enter the final total on hand. This replaces the current count immediately.';
+        document.getElementById('stockSubmitButton').textContent = adding ? 'Add Stock' : 'Save Stock Adjustment';
+        updateStockBalancePreview();
+    }
+
+    function updateStockBalancePreview() {
+        const input = document.getElementById('stockModalQty');
+        const quantity = Number(input.value);
+        const current = Number(document.getElementById('stockModalCurrentCount').textContent);
+        const adding = document.getElementById('stockReason').value === 'restock';
+        document.getElementById('stockBalancePreview').textContent = input.value !== '' && Number.isInteger(quantity) && quantity >= (adding ? 1 : 0) ? `${adding ? current + quantity : quantity} units` : '—';
     }
 
     function closeStockModal() {

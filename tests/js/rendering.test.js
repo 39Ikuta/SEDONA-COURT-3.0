@@ -41,6 +41,29 @@ function descendants(element) {
     return [element, ...element.children.flatMap(descendants)];
 }
 
+test('stock delivery preview adds units and admin recount mode replaces the total explicitly', () => {
+    const blade = readFileSync(new URL('../../resources/views/inventory/index.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf('function openStockModal('), blade.indexOf('</script>', blade.indexOf('function openStockModal(')));
+    const document = documentWith(['stockModalTitle', 'stockModalItemName', 'stockModalCurrentCount', 'stockReason', 'stockModalQty', 'stockQuantityLabel', 'stockQuantityHelp', 'stockSubmitButton', 'stockBalancePreview', 'stockForm', 'stockModal']);
+    const context = { document };
+    runInNewContext(source, context);
+    context.openStockModal(7, 'Delivery sample', '3');
+    assert.equal(document.elements.stockModalQty.value, '');
+    document.elements.stockModalQty.value = '30';
+    context.updateStockBalancePreview();
+    assert.equal(document.elements.stockBalancePreview.textContent, '33 units');
+    document.elements.stockReason.value = 'adjustment';
+    context.updateStockMode();
+    assert.equal(document.elements.stockModalQty.value, '3');
+    document.elements.stockModalQty.value = '30';
+    context.updateStockBalancePreview();
+    assert.equal(document.elements.stockBalancePreview.textContent, '30 units');
+    context.openStockModal(8, 'Next delivery', '10');
+    assert.equal(document.elements.stockReason.value, 'restock');
+    assert.equal(document.elements.stockModalQty.value, '');
+    assert.equal(document.elements.stockBalancePreview.textContent, '—');
+});
+
 test('alarm names stay literal text and snooze callbacks preserve their arguments', () => {
     const source = readFileSync(new URL('../../resources/js/audio.js', import.meta.url), 'utf8').split('// Global instance')[0];
     const document = documentWith(['activeAlarmBanner', 'alarmBannerRoomsList', 'alarmBannerTitle', 'alarmBannerIcon']);
@@ -329,7 +352,7 @@ test('admin time correction preview uses the fixed midnight cutoff and flags day
     const listeners = {};
     const input = { value: '2026-10-15T23:30', checkValidity: () => true, addEventListener: (name, callback) => { listeners[name] = callback; } };
     const preview = { dataset: { midnightPromo: 'true', extraHours: '1', packageHours: '11' } };
-    const form = { querySelector: selector => selector === '[data-corrected-time]' ? input : preview };
+    const form = { querySelector: selector => selector === '[data-corrected-time]' ? input : preview, addEventListener() {} };
     runInNewContext(source, { document: { querySelectorAll: () => [form] }, Date, Intl });
     assert.match(preview.textContent, /10\/16\/2026.*07:00 AM/);
     input.value = '2026-10-16T01:30';
@@ -342,6 +365,26 @@ test('admin time correction preview uses the fixed midnight cutoff and flags day
     preview.dataset.packageHours = '3';
     listeners.input();
     assert.match(preview.textContent, /10\/16\/2026.*03:00 PM/);
+});
+
+test('invalid admin correction fields display an inline explanation before submission', () => {
+    const blade = readFileSync(new URL('../../resources/views/admin/check-in-times.blade.php', import.meta.url), 'utf8');
+    const source = blade.slice(blade.indexOf("document.querySelectorAll('[data-time-correction-form]')"), blade.indexOf('</script>'));
+    const listeners = {};
+    const input = { value: '2026-10-16T11:00', checkValidity: () => true, addEventListener() {} };
+    const preview = { dataset: { midnightPromo: 'false', packageHours: '3' } };
+    const feedback = { hidden: true, textContent: '' };
+    const form = {
+        querySelector: selector => ({ '[data-corrected-time]': input, '[data-corrected-checkout]': preview, '[data-correction-feedback]': feedback })[selector],
+        addEventListener: (name, handler) => { listeners[name] = handler; },
+    };
+    runInNewContext(source, { document: { querySelectorAll: () => [form] }, Date, Intl });
+    assert.equal(typeof listeners.invalid, 'function');
+    listeners.invalid({ target: { name: 'reason', validationMessage: 'Please fill out this field.' } });
+    assert.equal(feedback.hidden, false);
+    assert.match(feedback.textContent, /Enter a reason/);
+    listeners.invalid({ target: { name: 'checked_in_at', validationMessage: 'Value must be earlier.' } });
+    assert.match(feedback.textContent, /Value must be earlier/);
 });
 
 test('mobile navigation restores page interaction on dismissal and desktop resize', () => {

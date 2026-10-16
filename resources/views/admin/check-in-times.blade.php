@@ -44,9 +44,10 @@
                 <label class="block text-sm font-bold">RA declaration time (hotel time)
                     <input type="datetime-local" name="checked_in_at" required max="{{ now()->format('Y-m-d\TH:i') }}" value="{{ old('folio_id') == $folio->id ? old('checked_in_at', $folio->checked_in_at->format('Y-m-d\TH:i')) : $folio->checked_in_at->format('Y-m-d\TH:i') }}" class="form-control-hms block mt-1" data-corrected-time>
                 </label>
-                <label class="block text-sm font-bold">Reason for correction
-                    <input type="text" name="reason" required maxlength="500" placeholder="Cashier entered the stay after RA declared the guest" value="{{ old('folio_id') == $folio->id ? old('reason') : '' }}" class="form-control-hms block mt-1">
+                <label class="block text-sm font-bold">Reason for correction (required)
+                    <input type="text" name="reason" required maxlength="500" placeholder="Type the reason for changing the check-in time" value="{{ old('folio_id') == $folio->id ? old('reason') : '' }}" class="form-control-hms block mt-1">
                 </label>
+                <p role="alert" data-correction-feedback hidden class="text-sm font-bold text-rose-700 sm:col-span-2"></p>
                 <p class="text-sm text-slate-600 self-center">New checkout: <strong data-corrected-checkout data-package-hours="{{ $folio->room->getTierHours($folio->rate_tier) + (int) $folio->extra_hours }}" data-midnight-promo="{{ $folio->rate_tier === 'promo' ? 'true' : 'false' }}" data-extra-hours="{{ (int) $folio->extra_hours }}"></strong></p>
                 <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-hover justify-self-start sm:justify-self-end">Save corrected time</button>
             </form>
@@ -82,6 +83,16 @@
     document.querySelectorAll('[data-time-correction-form]').forEach(form => {
         const input = form.querySelector('[data-corrected-time]');
         const preview = form.querySelector('[data-corrected-checkout]');
+        const feedback = form.querySelector('[data-correction-feedback]');
+        form.addEventListener('invalid', event => {
+            feedback.textContent = event.target.name === 'reason'
+                ? 'The correction was not sent. Enter a reason for changing the check-in time, then save again.'
+                : `The correction was not sent. Check the RA declaration time: ${event.target.validationMessage}`;
+            feedback.hidden = false;
+        }, true);
+        form.addEventListener('input', () => {
+            feedback.hidden = true;
+        });
         const updatePreview = () => {
             if (!input.value || !input.checkValidity()) {
                 preview.textContent = 'Choose a valid declaration time';

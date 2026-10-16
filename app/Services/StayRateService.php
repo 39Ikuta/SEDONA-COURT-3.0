@@ -20,6 +20,10 @@ class StayRateService
 
     public function convert(Folio $folio, string $tier, Request $request): void
     {
+        if ($folio->room->getTierHours($tier) <= $folio->room->getTierHours($folio->rate_tier)) {
+            throw ValidationException::withMessages(['rate_tier' => 'Choose a package longer than the current stay package.']);
+        }
+
         $this->apply($folio, $folio->room, $tier, 0, $request, 'folio.package_converted');
     }
 

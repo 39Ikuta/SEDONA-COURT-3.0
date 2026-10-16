@@ -439,8 +439,8 @@ class PosInventoryIntegrityTest extends TestCase
             'stock_quantity' => 15, 'reason' => 'restock',
         ])->assertRedirect()->assertSessionHas('success');
 
-        $this->assertSame(15, $item->fresh()->stock_quantity);
-        $this->assertDatabaseHas('inventory_events', ['pos_item_id' => $item->id, 'event_type' => 'restock', 'quantity_change' => 5]);
+        $this->assertSame(25, $item->fresh()->stock_quantity);
+        $this->assertDatabaseHas('inventory_events', ['pos_item_id' => $item->id, 'event_type' => 'restock', 'quantity_change' => 15]);
     }
 
     #[TestWith(['missing_id'])]
@@ -459,7 +459,9 @@ class PosInventoryIntegrityTest extends TestCase
             $counts[$second->id] = -1;
         }
 
-        $this->actingAs($this->cashier())->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(), 'counts' => $counts])->assertSessionHasErrors();
+        $admin = $this->cashier();
+        $admin->assignRole(Role::findOrCreate('admin', 'web'));
+        $this->actingAs($admin)->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(), 'counts' => $counts])->assertSessionHasErrors();
 
         $this->assertSame(10, $first->fresh()->stock_quantity);
         $this->assertSame(10, $second->fresh()->stock_quantity);
@@ -477,7 +479,9 @@ class PosInventoryIntegrityTest extends TestCase
         });
 
         try {
-            $this->actingAs($this->cashier())->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(),
+            $admin = $this->cashier();
+            $admin->assignRole(Role::findOrCreate('admin', 'web'));
+            $this->actingAs($admin)->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(),
                 'counts' => [$first->id => 3, $second->id => 4],
             ])->assertServerError();
         } finally {
@@ -495,7 +499,9 @@ class PosInventoryIntegrityTest extends TestCase
         $first = $this->item();
         $second = $this->item(['name' => 'Water']);
 
-        $this->actingAs($this->cashier())->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(),
+        $admin = $this->cashier();
+        $admin->assignRole(Role::findOrCreate('admin', 'web'));
+        $this->actingAs($admin)->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(),
             'counts' => [$second->id => 4, $first->id => 3],
         ])->assertSessionHas('success');
 

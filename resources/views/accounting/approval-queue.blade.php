@@ -43,6 +43,8 @@
                         <p class="text-sm text-slate-600">This older request cannot be applied. Cancel it and ask RA to correct the time in Check-in Time Corrections.</p>
                     @elseif($approval->kind === 'handover_variance' && !config('sedona.shift_handover_enabled'))
                         <p class="text-sm text-slate-600">Handover is disabled. This request remains as history and does not block day closing.</p>
+                    @elseif($approval->isStockChange() && in_array($approval->status, ['pending', 'approved']) && !auth()->user()->hasAnyRole(['admin', 'owner']))
+                        <p class="text-sm text-slate-600">Only an admin or owner can apply this older stock adjustment. Add new deliveries from Stock.</p>
                     @elseif($approval->isStockChange() && in_array($approval->status, ['pending', 'approved']) && ($approval->requested_by === auth()->id() || auth()->user()->can('review-financial')))
                         <form method="POST" action="{{ route('approvals.execute', $approval) }}" class="grid gap-2">
                             @csrf<input name="operation_key" type="hidden" value="{{ (string) \Illuminate\Support\Str::uuid() }}">

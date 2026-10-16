@@ -24,7 +24,7 @@ test('alarm recordings are valid, distinct and loud PCM audio with the intended 
     assert.equal(new Set(buffers.map(buffer => buffer.toString('base64'))).size, 4);
 });
 
-function audioHarness(play = () => Promise.resolve(), clock = () => Date.now(), stored = new Map()) {
+function audioHarness(play = () => Promise.resolve(), clock = () => Date.now(), stored = new Map(), audioState = { unlocked: true }) {
     const intervals = new Map();
     const oscillators = [];
     const gains = [];
@@ -35,8 +35,8 @@ function audioHarness(play = () => Promise.resolve(), clock = () => Date.now(), 
         pause() { this.paused = true; }
     }
     class AudioContext {
-        constructor() { this.currentTime = 0; this.state = 'running'; this.destination = {}; }
-        resume() { return Promise.resolve(); }
+        constructor() { this.currentTime = 0; this.state = audioState.unlocked ? 'running' : 'suspended'; this.destination = {}; }
+        resume() { if (audioState.unlocked) this.state = 'running'; return Promise.resolve(); }
         createOscillator() {
             const oscillator = { frequency: { setValueAtTime(value) { oscillator.frequencyValue = value; } },
                 connect() {}, disconnect() {}, start(at) { oscillator.startAt = at; },
@@ -72,7 +72,71 @@ function openTimeRow() {
     return { attributes, timer, getAttribute: name => attributes[name], querySelector: () => timer };
 }
 
-test('Open Time rings briefly at base reminders then once hourly without changing billing grace', () => {
+test('an autoplay-blocked Open Time reminder remains pending until audio is unlocked, then rings once', async () => {
+    let clock = Date.parse('2026-10-16T12:45:00+08:00');
+    const audioState = { unlocked: false };
+    const { engine, document, listeners, oscillators } = audioHarness(
+        () => Promise.reject(new Error('Autoplay blocked')), () => clock, new Map(), audioState,
+    );
+    document.querySelectorAll = () => [openTimeRow()];
+    engine.evaluateAlarms();
+    await Promise.resolve();
+    assert.equal(engine.openTimeReminders.size, 0, 'Blocked playback must not consume the reminder');
+    clock += 6000;
+    engine.evaluateAlarms();
+    assert.equal(engine.openTimeReminders.size, 0);
+    const blockedAttempts = engine.alarmAudios.open.playCalls;
+    clock += 6000;
+    engine.evaluateAlarms();
+    assert.equal(engine.alarmAudios.open.playCalls, blockedAttempts, 'Wait for a gesture instead of repeatedly attempting blocked audio');
+    audioState.unlocked = true;
+    listeners.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    engine.evaluateAlarms();
+    await Promise.resolve();
+    assert.equal(engine.openTimeReminders.size, 1);
+    assert.equal(oscillators.filter(oscillator => !oscillator.stopped).length, 5);
+    clock += 6000;
+    engine.evaluateAlarms();
+    const played = engine.alarmAudios.open.playCalls;
+    clock += 6000;
+    engine.evaluateAlarms();
+    assert.equal(engine.alarmAudios.open.playCalls, played, 'Delivered reminders must not repeat');
+});
+
+for (const action of ['mute', 'acknowledge', 'checkout', 'convert']) {
+    test(`unlocking blocked Open Time audio does not revive a reminder after ${action}`, async () => {
+        const clock = Date.parse('2026-10-16T12:45:00+08:00');
+        const audioState = { unlocked: false };
+        const { engine, document, listeners, oscillators } = audioHarness(
+            () => Promise.reject(new Error('Autoplay blocked')), () => clock, new Map(), audioState,
+        );
+        const row = openTimeRow();
+        document.querySelectorAll = () => [row];
+        engine.evaluateAlarms();
+        await Promise.resolve();
+        if (action === 'mute') engine.toggleMute();
+        if (action === 'acknowledge') engine.silenceStage('8', row.attributes['data-checkout-time'], 'open-123-1');
+        if (action === 'checkout') document.querySelectorAll = () => [];
+        if (action === 'convert') {
+            row.attributes['data-stay-mode'] = 'fixed';
+            row.attributes['data-checkout-time'] = '2026-10-16T22:00:00+08:00';
+        }
+        audioState.unlocked = true;
+        listeners.click();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        engine.evaluateAlarms();
+        assert.equal(engine.openTimeReminders.size, 0);
+        assert.equal(oscillators.length, 0);
+        assert.equal(engine.currentSoundMode, null);
+    });
+}
+
+test('Open Time rings briefly at base reminders then once hourly without changing billing grace', async () => {
     let clock = Date.parse('2026-10-16T12:44:59+08:00');
     const { engine, document } = audioHarness(undefined, () => clock);
     const row = openTimeRow();
@@ -83,6 +147,7 @@ test('Open Time rings briefly at base reminders then once hourly without changin
     for (const [time, count] of [['12:45:00', 1], ['13:00:00', 2], ['13:15:00', 3], ['14:15:00', 4], ['15:15:00', 5]]) {
         clock = Date.parse(`2026-10-16T${time}+08:00`);
         engine.evaluateAlarms();
+        await Promise.resolve();
         assert.equal(audio.playCalls, count);
         assert.equal(audio.loop, false);
         clock += 2000;
@@ -97,12 +162,13 @@ test('Open Time rings briefly at base reminders then once hourly without changin
     for (const audio of [engine.alarmAudios.stage1, engine.alarmAudios.stage2, engine.alarmAudios.stage3]) assert.equal(audio.playCalls, 0);
 });
 
-test('Open Time reminders survive refresh, respect mute and acknowledgment, and stop at checkout', () => {
+test('Open Time reminders survive refresh, respect mute and acknowledgment, and stop at checkout', async () => {
     let clock = Date.parse('2026-10-16T12:45:00+08:00');
     const first = audioHarness(undefined, () => clock);
     const row = openTimeRow();
     first.document.querySelectorAll = () => [row];
     first.engine.evaluateAlarms();
+    await Promise.resolve();
     const reloaded = audioHarness(undefined, () => clock, first.stored);
     reloaded.document.querySelectorAll = () => [row];
     reloaded.engine.evaluateAlarms();
@@ -113,6 +179,7 @@ test('Open Time reminders survive refresh, respect mute and acknowledgment, and 
     assert.equal(reloaded.engine.alarmAudios.open.playCalls, 0);
     reloaded.engine.toggleMute();
     reloaded.engine.evaluateAlarms();
+    await Promise.resolve();
     assert.equal(reloaded.engine.alarmAudios.open.playCalls, 1);
     reloaded.engine.silenceStage('8', row.attributes['data-checkout-time'], 'open-123-2');
     assert.equal(reloaded.engine.currentSoundMode, null);
@@ -157,18 +224,20 @@ test('Open Time synthesized fallback plays its own tune once and schedules no lo
     assert.equal(intervals.size, 0);
 });
 
-test('acknowledging a previous guest cannot silence or duplicate the next stay reminder in the same room', () => {
+test('acknowledging a previous guest cannot silence or duplicate the next stay reminder in the same room', async () => {
     let clock = Date.parse('2026-10-16T12:45:00+08:00');
     const { engine, document } = audioHarness(undefined, () => clock);
     const row = openTimeRow();
     document.querySelectorAll = () => [row];
     engine.evaluateAlarms();
+    await Promise.resolve();
     engine.silenceStage('8', row.attributes['data-checkout-time'], 'open-123-1');
     row.attributes['data-folio-id'] = '456';
     engine.evaluateAlarms();
     assert.equal(engine.alarmAudios.open.playCalls, 1);
     clock += 6000;
     engine.evaluateAlarms();
+    await Promise.resolve();
     assert.equal(engine.alarmAudios.open.playCalls, 2);
     clock += 6000;
     engine.evaluateAlarms();

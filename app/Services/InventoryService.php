@@ -245,6 +245,27 @@ class InventoryService
         PosItem::clearEggCache();
     }
 
+    public function addStock(int $posItemId, int $quantity, ?string $notes, int $userId): PosItem
+    {
+        if ($quantity < 1 || $quantity > 100000) {
+            throw ValidationException::withMessages(['stock_quantity' => 'Enter a whole number of units to add between 1 and 100000.']);
+        }
+
+        return DB::transaction(function () use ($posItemId, $quantity, $notes, $userId): PosItem {
+            $item = PosItem::whereKey($posItemId)->lockForUpdate()->firstOrFail();
+            if ($item->is_retired) {
+                throw ValidationException::withMessages(['stock_quantity' => 'Retired catalog items cannot be restocked.']);
+            }
+            $newCount = (int) $item->stock_quantity + $quantity;
+            if ($newCount > 100000) {
+                throw ValidationException::withMessages(['stock_quantity' => 'Adding this delivery would exceed the stock limit of 100000.']);
+            }
+            $this->setLockedCount($item, $newCount, 'restock', $notes ?? "Received {$quantity} additional units.", $userId);
+
+            return $item;
+        });
+    }
+
     public function setStockCount(
         int $posItemId,
         int $newCount,

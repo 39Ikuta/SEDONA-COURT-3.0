@@ -61,21 +61,20 @@ class ApprovalAndCustodyTest extends TestCase
     {
         $item = PosItem::where('is_tracked', true)->firstOrFail();
         $before = $item->stock_quantity;
-        $data = $this->key(['stock_quantity' => $before + 10, 'reason' => 'restock']);
+        $data = $this->key(['stock_quantity' => 10, 'reason' => 'restock']);
         $this->post(route('inventory.update-stock', $item), $data)->assertRedirect(route('inventory.index'))->assertSessionHasNoErrors();
-        $approval = ApprovalRequest::latest('id')->firstOrFail();
         $this->assertSame($before + 10, $item->fresh()->stock_quantity);
-        $this->assertSame('executed', $approval->status);
-        $this->assertNull($approval->reviewed_by);
+        $this->assertDatabaseCount('approval_requests', 0);
+        $this->assertDatabaseHas('audit_logs', ['event' => 'inventory.restocked', 'auditable_id' => $item->id]);
         $item->update(['stock_quantity' => $before + 9]);
         $this->post(route('inventory.update-stock', $item), $data)->assertSessionHasNoErrors();
-        $this->post(route('approvals.execute', $approval), $this->key())->assertSessionHasErrors('approval');
         $this->assertSame($before + 9, $item->fresh()->stock_quantity);
         $this->assertDatabaseCount('inventory_events', 1);
     }
 
     public function test_immediate_stock_recount_is_atomic_and_has_audited_result(): void
     {
+        $this->actingAs($this->reviewer);
         $items = PosItem::where('is_tracked', true)->take(2)->get();
         $counts = [$items[0]->id => 17, $items[1]->id => 23];
         $this->post(route('inventory.recount'), $this->key(['counts' => $counts]))->assertRedirect()->assertSessionHasNoErrors();
@@ -283,9 +282,9 @@ class ApprovalAndCustodyTest extends TestCase
             'source_hash' => hash('sha256', json_encode($item->only(['stock_quantity', 'retired_at'])))]);
         $this->approve($request);
         $this->post(route('approvals.cancel', $request), ['reason' => 'Delivery corrected'])->assertRedirect()->assertSessionHasNoErrors();
-        $this->post(route('approvals.execute', $request), $this->key())->assertSessionHasErrors('approval');
+        $this->actingAs($this->reviewer)->post(route('approvals.execute', $request), $this->key())->assertSessionHasErrors('approval');
         $this->assertSame('cancelled', $request->fresh()->status);
-        $this->post(route('shifts.expense.store'), $this->key(['description' => 'Actual paid expense', 'amount' => 10, 'category' => 'other']))->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($this->cashier)->post(route('shifts.expense.store'), $this->key(['description' => 'Actual paid expense', 'amount' => 10, 'category' => 'other']))->assertRedirect()->assertSessionHasNoErrors();
         $expenseReview = ApprovalRequest::where('kind', 'expense_review')->firstOrFail();
         $this->post(route('approvals.cancel', $expenseReview), ['reason' => 'Hide expense'])->assertConflict();
         $this->assertSame(90.0, app(FinancialSummaryService::class)->shift($this->shift)['expectedCash']);

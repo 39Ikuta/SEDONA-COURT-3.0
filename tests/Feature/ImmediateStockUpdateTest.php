@@ -24,14 +24,14 @@ class ImmediateStockUpdateTest extends TestCase
     public function test_stock_changes_do_not_require_reopening_a_closed_accounting_day(string $action): void
     {
         $this->seed(DatabaseSeeder::class);
-        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        $cashier = User::where('email', $action === 'adjustment' ? 'pau@sedonapms.com' : 'admin1@sedonapms.com')->firstOrFail();
         BusinessDay::create(['business_date' => app(BusinessDayService::class)->date(), 'status' => 'closed', 'version' => 1]);
         $approval = ApprovalRequest::factory()->create(['requested_by' => $cashier->id]);
         $item = $approval->source;
         $payload = ['operation_key' => (string) Str::uuid()];
         $this->actingAs($cashier);
         if ($action === 'adjustment') {
-            $this->post(route('inventory.update-stock', $item), $payload + ['stock_quantity' => 20, 'reason' => 'restock'])->assertSessionHasNoErrors();
+            $this->post(route('inventory.update-stock', $item), $payload + ['stock_quantity' => 10, 'reason' => 'restock'])->assertSessionHasNoErrors();
         } elseif ($action === 'recount') {
             $this->post(route('inventory.recount'), $payload + ['counts' => [$item->id => 20]])->assertSessionHasNoErrors();
         } else {
@@ -64,9 +64,8 @@ class ImmediateStockUpdateTest extends TestCase
         $this->assertTrue((bool) $item->fresh()->getRawOriginal('is_available'));
         $this->assertDatabaseCount('inventory_events', 1);
         $this->assertDatabaseHas('inventory_events', ['pos_item_id' => $item->id, 'quantity_change' => 20, 'balance_after' => 20, 'user_id' => $actor->id]);
-        $this->assertSame('executed', ApprovalRequest::sole()->status);
-        $this->assertNull(ApprovalRequest::sole()->reviewed_by);
-        $this->get(route('inventory.index'))->assertSee('Stock count saved immediately. No approval is required.');
+        $this->assertDatabaseCount('approval_requests', 0);
+        $this->get(route('inventory.index'))->assertSee('Stock added immediately. No approval is required.');
     }
 
     public function test_every_catalog_item_accepts_stock_changes_without_a_pending_approval(): void
@@ -79,7 +78,7 @@ class ImmediateStockUpdateTest extends TestCase
 
         foreach ($items as $item) {
             $newCount = $item->stock_quantity + 7;
-            $this->post(route('inventory.update-stock', $item), ['operation_key' => (string) Str::uuid(), 'stock_quantity' => $newCount, 'reason' => 'restock'])->assertSessionHasNoErrors();
+            $this->post(route('inventory.update-stock', $item), ['operation_key' => (string) Str::uuid(), 'stock_quantity' => 7, 'reason' => 'restock'])->assertSessionHasNoErrors();
             $this->assertSame($newCount, $item->fresh()->stock_quantity, $item->name);
         }
 
@@ -90,7 +89,7 @@ class ImmediateStockUpdateTest extends TestCase
     public function test_invalid_batch_count_rolls_back_every_stock_change(): void
     {
         $this->seed(DatabaseSeeder::class);
-        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        $cashier = User::where('email', 'admin1@sedonapms.com')->firstOrFail();
         $item = PosItem::where('is_tracked', true)->firstOrFail();
         $before = $item->stock_quantity;
 
@@ -104,7 +103,7 @@ class ImmediateStockUpdateTest extends TestCase
     public function test_old_pending_stock_update_can_be_applied_without_review_but_stale_counts_cannot(): void
     {
         $this->seed(DatabaseSeeder::class);
-        $cashier = User::where('email', 'pau@sedonapms.com')->firstOrFail();
+        $cashier = User::where('email', 'admin1@sedonapms.com')->firstOrFail();
         $approval = ApprovalRequest::factory()->create(['requested_by' => $cashier->id]);
 
         $this->actingAs($cashier)->post(route('approvals.execute', $approval), ['operation_key' => (string) Str::uuid()])->assertSessionHasNoErrors();

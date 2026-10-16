@@ -62,6 +62,23 @@ class AdminCheckInTimeTest extends TestCase
         $this->actingAs($cashier)->get(route('dashboard'))->assertSee('data-checkout-time="2026-10-13T15:00:00+08:00"', false);
     }
 
+    public function test_newly_registered_admin_can_correct_a_stay_they_recorded_without_extra_direct_permissions(): void
+    {
+        $owner = $this->actor('owner');
+        Role::findOrCreate('admin', 'web');
+        $this->actingAs($owner)->post(route('admin.users.store'), ['name' => 'RA (Cashier)', 'email' => 'new-admin@example.test',
+            'password' => 'test-password', 'role' => 'admin'])->assertSessionHasNoErrors();
+        $admin = User::where('email', 'new-admin@example.test')->sole();
+        $folio = $this->folio($admin);
+        $this->assertSame(0, $admin->permissions()->count());
+
+        $response = $this->actingAs($admin)->post(route('admin.check-in-times.update', $folio), $this->correction($folio));
+
+        $response->assertSessionHasNoErrors()->assertSessionHas('success');
+        $this->assertSame('2026-10-13 11:00:00', $folio->fresh()->checked_in_at->toDateTimeString());
+        $this->get($response->headers->get('Location'))->assertSee('10/13/2026 11:00:00 AM');
+    }
+
     #[TestWith(['cashier'])]
     #[TestWith(['owner'])]
     #[TestWith(['manager'])]

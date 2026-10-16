@@ -112,13 +112,13 @@ class DiscountAndInventoryRbacTest extends TestCase
         ]);
     }
 
-    public function test_cashier_shift_recount_and_movement_csv_export()
+    public function test_admin_shift_recount_and_cashier_movement_csv_export()
     {
         $cashier = User::where('email', 'pau@sedonapms.com')->first();
         $item = PosItem::first();
 
         // Perform batch recount
-        $recountResp = $this->actingAs($cashier)->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(),
+        $recountResp = $this->actingAs(User::where('email', 'admin1@sedonapms.com')->firstOrFail())->post(route('inventory.recount'), ['operation_key' => (string) Str::uuid(),
             'counts' => [
                 $item->id => 25,
             ],
