@@ -454,3 +454,35 @@ test('mobile navigation restores page interaction on dismissal and desktop resiz
     assert.equal(workspace.inert, false);
     assert.equal(toggle.focusCount, 1);
 });
+test('explicit check-in save waits for payment drafts and keeps unsaved time out of those drafts', async () => {
+    const blade = readFileSync(new URL('../../resources/views/checkout/process.blade.php', import.meta.url), 'utf8');
+    const saveSource = blade.slice(blade.indexOf('let initializingSettlement = true;'), blade.indexOf('function togglePaymentInputs()'));
+    const handlerSource = blade.slice(blade.indexOf("document.getElementById('checkoutCheckInTimeForm')?.addEventListener('submit'"), blade.indexOf("document.getElementById('checkoutProcessForm').addEventListener('submit'"));
+    const document = documentWith(['paymentMethodSelect', 'inpCashTendered', 'inpGcashAmount', 'inpGcashRef', 'inpDiscountRef', 'inpCheckInTime', 'checkoutCheckInTimeForm', 'settlementSaveStatus']);
+    document.querySelector = selector => selector.includes('shift_override_reason') ? { value: '' } : { value: 'csrf-token' };
+    document.elements.paymentMethodSelect.value = 'cash';
+    document.elements.inpCashTendered.value = '1000';
+    document.elements.inpCheckInTime.value = '2026-10-17T13:00:00+08:00';
+    const requests = [];
+    let submitted = false;
+    const form = document.elements.checkoutCheckInTimeForm;
+    form.submit = () => { submitted = true; };
+    const context = { document, currentDeposit: 0, applyDeposit: true, currentDiscountType: 'NONE',
+        currentRoomRate: 395, finalBalanceToPay: 395, depositSaveTimer: null, checkInSaveTimer: null,
+        clearTimeout() {}, fetch(url, options) { return new Promise(resolve => requests.push({ body: JSON.parse(options.body), resolve })); } };
+    runInNewContext(`${saveSource}\n${handlerSource}`.replace(/\{\{[^]*?\}\}/g, 'local'), context);
+    runInNewContext('initializingSettlement = false;', context);
+    assert.equal(requests.length, 0, 'No change should save before the cashier clicks Save');
+    const submission = form.listeners.submit.call(form, { preventDefault() {} });
+    await new Promise(setImmediate);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].body.cash_tendered, 1000);
+    assert.equal(requests[0].body.checked_in_at, '2026-10-17T13:00:00+08:00');
+    assert.equal(Object.hasOwn(requests[0].body, 'actual_checked_in_at'), false);
+    assert.equal(submitted, false);
+    requests[0].resolve({ ok: true, json: async () => ({ success: true }) });
+    await submission;
+    assert.equal(submitted, true, 'Time correction posts only after payment drafts finish');
+    await context.saveSettlementDraftToServer();
+    assert.equal(requests.length, 1, 'A stale draft cannot write after time correction begins');
+});

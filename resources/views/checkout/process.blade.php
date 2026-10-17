@@ -4,7 +4,7 @@
 @section('subtitle', 'Check Out | Settle Guest Stay & Issue Official Receipt')
 
 @section('top_action')
-    @if(auth()->user()->hasRole('admin'))
+    @if(auth()->user()->hasAnyRole(['admin', 'owner']))
         <a href="{{ route('admin.check-in-times.index', ['folio_id' => $folio->id]) }}" class="bg-brand text-white text-[11px] font-bold px-3 py-1 rounded">Correct check-in time</a>
     @endif
     <a href="{{ route('folios.orders.index', $folio) }}" class="bg-sky-700 text-white text-[11px] font-bold px-3 py-1 rounded">Add-ons &amp; order history</a>
@@ -14,7 +14,7 @@
 @endsection
 
 @section('content')
-<div class="hms-card mb-4 text-sm">Cashiers can save fixed Senior, PWD and DC discounts directly. <a href="{{ route('approvals.index', ['folio_id' => $folio->id]) }}" class="underline font-semibold">Request rate or custom discount overrides for Room {{ $folio->room->number }}</a>. Execute approved overrides, then reload checkout. Check-in time corrections are handled by RA (admin). @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
+<div class="hms-card mb-4 text-sm">Cashiers can save fixed Senior, PWD and DC discounts directly. <a href="{{ route('approvals.index', ['folio_id' => $folio->id]) }}" class="underline font-semibold">Request rate or custom discount overrides for Room {{ $folio->room->number }}</a>. Execute approved overrides, then reload checkout. Save late check-in corrections below before printing Statement / Billing. @if(auth()->user()->hasAnyRole(['owner', 'admin']))<a href="{{ route('admin.discounts.index') }}" class="underline font-semibold">Manage discount defaults and guest corrections</a>.@endif</div>
     <div class="rounded-xl border p-5 mx-2 mb-4 text-sm {{ $drawerStatus['state'] === 'ready' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50' }}" role="status" id="checkoutDrawerStatus">
         <h2 class="font-bold text-brand">{{ $drawerStatus['title'] }}</h2>
         <p class="mt-1 text-slate-700">{{ $drawerStatus['message'] }}</p>
@@ -36,6 +36,29 @@
     </div>
 
 <div class="checkout-page px-3 pt-2 max-w-6xl mx-auto">
+
+    @if(auth()->user()->hasAnyRole(['cashier', 'front_desk', 'admin', 'owner']) && ! $room->is_staff_quarters)
+        <section class="hms-card mb-4">
+            <h2 class="font-bold text-brand">Correct a late check-in</h2>
+            @if($folio->isStayTimeLockedFor(auth()->user()))
+                <p class="mt-2 text-sm text-slate-600">Statement / Billing has been issued for printing. Ask an admin or owner to correct the check-in time.</p>
+            @else
+                <p class="mt-2 text-sm text-slate-600">Enter when the guest actually arrived. Changes apply only after you click Save check-in time. Checkout will reload with the saved time and updated bill.</p>
+                <form method="POST" action="{{ route('checkout.check-in-time', $folio) }}" id="checkoutCheckInTimeForm" class="mt-3 flex flex-wrap items-end gap-3">
+                    @csrf
+                    <input type="hidden" name="operation_key" value="{{ old('actual_checked_in_at') ? old('operation_key', (string) \Illuminate\Support\Str::uuid()) : (string) \Illuminate\Support\Str::uuid() }}">
+                    <input type="hidden" name="expected_checked_in_at" value="{{ $folio->checked_in_at->toIso8601String() }}">
+                    <label class="min-w-0 max-w-full text-sm font-semibold">Actual check-in time (hotel time)
+                        <input type="datetime-local" name="actual_checked_in_at" required max="{{ now('Asia/Manila')->format('Y-m-d\TH:i') }}" value="{{ old('actual_checked_in_at', $folio->checked_in_at->copy()->setTimezone('Asia/Manila')->format('Y-m-d\TH:i')) }}" class="form-control-hms block mt-1">
+                    </label>
+                    <label class="min-w-0 grow text-sm font-semibold">Reason for correction
+                        <input type="text" name="reason" required maxlength="500" value="{{ old('actual_checked_in_at') ? old('reason') : '' }}" placeholder="Guest arrived before the check-in was recorded" class="form-control-hms block mt-1">
+                    </label>
+                    <button type="submit" class="btn-hms-primary">Save check-in time</button>
+                </form>
+            @endif
+        </section>
+    @endif
 
     @can('record_payments')
     <form method="POST" action="{{ route('folios.deposit.collect', $folio) }}" class="hms-card mb-4" onsubmit="return confirm('Confirm you have received this deposit from the guest?')">
@@ -70,7 +93,7 @@
 
             @if($errors->any())
                 <div role="alert" class="mb-3 border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                    <strong>Checkout could not be completed.</strong>
+                    <strong>{{ old('actual_checked_in_at') ? 'Check-in time could not be saved.' : 'Checkout could not be completed.' }}</strong>
                     <ul class="mt-1 list-disc pl-5">
                         @foreach($errors->all() as $error)
                             <li>{{ $error }}</li>
@@ -904,6 +927,16 @@
     setInterval(() => {
         if (!settlementSubmitting) onCheckInTimeChange(document.getElementById('inpCheckInTime').value);
     }, 1000);
+    document.getElementById('checkoutCheckInTimeForm')?.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (settlementSubmitting) return;
+        const pendingDraft = saveSettlementDraftToServer();
+        settlementSubmitting = true;
+        clearTimeout(depositSaveTimer);
+        clearTimeout(checkInSaveTimer);
+        await pendingDraft;
+        this.submit();
+    });
     document.getElementById('checkoutProcessForm').addEventListener('submit', async function (event) {
         event.preventDefault();
         if (settlementSubmitting) return;

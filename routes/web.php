@@ -66,6 +66,7 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
 
         // Exact Process Checkout Screen (Matching old HMS)
         Route::get('/checkout/{folio}', [CheckInController::class, 'showCheckout'])->name('checkout.process');
+        Route::post('/checkout/{folio}/check-in-time', [AdminCheckInTimeController::class, 'updateFromCheckout'])->name('checkout.check-in-time');
         Route::post('/checkout/{folio}', [CheckInController::class, 'processCheckout'])->middleware('permission:record_payments')->name('checkout.submit');
 
         // Printables: Receipt, Gate Pass, Deposit Slip, Deposit Refund, Statement of Account (Billing), Loss Slip, Order Slip

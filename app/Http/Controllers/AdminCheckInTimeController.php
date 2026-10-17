@@ -48,6 +48,25 @@ class AdminCheckInTimeController extends Controller
     public function update(Request $request, Folio $folio): RedirectResponse
     {
         abort_unless($request->user()->hasAnyRole(['admin', 'owner']), 403);
+        $this->saveCorrection($request, $folio);
+
+        return redirect()->route('admin.check-in-times.index', ['folio_id' => $folio->id])
+            ->with('success', 'RA declaration time saved. Refresh any open Front Desk or checkout screen to load the corrected time.');
+    }
+
+    public function updateFromCheckout(Request $request, Folio $folio): RedirectResponse
+    {
+        abort_unless($request->user()->hasAnyRole(['cashier', 'front_desk', 'admin', 'owner']), 403);
+        $data = $request->validate(['actual_checked_in_at' => 'required|date_format:Y-m-d\TH:i']);
+        $request->merge(['checked_in_at' => Carbon::parse($data['actual_checked_in_at'], 'Asia/Manila')->toIso8601String()]);
+        $this->saveCorrection($request, $folio);
+
+        return redirect()->route('checkout.process', $folio)
+            ->with('success', 'Check-in time saved. The checkout schedule, stay duration and bill have been recalculated.');
+    }
+
+    private function saveCorrection(Request $request, Folio $folio): void
+    {
         $data = $request->validate([
             'checked_in_at' => 'required|date|before_or_equal:now',
             'expected_checked_in_at' => 'required|date',
@@ -84,9 +103,6 @@ class AdminCheckInTimeController extends Controller
 
             return ['folio_id' => $locked->id];
         });
-
-        return redirect()->route('admin.check-in-times.index', ['folio_id' => $folio->id])
-            ->with('success', 'RA declaration time saved. Refresh any open Front Desk or checkout screen to load the corrected time.');
     }
 
     /** @return array{checked_in_at: string, expected_checkout_at: string, net_total: string} */

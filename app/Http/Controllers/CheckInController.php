@@ -495,7 +495,7 @@ class CheckInController extends Controller
     {
         $this->assertApprovedPricing($folio, $data);
         if (isset($data['checked_in_at']) && ! Carbon::parse($data['checked_in_at'])->equalTo(strlen($data['checked_in_at']) <= 16 ? $folio->checked_in_at->copy()->startOfMinute() : $folio->checked_in_at)) {
-            throw ValidationException::withMessages(['checked_in_at' => 'Only RA (admin) can correct check-in time in Check-in Time Corrections.']);
+            throw ValidationException::withMessages(['checked_in_at' => 'Save the corrected check-in time using Save check-in time on the checkout screen, then reload any other open checkout or billing tabs.']);
         }
         $discountType = DiscountService::normalizeDiscountType($data['discount_type'] ?? $folio->discount_type);
         if (! $discountType && ! isset($data['discount_type']) && $folio->senior_pwd_discount) {
