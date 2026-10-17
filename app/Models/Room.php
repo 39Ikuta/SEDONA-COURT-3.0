@@ -42,7 +42,7 @@ class Room extends Model
     {
         return $this->hasOne(Folio::class)
             ->where('status', 'active')
-            ->latestOfMany();
+            ->ofMany(['id' => 'max'], fn (Builder $query): Builder => $query->where('status', 'active'));
     }
 
     public function bookings(): HasMany

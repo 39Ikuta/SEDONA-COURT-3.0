@@ -94,6 +94,30 @@ class LobbyKioskDisplayTest extends TestCase
         }
     }
 
+    #[TestWith(['checked_out'])]
+    #[TestWith(['voided'])]
+    public function test_transferred_stay_is_visible_when_destination_has_a_newer_inactive_stay(string $status): void
+    {
+        $transferred = $this->stay('1');
+        $previous = $this->stay('10');
+        $previous->update(['status' => $status, 'checked_in_at' => '2026-10-17 19:00:00', 'checked_out_at' => '2026-10-17 22:00:00']);
+        $previous->room->update(['status' => 'available']);
+        $cashier = User::factory()->create()->assignRole(Role::findOrCreate('cashier', 'web'));
+        foreach (['manage_folios', 'view_dashboard'] as $permission) {
+            $cashier->givePermissionTo(Permission::findOrCreate($permission, 'web'));
+        }
+        $this->actingAs($cashier)->post(route('folios.transfer', $transferred), ['target_room_id' => $previous->room_id])->assertSessionHasNoErrors();
+
+        $response = $this->get(route('kiosk.view'))->assertOk()->assertSee('Oct 17, 11:00 PM')->assertSee('Oct 18, 02:00 AM');
+        $destination = $response->viewData('rooms')->firstWhere('number', '10');
+        $this->assertSame($transferred->id, $destination->activeFolio?->id);
+        $this->assertSame($transferred->id, $destination->fresh()->activeFolio?->id);
+        $this->get(route('dashboard'))->assertOk()->assertViewHas('activeFolios', fn ($folios): bool => $folios->contains('id', $transferred->id));
+        $transferred->update(['status' => 'checked_out', 'checked_out_at' => now()]);
+        $destination->update(['status' => 'available']);
+        $this->get(route('kiosk.view'))->assertOk()->assertDontSee('Oct 17, 11:00 PM')->assertDontSee('Expected checkout');
+    }
+
     public function test_loading_more_occupied_rooms_does_not_add_one_query_per_room(): void
     {
         $this->stay('1');
