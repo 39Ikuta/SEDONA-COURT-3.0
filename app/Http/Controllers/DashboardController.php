@@ -277,7 +277,7 @@ class DashboardController extends Controller
      */
     public function kioskView(): View
     {
-        $rooms = Room::orderByNumber()->get();
+        $rooms = Room::with(['activeFolio' => fn ($query) => $query->select('folios.id', 'folios.room_id', 'folios.checked_in_at', 'folios.expected_checkout_at', 'folios.stay_mode')])->orderByNumber()->get();
         $totalRooms = $rooms->count();
         $availableRooms = $rooms->where('status', 'available')->count();
         $occupiedRooms = $rooms->where('status', 'occupied')->count();

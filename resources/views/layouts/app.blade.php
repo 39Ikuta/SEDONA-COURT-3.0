@@ -53,6 +53,8 @@
             $navigation = $kitchenNavigation;
         } elseif ($operator?->hasRole('customer_display')) {
             $navigation = $lobbyNavigation;
+        } elseif ($operator?->hasAnyRole(['cashier', 'front_desk'])) {
+            $navigation = array_merge($navigation, $lobbyNavigation);
         }
         $financeNavigation = [
             ['label' => 'Ledger', 'route' => 'admin.accounting.ledger', 'patterns' => ['admin.accounting.ledger'], 'icon' => 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5'],

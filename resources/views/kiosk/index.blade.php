@@ -98,7 +98,7 @@
                 };
             @endphp
 
-            <div class="rounded-xl border p-2 flex flex-col justify-between transition-all duration-200 {{ $cardBg }}">
+            <div data-room-number="{{ $room->number }}" class="min-w-0 rounded-xl border p-2 flex flex-col justify-between transition-all duration-200 {{ $cardBg }}">
                 <!-- Room Card Top -->
                 <div class="flex items-center justify-between">
                     <span class="font-mono font-black text-lg md:text-xl tracking-tight leading-none">
@@ -113,6 +113,20 @@
                 <div class="text-[10px] font-bold uppercase truncate text-slate-600 mt-0.5">
                     {{ strtoupper($room->type ?? 'Guest Room') }}
                 </div>
+
+                @if($isOcc && ! $room->is_staff_quarters)
+                    @php($stay = $room->activeFolio)
+                    <dl class="mt-1 space-y-1 text-[9px] leading-tight text-rose-900">
+                        <div>
+                            <dt class="text-[8px] font-bold uppercase text-rose-700">Check-in</dt>
+                            <dd class="font-mono font-bold">{{ $stay?->checked_in_at?->copy()->setTimezone('Asia/Manila')->format('M d, h:i A') ?? '—' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-[8px] font-bold uppercase text-rose-700">{{ $stay?->isOpenTime() ? 'Open Time · Base ends' : 'Expected checkout' }}</dt>
+                            <dd class="font-mono font-bold">{{ $stay?->expected_checkout_at?->copy()->setTimezone('Asia/Manila')->format('M d, h:i A') ?? '—' }}</dd>
+                        </div>
+                    </dl>
+                @endif
 
                 <!-- Status Badge -->
                 <div class="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between">
