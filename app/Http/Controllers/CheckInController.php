@@ -176,7 +176,7 @@ class CheckInController extends Controller
         $extraHours = (int) $data['hours'];
         $this->posting->execute($request, 'folio.extend', $folio->id, $data, function () use ($request, $folio, $extraHours): array {
             [$locked] = $this->lockActive($folio);
-            $locked->assertStayTimeEditable();
+            $locked->assertStayTimeEditable($request->user());
             if ($locked->isOpenTime()) {
                 throw ValidationException::withMessages(['hours' => 'Open Time already bills additional hours automatically at ₱130 per hour. Use package conversion for a 12-hour or 24-hour stay.']);
             }

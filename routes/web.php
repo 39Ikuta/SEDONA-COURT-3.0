@@ -140,8 +140,8 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
     // Admin & Owner Subsystems (Strictly Role-Gated: 403 for Cashier & Kitchen)
     // ═══════════════════════════════════════════════════════════════════════
     Route::middleware(['role:admin|owner'])->prefix('admin')->name('admin.')->group(function () {
-        Route::get('/check-in-times', [AdminCheckInTimeController::class, 'index'])->middleware('role:admin')->name('check-in-times.index');
-        Route::post('/check-in-times/{folio}', [AdminCheckInTimeController::class, 'update'])->middleware('role:admin')->name('check-in-times.update');
+        Route::get('/check-in-times', [AdminCheckInTimeController::class, 'index'])->name('check-in-times.index');
+        Route::post('/check-in-times/{folio}', [AdminCheckInTimeController::class, 'update'])->name('check-in-times.update');
         Route::get('/login-history', [LoginHistoryController::class, 'index'])->name('login-history.index');
         Route::get('/discounts', [DiscountController::class, 'index'])->name('discounts.index');
         Route::post('/discounts', [DiscountController::class, 'update'])->name('discounts.update');

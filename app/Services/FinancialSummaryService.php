@@ -18,23 +18,28 @@ use Illuminate\Support\Facades\DB;
 class FinancialSummaryService
 {
     /** @return array<string, mixed> */
-    public function period(CarbonInterface $start, CarbonInterface $end): array
+    public function period(CarbonInterface $start, CarbonInterface $end, bool $shiftBased = false): array
     {
-        $folios = Folio::with(['room', 'guest', 'cashier'])
-            ->where('status', 'checked_out')->whereBetween('checked_out_at', [$start, $end])->get();
-        $walkinOrders = Order::where('type', 'walkin_pos')->whereBetween('created_at', [$start, $end])->get();
+        $withinPeriod = fn (Builder $query, string $column): Builder => $query
+            ->where($column, '>=', $start)->where($column, $shiftBased ? '<' : '<=', $end);
+        $folios = $withinPeriod(Folio::with(['room', 'guest', 'cashier'])->where('status', 'checked_out'), 'checked_out_at')->get();
+        $walkinOrders = $withinPeriod(Order::where('type', 'walkin_pos'), 'created_at')->get();
         $expenses = Expense::whereIn('status', ['approved', 'pending_review', 'rejected_paid'])
-            ->whereDate('expense_date', '>=', $start->toDateString())->whereDate('expense_date', '<=', $end->toDateString())->get();
+            ->when($shiftBased,
+                fn (Builder $query): Builder => $withinPeriod($query, 'created_at'),
+                fn (Builder $query): Builder => $query->whereDate('expense_date', '>=', $start->toDateString())->whereDate('expense_date', '<=', $end->toDateString())
+            )->get();
         $revenue = $this->revenue($folios, $walkinOrders);
-        $returns = -(float) PaymentEntry::where('kind', 'pos_refund')->whereBetween('posted_at', [$start, $end])->get()->sum(fn (PaymentEntry $entry): float => (float) $entry->cash_amount + (float) $entry->gcash_amount);
+        $refunds = $withinPeriod(PaymentEntry::where('kind', 'pos_refund'), 'posted_at')->get();
+        $returns = -(float) $refunds->sum(fn (PaymentEntry $entry): float => (float) $entry->cash_amount + (float) $entry->gcash_amount);
         $revenue['netRevenue'] = round($revenue['netRevenue'] - $returns, 2);
         $revenue['salesReturns'] = $returns;
         $invoiceTax = (float) Invoice::where(fn ($query) => $query->whereIn('folio_id', $folios->modelKeys())->orWhereIn('order_id', $walkinOrders->modelKeys()))->get()->sum(fn ($invoice): float => $invoice->document['tax_cents'] / 100);
-        $invoiceTax -= PaymentEntry::where('kind', 'pos_refund')->whereBetween('posted_at', [$start, $end])->get()->sum(fn (PaymentEntry $entry): float => InvoiceService::refundTaxCents($entry) / 100);
-        $providerFees = (float) StatementLine::whereBetween('posted_at', [$start, $end])->whereIn('id', DB::table('statement_matches')->select('statement_line_id'))->sum('fee_amount');
+        $invoiceTax -= $refunds->sum(fn (PaymentEntry $entry): float => InvoiceService::refundTaxCents($entry) / 100);
+        $providerFees = (float) $withinPeriod(StatementLine::query(), 'posted_at')->whereIn('id', DB::table('statement_matches')->select('statement_line_id'))->sum('fee_amount');
         $totalExpenses = (float) $expenses->sum('amount');
-        $entries = PaymentEntry::whereBetween('posted_at', [$start, $end])->get();
-        [$legacyCash, $legacyGcash] = $this->tenders($this->legacySettlements($start, $end));
+        $entries = $withinPeriod(PaymentEntry::query(), 'posted_at')->get();
+        [$legacyCash, $legacyGcash] = $this->tenders($this->legacySettlements($start, $end, ! $shiftBased));
         [$posCash, $posGcash] = $this->tenders($this->legacyOrders($walkinOrders));
         $cashCollections = round((float) $entries->sum('cash_amount') + $legacyCash + $posCash, 2);
         $gcashCollections = round((float) $entries->sum('gcash_amount') + $legacyGcash + $posGcash, 2);

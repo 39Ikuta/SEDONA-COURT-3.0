@@ -55,10 +55,8 @@ class BillingPrintTimeLockTest extends TestCase
 
     #[TestWith(['cashier'])]
     #[TestWith(['front_desk'])]
-    #[TestWith(['admin'])]
-    #[TestWith(['owner'])]
     #[TestWith(['manager'])]
-    public function test_all_operating_roles_cannot_extend_or_convert_a_printed_stay(string $role): void
+    public function test_staff_cannot_extend_or_convert_a_printed_stay(string $role): void
     {
         $actor = $this->actor($role);
         $folio = $this->stay($actor);
@@ -73,19 +71,34 @@ class BillingPrintTimeLockTest extends TestCase
         $this->assertSame($before, $folio->fresh()->getAttributes());
     }
 
-    public function test_admin_cannot_submit_a_time_correction_form_opened_before_printing(): void
+    #[TestWith(['admin'])]
+    #[TestWith(['owner'])]
+    public function test_admin_and_owner_can_correct_extend_and_convert_after_staff_prints(string $role): void
     {
-        $admin = $this->actor('admin');
+        $admin = $this->actor($role);
         $folio = $this->stay($admin);
         $data = $this->key() + ['checked_in_at' => '2026-10-17T10:30', 'expected_checked_in_at' => $folio->checked_in_at->toIso8601String(), 'reason' => 'RA declared earlier'];
-        $this->actingAs($admin)->post(route('folios.billing.print', $folio), $this->key())->assertOk();
+        $cashier = $this->actor('cashier');
+        $this->actingAs($cashier)->post(route('folios.billing.print', $folio), $this->key())->assertOk();
+        $printedAt = $folio->fresh()->billing_printed_at->toDateTimeString();
 
-        $this->post(route('admin.check-in-times.update', $folio), $data)->assertSessionHasErrors('stay_time');
+        $this->actingAs($admin)->get(route('admin.check-in-times.index'))->assertOk()->assertSee('name="checked_in_at"', false);
+        $this->get(route('dashboard'))->assertViewHas('folioExtensionOptions', fn ($options): bool => ! $options[$folio->id]['timeLocked'] && count($options[$folio->id]['conversions']) === 2);
+        $this->post(route('admin.check-in-times.update', $folio), $data)->assertSessionHasNoErrors();
+        $this->assertSame('2026-10-17 10:30:00', $folio->fresh()->checked_in_at->toDateTimeString());
+        $this->post(route('folios.extend', $folio), $this->key() + ['hours' => 1])->assertSessionHasNoErrors();
+        $this->assertSame(1, $folio->fresh()->extra_hours);
+        foreach (['12h', '24h'] as $tier) {
+            $this->post(route('folios.convert', $folio), $this->key() + ['rate_tier' => $tier, 'reason' => 'Guest requested conversion'])->assertSessionHasNoErrors();
+            $this->assertSame($tier, $folio->fresh()->rate_tier);
+        }
 
-        $this->assertSame('2026-10-17 11:00:00', $folio->fresh()->checked_in_at->toDateTimeString());
-        $this->get(route('admin.check-in-times.index'))->assertOk()->assertSee('Stay times and package are locked.')
-            ->assertDontSee('name="checked_in_at"', false);
-        $this->get(route('dashboard'))->assertViewHas('folioExtensionOptions', fn ($options): bool => $options[$folio->id]['timeLocked'] && $options[$folio->id]['conversions'] === []);
+        $this->assertSame($printedAt, $folio->fresh()->billing_printed_at->toDateTimeString());
+        foreach (['folio.checkin_time_corrected', 'folio.extended', 'folio.package_converted'] as $event) {
+            $this->assertDatabaseHas('audit_logs', ['event' => $event, 'user_id' => $admin->id, 'auditable_id' => $folio->id]);
+        }
+        $this->actingAs($cashier)->get(route('dashboard'))->assertViewHas('folioExtensionOptions', fn ($options): bool => $options[$folio->id]['timeLocked'] && $options[$folio->id]['conversions'] === []);
+        $this->post(route('folios.extend', $folio), $this->key() + ['hours' => 1, 'role' => 'admin'])->assertSessionHasErrors('stay_time');
     }
 
     public function test_open_time_cannot_convert_after_printing(): void

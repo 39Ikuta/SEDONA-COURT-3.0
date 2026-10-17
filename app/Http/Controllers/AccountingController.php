@@ -13,6 +13,7 @@ use App\Services\BusinessDayService;
 use App\Services\FinancialPostingService;
 use App\Services\FinancialSummaryService;
 use App\Services\ShiftAccessService;
+use App\Services\ShiftReportService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,10 +35,12 @@ class AccountingController extends Controller
         $range = $request->query('range', 'this_week');
         $customStart = $request->query('start_date');
         $customEnd = $request->query('end_date');
+        $shift = $request->query('shift') ?? 'all';
 
-        [$startDate, $endDate, $rangeLabel] = $this->resolveDateRange($range, $customStart, $customEnd);
+        [$startDate, $endDate, $rangeLabel] = $this->resolveDateRange($range, $customStart, $customEnd, $shift, $request->query('report_date'));
+        $reportDate = $range === 'today' ? $startDate->copy()->setTimezone('Asia/Manila')->toDateString() : null;
 
-        $summary = $this->financials->period($startDate, $endDate);
+        $summary = $this->financials->period($startDate, $endDate, shiftBased: $range === 'today');
         $settledFolios = $summary['folios'];
         $expenses = $summary['expenses'];
         $roomLodgingRev = $summary['roomRevenue'];
@@ -66,7 +69,7 @@ class AccountingController extends Controller
         $gcashCollections = $summary['gcashCollections'];
 
         return view('accounting.pnl', compact(
-            'range', 'rangeLabel', 'startDate', 'endDate',
+            'range', 'rangeLabel', 'startDate', 'endDate', 'shift', 'reportDate',
             'roomLodgingRev', 'overtimeRev', 'surchargesRev', 'totalDiningRev', 'grossRevenue',
             'seniorPwdDiscounts', 'lossSlips', 'salesReturns', 'netRevenueCollected',
             'netVatableSales', 'vatOutputAmount',
@@ -245,14 +248,23 @@ class AccountingController extends Controller
     {
         $this->validateDateRange($request);
         $range = $request->query('range', 'this_month');
-        [$startDate, $endDate, $rangeLabel] = $this->resolveDateRange($range, $request->query('start_date'), $request->query('end_date'));
-        $summary = $this->financials->period($startDate, $endDate);
-        $filename = 'Sedona_Court_Financial_Report_'.$startDate->format('Ymd').'_to_'.$endDate->format('Ymd').'.csv';
+        $shift = $request->query('shift') ?? 'all';
+        [$startDate, $endDate, $rangeLabel] = $this->resolveDateRange($range, $request->query('start_date'), $request->query('end_date'), $shift, $request->query('report_date'));
+        $shiftBased = $range === 'today';
+        $summary = $this->financials->period($startDate, $endDate, shiftBased: $shiftBased);
+        $filename = $shiftBased
+            ? 'Sedona_Court_Financial_Report_'.$startDate->copy()->setTimezone('Asia/Manila')->format('Ymd').'_'.$shift.'.csv'
+            : 'Sedona_Court_Financial_Report_'.$startDate->format('Ymd').'_to_'.$endDate->format('Ymd').'.csv';
 
-        return response()->streamDownload(function () use ($summary, $rangeLabel, $startDate, $endDate): void {
+        return response()->streamDownload(function () use ($summary, $rangeLabel, $startDate, $endDate, $shiftBased): void {
             $handle = fopen('php://output', 'w');
             fputcsv($handle, ['SEDONA COURT FINANCIAL STATEMENT']);
-            fputcsv($handle, ['Period', $rangeLabel, 'From', $startDate->format('m/d/Y'), 'To', $endDate->format('m/d/Y')]);
+            $format = $shiftBased ? 'm/d/Y h:i A' : 'm/d/Y';
+            fputcsv($handle, ['Period', $rangeLabel, 'From', $startDate->copy()->setTimezone($shiftBased ? 'Asia/Manila' : config('app.timezone'))->format($format), 'To', $endDate->copy()->setTimezone($shiftBased ? 'Asia/Manila' : config('app.timezone'))->format($format)]);
+            if ($shiftBased) {
+                fputcsv($handle, ['Timezone', 'Asia/Manila', 'Start included; end excluded']);
+                fputcsv($handle, ['Expenses counted by recorded time']);
+            }
             fputcsv($handle, []);
             fputcsv($handle, ['REVENUE STREAMS', 'AMOUNT (PHP)']);
             foreach (['Room Lodging Base Revenue' => 'roomRevenue', 'Overtime & Extensions' => 'overtimeRevenue',
@@ -281,19 +293,26 @@ class AccountingController extends Controller
     {
         $request->validate([
             'range' => 'nullable|in:today,this_week,this_month,last_month,custom',
+            'shift' => 'nullable|in:all,day,night',
+            'report_date' => 'nullable|date_format:Y-m-d',
             'start_date' => 'nullable|date_format:Y-m-d',
             'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
         ]);
     }
 
-    private function resolveDateRange(string $range, ?string $customStart, ?string $customEnd): array
+    private function resolveDateRange(string $range, ?string $customStart, ?string $customEnd, string $shift = 'all', ?string $reportDate = null): array
     {
+        if ($range === 'today') {
+            $period = app(ShiftReportService::class)->period($reportDate, $shift);
+
+            return [
+                $period['start']->setTimezone(config('app.timezone')),
+                $period['end']->setTimezone(config('app.timezone')),
+                $period['label'].' ('.$period['day']->format('M d, Y').')',
+            ];
+        }
+
         return match ($range) {
-            'today' => [
-                now()->startOfDay(),
-                now()->endOfDay(),
-                'Today ('.now()->format('M d, Y').')',
-            ],
             'this_week' => [
                 now()->startOfWeek(),
                 now()->endOfWeek(),

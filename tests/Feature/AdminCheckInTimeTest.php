@@ -80,7 +80,6 @@ class AdminCheckInTimeTest extends TestCase
     }
 
     #[TestWith(['cashier'])]
-    #[TestWith(['owner'])]
     #[TestWith(['manager'])]
     #[TestWith(['front_desk'])]
     #[TestWith(['kitchen'])]

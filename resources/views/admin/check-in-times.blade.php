@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('title', 'Check-in Time Corrections')
-@section('subtitle', 'RA declaration time · Admin only')
+@section('subtitle', 'RA declaration time · Admin / Owner')
 
 @section('top_action')
     <a href="{{ route('admin.check-in-times.index') }}" class="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-hover">All active stays</a>
@@ -36,7 +36,7 @@
                 <p><span class="text-slate-500">Current check-in:</span> <strong>{{ $folio->checked_in_at->format('m/d/Y h:i:s A') }}</strong></p>
                 <p><span class="text-slate-500">{{ $folio->isOpenTime() ? 'Open Time base ends:' : 'Current checkout:' }}</span> <strong>{{ $folio->expected_checkout_at->format('m/d/Y h:i A') }}</strong></p>
             </div>
-            @if($folio->isStayTimeLocked())
+            @if($folio->isStayTimeLockedFor(auth()->user()))
                 <p class="text-sm font-bold text-slate-600">Statement / Billing issued for printing on {{ $folio->billing_printed_at->format('m/d/Y h:i A') }}. Stay times and package are locked.</p>
             @else
             <form method="POST" action="{{ route('admin.check-in-times.update', $folio) }}" class="grid grid-cols-1 sm:grid-cols-2 gap-4" data-time-correction-form>

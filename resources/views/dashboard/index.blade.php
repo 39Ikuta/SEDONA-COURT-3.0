@@ -195,7 +195,7 @@
                                         <td colspan="5">
                                             <div class="occupied-room-actions" role="group" aria-label="Actions for room {{ $room->number }}">
                                                 <a href="{{ route('checkout.process', $folio->id) }}" class="btn-occupied font-bold">Occupied</a>
-                                                @if($folio->isStayTimeLocked())
+                                                @if($folio->isStayTimeLockedFor(auth()->user()))
                                                     <span class="text-xs font-semibold text-slate-500">Time locked · Billing printed</span>
                                                 @else
                                                     <button onclick="openXtendModal({{ $folio->id }}, '{{ $room->number }}')" class="btn-xtend font-bold">{{ $folio->isOpenTime() ? 'Convert Package' : 'Extend' }}</button>

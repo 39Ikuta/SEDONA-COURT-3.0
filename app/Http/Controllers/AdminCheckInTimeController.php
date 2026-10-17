@@ -20,7 +20,7 @@ class AdminCheckInTimeController extends Controller
 
     public function index(Request $request): View
     {
-        abort_unless($request->user()->hasRole('admin'), 403);
+        abort_unless($request->user()->hasAnyRole(['admin', 'owner']), 403);
         $selectedId = $request->integer('folio_id');
         $rooms = Room::where('is_staff_quarters', false)->whereHas('activeFolio')
             ->when($selectedId, fn ($query) => $query->whereHas('activeFolio', fn ($folioQuery) => $folioQuery->whereKey($selectedId)))
@@ -47,7 +47,7 @@ class AdminCheckInTimeController extends Controller
 
     public function update(Request $request, Folio $folio): RedirectResponse
     {
-        abort_unless($request->user()->hasRole('admin'), 403);
+        abort_unless($request->user()->hasAnyRole(['admin', 'owner']), 403);
         $data = $request->validate([
             'checked_in_at' => 'required|date|before_or_equal:now',
             'expected_checked_in_at' => 'required|date',
@@ -56,7 +56,7 @@ class AdminCheckInTimeController extends Controller
         $this->posting->execute($request, 'folio.checkin_time', $folio->id, $data, function () use ($request, $folio, $data): array {
             $room = Room::whereKey($folio->room_id)->lockForUpdate()->firstOrFail();
             $locked = Folio::whereKey($folio->id)->lockForUpdate()->firstOrFail();
-            $locked->assertStayTimeEditable();
+            $locked->assertStayTimeEditable($request->user());
             abort_unless($locked->isActive() && ! $room->is_staff_quarters, 409, 'Only active guest stays can have their check-in time corrected.');
             abort_unless((int) $locked->room_id === $room->id, 409, 'Room assignment changed. Reload this stay.');
             abort_unless($locked->checked_in_at->equalTo(Carbon::parse($data['expected_checked_in_at'])), 409, 'This check-in time has changed. Reload before correcting it.');

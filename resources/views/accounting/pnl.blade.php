@@ -5,7 +5,7 @@
 
 @section('top_action')
     <div class="flex items-center space-x-2">
-        <a href="{{ route('admin.accounting.pnl.csv', ['range' => $range, 'start_date' => request('start_date'), 'end_date' => request('end_date')]) }}" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] px-3 py-1 rounded shadow-sm">
+        <a href="{{ route('admin.accounting.pnl.csv', ['range' => $range, 'start_date' => request('start_date'), 'end_date' => request('end_date')] + ($range === 'today' ? ['shift' => $shift, 'report_date' => $reportDate] : [])) }}" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] px-3 py-1 rounded shadow-sm">
             ⤓ Export CSV Report
         </a>
         <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-800 text-white font-bold text-[11px] px-3 py-1 rounded shadow-sm">
@@ -19,7 +19,7 @@
 
     <!-- Date Range Filter Bar -->
     <div class="bg-white p-2.5 border-l-4 border-[#421A2B] shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div class="flex items-center space-x-1">
+        <div class="flex flex-wrap items-center gap-1">
             <span class="font-bold text-slate-700 uppercase tracking-wide mr-2">Reporting Period:</span>
             <a href="{{ route('admin.accounting.pnl', ['range' => 'today']) }}" class="px-2.5 py-1 rounded font-bold {{ $range === 'today' ? 'bg-[#421A2B] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300' }}">Today</a>
             <a href="{{ route('admin.accounting.pnl', ['range' => 'this_week']) }}" class="px-2.5 py-1 rounded font-bold {{ $range === 'this_week' ? 'bg-[#421A2B] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300' }}">This Week</a>
@@ -27,14 +27,35 @@
             <a href="{{ route('admin.accounting.pnl', ['range' => 'last_month']) }}" class="px-2.5 py-1 rounded font-bold {{ $range === 'last_month' ? 'bg-[#421A2B] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300' }}">Last Month</a>
         </div>
 
-        <form method="GET" action="{{ route('admin.accounting.pnl') }}" class="flex items-center space-x-2">
+        <form method="GET" action="{{ route('admin.accounting.pnl') }}" class="flex flex-wrap items-center gap-2">
             <input type="hidden" name="range" value="custom">
-            <input type="date" name="start_date" value="{{ request('start_date', $startDate->toDateString()) }}" class="form-control-hms !w-32 font-mono text-xs">
+            <input type="date" name="start_date" value="{{ request('start_date', $reportDate ?? $startDate->toDateString()) }}" class="form-control-hms !w-32 font-mono text-xs">
             <span class="text-slate-400">to</span>
-            <input type="date" name="end_date" value="{{ request('end_date', $endDate->toDateString()) }}" class="form-control-hms !w-32 font-mono text-xs">
+            <input type="date" name="end_date" value="{{ request('end_date', $reportDate ?? $endDate->toDateString()) }}" class="form-control-hms !w-32 font-mono text-xs">
             <button type="submit" class="px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded">Filter</button>
         </form>
     </div>
+
+    @if($range === 'today')
+        <section class="hms-card space-y-3">
+            <form method="GET" action="{{ route('admin.accounting.pnl') }}" class="flex flex-wrap items-end gap-3 text-xs">
+                <input type="hidden" name="range" value="today">
+                <label class="font-bold text-slate-700">Shift date
+                    <input type="date" name="report_date" required value="{{ $reportDate }}" class="form-control-hms block mt-1">
+                </label>
+                <label class="min-w-0 max-w-full font-bold text-slate-700">Reporting shift
+                    <select name="shift" class="form-control-hms block mt-1 max-w-full">
+                        <option value="all" @selected($shift === 'all')>Both shifts · 6:30 AM to next 6:30 AM</option>
+                        <option value="day" @selected($shift === 'day')>Day · 6:30 AM to 6:30 PM</option>
+                        <option value="night" @selected($shift === 'night')>Night · 6:30 PM to next 6:30 AM</option>
+                    </select>
+                </label>
+                <button type="submit" class="rounded bg-brand px-4 py-2 font-bold text-white hover:bg-brand-hover">Show period</button>
+            </form>
+            <p class="text-sm font-semibold text-slate-700">{{ $startDate->copy()->setTimezone('Asia/Manila')->format('M d, Y h:i A') }} → {{ $endDate->copy()->setTimezone('Asia/Manila')->format('M d, Y h:i A') }} (hotel time)</p>
+            <p class="text-xs text-slate-500">Before 6:30 AM, Today belongs to the previous shift date. Shift expenses are counted when recorded. Transactions at the ending time belong to the next shift.</p>
+        </section>
+    @endif
 
     <!-- Executive KPI Row -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">

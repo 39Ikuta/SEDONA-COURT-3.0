@@ -155,7 +155,7 @@
             <button type="submit" class="btn-print">🖨️ Print 80mm Statement / Billing</button>
         </form>
         <button class="btn-print" style="background:#4b5563; margin-left:6px;" onclick="window.close()">Close</button>
-        <p style="max-width:72mm;font-size:12px;">{{ $folio->isStayTimeLocked() ? 'Stay times and package are locked. Reprinting keeps the lock.' : 'Clicking Print locks check-in time, extensions and package conversions, even if you cancel the printer dialog.' }}</p>
+        <p style="max-width:72mm;font-size:12px;">{{ auth()->user()->hasAnyRole(['admin', 'owner']) ? 'Admin and owner can still correct stay times, extend stays and convert packages after printing. Changes are recorded in the audit history.' : ($folio->isStayTimeLocked() ? 'Stay times and package are locked. Contact an admin or owner for changes.' : 'Clicking Print locks check-in time, extensions and package conversions for staff, even if you cancel the printer dialog. Admin and owner can still make changes.') }}</p>
     </div>
     <p class="print-not-issued">Use the Print Statement / Billing button to issue this statement before printing.</p>
 
