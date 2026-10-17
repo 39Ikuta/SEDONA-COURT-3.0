@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Folio;
+use App\Services\ShiftReportService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -43,19 +44,21 @@ class DailyCheckInController extends Controller
 
     public function receipts(Request $request): View
     {
-        $filters = $request->validate(['date' => 'nullable|date_format:Y-m-d']);
-        $date = $filters['date'] ?? CarbonImmutable::now('Asia/Manila')->toDateString();
-        $day = CarbonImmutable::parse($date, 'Asia/Manila')->startOfDay();
-        $start = $day->setTimezone(config('app.timezone'));
-        $end = $start->addDay();
-        $query = Folio::whereNotNull('receipt_number')->where('receipt_issued_at', '>=', $start)->where('receipt_issued_at', '<', $end)
+        $filters = $request->validate(['date' => 'nullable|date_format:Y-m-d', 'shift' => 'nullable|in:all,day,night']);
+        $period = app(ShiftReportService::class)->period($filters['date'] ?? null, $filters['shift'] ?? 'all');
+        ['date' => $date, 'shift' => $shift, 'day' => $day, 'start' => $start, 'end' => $end, 'label' => $periodLabel] = $period;
+        $query = Folio::whereNotNull('receipt_number')
+            ->where('receipt_issued_at', '>=', $start->setTimezone(config('app.timezone')))
+            ->where('receipt_issued_at', '<', $end->setTimezone(config('app.timezone')))
             ->whereHas('room', fn (Builder $rooms): Builder => $rooms->where('is_staff_quarters', false));
         $receiptCount = (clone $query)->count();
         $guestCount = (int) (clone $query)->join('guests', 'guests.id', '=', 'folios.guest_id')->sum('guests.headcount');
-        $lastNumber = (int) DB::table('document_sequences')->where('name', 'scti:'.$day->format('Ymd'))->value('last_number');
+        $firstReceipt = (clone $query)->orderBy('receipt_issued_at')->orderByRaw('length(receipt_number)')->orderBy('receipt_number')->orderBy('folios.id')->value('receipt_number');
+        $lastReceipt = (clone $query)->orderByDesc('receipt_issued_at')->orderByRaw('length(receipt_number) DESC')->orderByDesc('receipt_number')->orderByDesc('folios.id')->value('receipt_number');
         $folios = $query->with(['room', 'guest', 'checkedOutBy'])->orderBy('receipt_issued_at')
-            ->orderByRaw('length(receipt_number)')->orderBy('receipt_number')->orderBy('folios.id')->paginate(30)->withQueryString();
+            ->orderByRaw('length(receipt_number)')->orderBy('receipt_number')->orderBy('folios.id')->paginate(30)->withQueryString()
+            ->appends(['date' => $date, 'shift' => $shift]);
 
-        return view('checkins.receipts', compact('date', 'day', 'folios', 'receiptCount', 'guestCount', 'lastNumber'));
+        return view('checkins.receipts', compact('date', 'shift', 'day', 'start', 'end', 'periodLabel', 'folios', 'receiptCount', 'guestCount', 'firstReceipt', 'lastReceipt'));
     }
 }

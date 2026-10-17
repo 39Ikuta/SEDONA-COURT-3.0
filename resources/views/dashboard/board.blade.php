@@ -10,6 +10,32 @@
     <!-- LEFT SIDEBAR -->
     <aside class="xl:col-span-3 space-y-3">
 
+        @if($shiftActivity !== null && auth()->user()->hasAnyRole(['admin', 'owner']))
+            <section class="bg-white rounded-xl border border-[#e8e2d6] shadow-sm p-4" aria-label="Check-ins and checkouts by shift">
+                <h2 class="font-black text-[13px] tracking-wide text-[#421A2B] uppercase">Check-ins &amp; Checkouts</h2>
+                <p class="text-xs text-slate-500 mt-1">By shift · Manila time · starting {{ $shiftActivity['date'] }}</p>
+                <form method="GET" action="{{ route('dashboard') }}" class="flex flex-wrap items-end gap-2 mt-3">
+                    <label class="text-xs text-slate-600">Shift start date
+                        <input type="date" name="shift_date" value="{{ $shiftActivity['date'] }}" required class="form-control-hms block w-full">
+                    </label>
+                    <button type="submit" class="btn-addon">Show</button>
+                </form>
+                <table class="w-full text-xs mt-3">
+                    <thead><tr class="text-slate-500"><th class="text-left py-2">Shift</th><th>Check-ins</th><th>Checkouts</th></tr></thead>
+                    <tbody>
+                        @foreach($shiftActivity['shifts'] as $shiftKey => $activity)
+                            <tr class="border-t border-slate-100">
+                                <th class="text-left py-3 font-semibold text-slate-700">{{ $activity['label'] }}<span class="block text-[10px] font-normal text-slate-500">{{ $activity['start']->format('g:i A') }}–{{ $activity['end']->format('g:i A') }}{{ $shiftKey === 'night' ? ' next day' : '' }}</span></th>
+                                <td class="text-center"><strong class="text-base text-emerald-800">{{ $activity['check_ins']['stays'] }}</strong><span class="block text-[10px] text-slate-500">{{ $activity['check_ins']['guests'] }} guests</span></td>
+                                <td class="text-center"><a class="font-bold text-base text-[#421A2B] underline" href="{{ route('receipts.index', ['date' => $shiftActivity['date'], 'shift' => $shiftKey]) }}">{{ $activity['check_outs']['stays'] }}</a><span class="block text-[10px] text-slate-500">{{ $activity['check_outs']['guests'] }} guests</span></td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+                <p class="text-[10px] text-slate-500 mt-2">Counts room stays, including guests who have already left. Cancelled stays and staff quarters are excluded.</p>
+            </section>
+        @endif
+
         <!-- Occupancy graph -->
         <div class="bg-white rounded-xl border border-[#e8e2d6] shadow-sm p-4">
             <div class="flex items-center justify-between">

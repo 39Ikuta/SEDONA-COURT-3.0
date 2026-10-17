@@ -142,8 +142,8 @@ class CheckoutReceiptSequenceTest extends TestCase
             $this->assertSame('SCTI-20261015-001', $second->fresh()->receipt_number);
             $this->assertSame('SCTI-20261016-001', $first->fresh()->receipt_number);
             $this->assertSame('STAY-20261015-001', $first->fresh()->transaction_id);
-            $this->get(route('receipts.index', ['date' => '2026-10-16']))
-                ->assertViewHas('receiptCount', 1)->assertSee('SCTI-20261016-001')->assertDontSee('SCTI-20261015-001');
+            $this->get(route('receipts.index', ['date' => '2026-10-15', 'shift' => 'night']))
+                ->assertViewHas('receiptCount', 2)->assertSee('SCTI-20261016-001')->assertSee('SCTI-20261015-001');
         } finally {
             date_default_timezone_set($originalTimezone);
         }
@@ -259,7 +259,8 @@ class CheckoutReceiptSequenceTest extends TestCase
         $response = $this->actingAs($actor)->get(route('receipts.index', ['date' => '2026-10-15', 'page' => 2]));
 
         $response->assertViewHas('receiptCount', 31)->assertViewHas('guestCount', 62)
-            ->assertSee('SCTI-20261015-031')->assertDontSee('SCTI-20261015-001');
+            ->assertSee('SCTI-20261015-031')
+            ->assertViewHas('folios', fn ($folios): bool => $folios->pluck('receipt_number')->all() === ['SCTI-20261015-031']);
         $this->assertCount(1, $response->viewData('folios')->items());
         $this->assertStringContainsString('date=2026-10-15', $response->viewData('folios')->url(1));
     }

@@ -11,6 +11,7 @@ use App\Models\PosItem;
 use App\Models\Room;
 use App\Models\Shift;
 use App\Services\DiscountService;
+use App\Services\ShiftReportService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -29,6 +30,12 @@ class DashboardController extends Controller
 
         $selectedFloor = $request->query('floor', 'all');
         $selectedStatus = $request->query('status', 'all');
+
+        $shiftActivity = null;
+        if ($request->user()->hasAnyRole(['admin', 'owner'])) {
+            $shiftFilters = $request->validate(['shift_date' => 'nullable|date_format:Y-m-d']);
+            $shiftActivity = app(ShiftReportService::class)->activity($shiftFilters['shift_date'] ?? null);
+        }
 
         $query = Room::with(['activeFolio.guest', 'activeFolio.orders.items']);
 
@@ -214,6 +221,7 @@ class DashboardController extends Controller
 
         return view($boardView ? 'dashboard.board' : 'dashboard.index', compact(
             'rooms',
+            'shiftActivity',
             'folioDiscountOptions',
             'folioExtensionOptions',
             'totalRooms',
