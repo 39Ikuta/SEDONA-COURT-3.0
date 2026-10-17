@@ -165,6 +165,44 @@ class PosItem extends Model
         return $query->where('is_retired', false);
     }
 
+    public function scopeInStockListOrder(Builder $query): Builder
+    {
+        $orderedNames = [
+            ['bangsilog'],
+            ['chicksilog'],
+            ['hotsilog'],
+            ['longsilog'],
+            ['porksilog'],
+            ['tapsilog'],
+            ['buffalo wings'],
+            ['buttered chicken'],
+            ['chicharong bulaklak', 'chicharon bulaklak'],
+            ['calamares'],
+            ['french fries', 'fries'],
+            ['lechon kawali'],
+            ['garlic chicken'],
+            ["tokwa't baboy", 'tokwat baboy'],
+            ['pancit canton'],
+            ['lomi'],
+            ['sizzling hotdog'],
+            ['sizzling tofu'],
+            ['sizzling sisig w/ egg', 'sizzling sisig w egg', 'sizzling sisig with egg'],
+            ['egg (fried/boiled)', 'egg', 'eggs'],
+        ];
+        $cases = [];
+        $bindings = [];
+        foreach ($orderedNames as $position => $names) {
+            foreach ($names as $name) {
+                $cases[] = 'WHEN ? THEN ?';
+                array_push($bindings, $name, $position);
+            }
+        }
+        $bindings[] = count($orderedNames);
+
+        return $query->orderByRaw('CASE LOWER(TRIM(name)) '.implode(' ', $cases).' ELSE ? END', $bindings)
+            ->orderBy('category')->orderBy('sort_order')->orderBy('name')->orderBy('id');
+    }
+
     public function scopeByCategory(Builder $query, string $category): Builder
     {
         return $query->notRetired()->where('category', $category);

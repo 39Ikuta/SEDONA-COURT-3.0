@@ -28,7 +28,7 @@ class InventoryController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PosItem::notRetired()->orderBy('category')->orderBy('sort_order');
+        $query = PosItem::notRetired()->inStockListOrder();
 
         if ($category = $request->input('category')) {
             $query->where('category', $category);

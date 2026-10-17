@@ -54,7 +54,7 @@
                     <label class="min-w-0 grow text-sm font-semibold">Reason for correction
                         <input type="text" name="reason" required maxlength="500" value="{{ old('actual_checked_in_at') ? old('reason') : '' }}" placeholder="Guest arrived before the check-in was recorded" class="form-control-hms block mt-1">
                     </label>
-                    <button type="submit" class="btn-hms-primary">Save check-in time</button>
+                    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover">Save check-in time</button>
                 </form>
             @endif
         </section>
