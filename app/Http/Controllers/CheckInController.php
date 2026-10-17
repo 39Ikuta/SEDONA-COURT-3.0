@@ -176,6 +176,7 @@ class CheckInController extends Controller
         $extraHours = (int) $data['hours'];
         $this->posting->execute($request, 'folio.extend', $folio->id, $data, function () use ($request, $folio, $extraHours): array {
             [$locked] = $this->lockActive($folio);
+            $locked->assertStayTimeEditable();
             if ($locked->isOpenTime()) {
                 throw ValidationException::withMessages(['hours' => 'Open Time already bills additional hours automatically at ₱130 per hour. Use package conversion for a 12-hour or 24-hour stay.']);
             }
@@ -360,8 +361,18 @@ class CheckInController extends Controller
     /** @return array<string, mixed> */
     private function recordPrintRequest(Request $request, Folio $folio, string $document): array
     {
-        return $this->posting->execute($request, $document.'.print', $folio->id, [], function () use ($request, $folio, $document): array {
+        $payload = $document === 'billing' ? $request->except(['_token', 'operation_key']) : [];
+
+        return $this->posting->execute($request, $document.'.print', $folio->id, $payload, function () use ($request, $folio, $document): array {
             $locked = Folio::whereKey($folio->id)->lockForUpdate()->firstOrFail();
+            if ($document === 'billing') {
+                abort_if($locked->status === 'voided', 409, 'Cancelled stays cannot issue billing statements.');
+                $this->viewData($locked, $request);
+                if (! $locked->isStayTimeLocked()) {
+                    $locked->billing_printed_at = now();
+                    $locked->save();
+                }
+            }
             $copy = DB::table('audit_logs')->where('auditable_type', Folio::class)->where('auditable_id', $locked->id)->where('event', $document.'.print_requested')->count() + 1;
             $this->audit->record($request, $document.'.print_requested', $locked, ['copy_number' => $copy, 'operation_key' => $request->input('operation_key'), 'physical_print_confirmed' => false]);
 
@@ -372,6 +383,17 @@ class CheckInController extends Controller
     public function showBillingStatement(Request $request, Folio $folio): View
     {
         return view('checkout.billing', $this->viewData($folio, $request));
+    }
+
+    public function requestBillingPrint(Request $request, Folio $folio): View|RedirectResponse
+    {
+        try {
+            $result = $this->recordPrintRequest($request, $folio, 'billing');
+
+            return view('checkout.billing', $this->viewData($folio->refresh(), $request) + ['receiptCopy' => $result['copy_number'], 'printRequested' => true]);
+        } catch (ValidationException $exception) {
+            return redirect()->route('folios.billing', $folio)->withErrors($exception->errors());
+        }
     }
 
     public function showDepositSlip(Request $request, Folio $folio): View

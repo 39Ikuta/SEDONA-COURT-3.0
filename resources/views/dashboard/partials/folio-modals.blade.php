@@ -333,6 +333,10 @@
     function openXtendModal(folioId, roomNumber) {
         const options = FOLIO_EXTENSION_OPTIONS[folioId];
         if (!options) return;
+        if (options.timeLocked) {
+            window.alert('Statement / Billing was issued for printing. Stay times and package are locked.');
+            return;
+        }
         currentExtensionOptions = options;
         document.getElementById('xtendForm').action = options.extendUrl;
         document.getElementById('convertStayForm').action = options.convertUrl;

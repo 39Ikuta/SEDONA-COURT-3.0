@@ -117,6 +117,7 @@
             margin-bottom: 16px;
             text-align: center;
         }
+        .print-not-issued { display: none; }
         .btn-print {
             background-color: #0275d8;
             color: #fff;
@@ -132,15 +133,31 @@
             .thermal-container { border: none; box-shadow: none; padding: 2mm 1mm; width: 72mm; max-width: 100%; margin: 0 auto; }
             .thermal-container, .thermal-container * { color: #000 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             .no-print { display: none; }
+            .thermal-container { display: none; }
+            .billing-print-authorized .thermal-container { display: block; }
+            .print-not-issued { display: block; }
+            .billing-print-authorized .print-not-issued { display: none; }
         }
     </style>
 </head>
-<body>
+<body @if($printRequested ?? false) class="billing-print-authorized" @endif>
 
     <div class="no-print">
-        <button class="btn-print" onclick="window.print()">🖨️ Print 80mm Statement / Billing</button>
+        @if($errors->any())
+            <div role="alert" style="max-width:72mm;margin:0 auto 12px;color:#991b1b;">
+                <strong>Statement was not printed. Review the updated bill and try again.</strong>
+                @foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach
+            </div>
+        @endif
+        <form method="POST" action="{{ route('folios.billing.print', $folio) }}{{ request()->getQueryString() ? '?'.request()->getQueryString() : '' }}" style="display:inline">
+            @csrf
+            <input type="hidden" name="operation_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+            <button type="submit" class="btn-print">🖨️ Print 80mm Statement / Billing</button>
+        </form>
         <button class="btn-print" style="background:#4b5563; margin-left:6px;" onclick="window.close()">Close</button>
+        <p style="max-width:72mm;font-size:12px;">{{ $folio->isStayTimeLocked() ? 'Stay times and package are locked. Reprinting keeps the lock.' : 'Clicking Print locks check-in time, extensions and package conversions, even if you cancel the printer dialog.' }}</p>
     </div>
+    <p class="print-not-issued">Use the Print Statement / Billing button to issue this statement before printing.</p>
 
     <div class="thermal-container" id="printable-billing">
         <!-- Header -->
@@ -383,4 +400,7 @@
     </div>
 
 </body>
+@if($printRequested ?? false)
+<script>window.addEventListener('load', () => window.print());</script>
+@endif
 </html>

@@ -79,6 +79,7 @@ Route::middleware(['auth', 'auth.session', 'active_account'])->group(function ()
         Route::get('/folios/{folio}/deposit-refund', [CheckInController::class, 'showDepositRefund'])->name('folios.deposit_refund');
         Route::post('/folios/{folio}/deposit-refund', [CheckInController::class, 'refundDeposit'])->middleware('permission:record_payments')->name('folios.deposit_refund.store');
         Route::get('/folios/{folio}/billing', [CheckInController::class, 'showBillingStatement'])->name('folios.billing');
+        Route::post('/folios/{folio}/billing-print', [CheckInController::class, 'requestBillingPrint'])->name('folios.billing.print');
         Route::get('/folios/{folio}/loss-slip', [CheckInController::class, 'showLossSlip'])->name('folios.loss_slip');
         Route::get('/folios/{folio}/order-slip', [PosController::class, 'showOrderSlip'])->name('folios.orderslip');
 

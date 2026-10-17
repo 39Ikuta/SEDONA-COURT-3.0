@@ -20,6 +20,7 @@ class StayRateService
 
     public function convert(Folio $folio, string $tier, Request $request): void
     {
+        $folio->assertStayTimeEditable();
         if ($folio->room->getTierHours($tier) <= $folio->room->getTierHours($folio->rate_tier)) {
             throw ValidationException::withMessages(['rate_tier' => 'Choose a package longer than the current stay package.']);
         }
@@ -48,6 +49,9 @@ class StayRateService
     private function apply(Folio $folio, Room $room, string $tier, int $extraHours, Request $request, string $event): void
     {
         $checkout = $room->getCheckoutForTier($tier, $folio->checked_in_at, $extraHours);
+        if ($tier !== $folio->rate_tier || $extraHours !== (int) $folio->extra_hours || ! $checkout->equalTo($folio->expected_checkout_at)) {
+            $folio->assertStayTimeEditable();
+        }
         $openTime = $folio->isOpenTime() && $event === 'folio.room_transferred';
         $this->assertReservationAvailable($room, now(), $checkout, $folio->booking_id, $openTime);
         $before = $folio->only(['room_id', 'rate_tier', 'stay_mode', 'room_charge', 'extra_hours', 'expected_checkout_at', 'net_total']);
