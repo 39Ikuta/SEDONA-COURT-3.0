@@ -83,8 +83,22 @@ class AdminCheckInTimeController extends Controller
             if ($corrected->equalTo($locked->checked_in_at)) {
                 return ['folio_id' => $locked->id];
             }
-            if ($room->folios()->whereKeyNot($locked->id)->where('status', 'checked_out')
-                ->where('checked_in_at', '<=', now())->where('checked_out_at', '>', $corrected)->exists()) {
+            $arrivalRoomId = $room->id;
+            $arrivalRoomDeparture = now();
+            $firstTransfer = DB::table('audit_logs')->where('auditable_type', Folio::class)->where('auditable_id', $locked->id)
+                ->where('event', 'folio.room_transferred')->orderBy('id')->first(['new_values', 'created_at']);
+            if ($firstTransfer) {
+                $arrivalRoomId = (int) data_get(json_decode($firstTransfer->new_values, true), 'before.room_id');
+                if ($arrivalRoomId < 1) {
+                    throw ValidationException::withMessages(['checked_in_at' => 'The original room could not be verified from the transfer history. Ask an admin or owner to review this stay.']);
+                }
+                $arrivalRoomDeparture = Carbon::parse($firstTransfer->created_at);
+                if ($corrected->gt($arrivalRoomDeparture)) {
+                    throw ValidationException::withMessages(['checked_in_at' => 'Check-in time cannot be later than the first room transfer.']);
+                }
+            }
+            if (Folio::where('room_id', $arrivalRoomId)->whereKeyNot($locked->id)->where('status', 'checked_out')
+                ->where('checked_in_at', '<', $arrivalRoomDeparture)->where('checked_out_at', '>', $corrected)->exists()) {
                 throw ValidationException::withMessages(['checked_in_at' => 'This declaration time overlaps another recorded stay in the room.']);
             }
             $this->stayRates->assertPromoArrival($locked->rate_tier, $corrected, 'checked_in_at');

@@ -49,6 +49,24 @@ class OpenTimeStayTest extends TestCase
         }
     }
 
+    #[TestWith(['pau@sedonapms.com', false])]
+    #[TestWith(['pau@sedonapms.com', true])]
+    #[TestWith(['admin1@sedonapms.com', false])]
+    #[TestWith(['owner@sedonapms.com', true])]
+    public function test_open_time_is_always_selectable_in_the_actual_checkin_dropdown(string $email, bool $promoEnabled): void
+    {
+        config(['sedona.midnight_promo_enabled' => $promoEnabled]);
+        $response = $this->actingAs(User::where('email', $email)->firstOrFail())->get(route('dashboard'))->assertOk();
+        $document = new \DOMDocument;
+        @$document->loadHTML($response->getContent());
+        $xpath = new \DOMXPath($document);
+        $select = $xpath->query('//form[@id="guestCheckInForm"]//select[@name="rate_tier" and @id="checkInTierSelect"]');
+        $this->assertSame(1, $select->length);
+        $option = $xpath->query('//select[@id="checkInTierSelect"]/option[@value="open" and not(@disabled) and not(@hidden)]');
+        $this->assertSame(1, $option->length);
+        $this->assertStringContainsString('Open Time', $option->item(0)->textContent);
+    }
+
     public function test_open_check_in_retries_create_one_stay_and_dashboard_exposes_live_timer_data_without_marking_it_late(): void
     {
         $room = Room::where('number', '6')->firstOrFail();

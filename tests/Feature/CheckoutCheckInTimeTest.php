@@ -150,6 +150,57 @@ class CheckoutCheckInTimeTest extends TestCase
         $this->assertSame('2026-10-17 03:00:00', $folio->fresh()->checked_in_at->toDateTimeString());
     }
 
+    #[TestWith([false, false])]
+    #[TestWith([true, false])]
+    #[TestWith([false, true])]
+    #[TestWith([true, true])]
+    public function test_transferred_stay_time_correction_checks_the_original_room_history(bool $originalRoomConflict, bool $multipleTransfers): void
+    {
+        $cashier = $this->actor('cashier');
+        $stay = $this->stay($cashier);
+        $originalRoom = $stay->room;
+        $stay->update(['checked_in_at' => '2026-10-17 08:00:00', 'expected_checkout_at' => '2026-10-17 11:00:00']);
+        $previous = $this->stay($cashier);
+        $previous->update(['status' => 'checked_out', 'checked_in_at' => '2026-10-17 10:00:00', 'checked_out_at' => '2026-10-17 11:00:00']);
+        $previous->room->update(['status' => 'available']);
+        $this->travelTo('2026-10-17 12:00:00');
+        $this->actingAs($cashier)->post(route('folios.transfer', $stay), ['target_room_id' => $previous->room_id])->assertSessionHasNoErrors();
+        if ($multipleTransfers) {
+            $thirdRoomStay = $this->stay($cashier);
+            $thirdRoomStay->update(['status' => 'voided']);
+            $thirdRoomStay->room->update(['status' => 'available']);
+            $this->post(route('folios.transfer', $stay), ['target_room_id' => $thirdRoomStay->room_id])->assertSessionHasNoErrors();
+        }
+        if ($originalRoomConflict) {
+            $earlier = $this->stay($cashier);
+            $earlier->update(['room_id' => $originalRoom->id, 'status' => 'checked_out', 'checked_in_at' => '2026-10-17 06:00:00', 'checked_out_at' => '2026-10-17 08:00:00']);
+        }
+        $data = array_replace($this->correction($stay->fresh()), ['actual_checked_in_at' => '2026-10-17T07:55']);
+        $response = $this->post(route('checkout.check-in-time', $stay), $data);
+        if ($originalRoomConflict) {
+            $response->assertSessionHasErrors('checked_in_at');
+            $this->assertSame('2026-10-17 08:00:00', $stay->fresh()->checked_in_at->toDateTimeString());
+        } else {
+            $response->assertSessionHasNoErrors();
+            $this->assertSame('2026-10-17 07:55:00', $stay->fresh()->checked_in_at->toDateTimeString());
+            $this->assertSame('2026-10-17 10:55:00', $stay->fresh()->expected_checkout_at->toDateTimeString());
+        }
+    }
+
+    public function test_corrected_arrival_cannot_be_after_the_first_transfer(): void
+    {
+        $cashier = $this->actor('cashier');
+        $stay = $this->stay($cashier);
+        $destination = $this->stay($cashier);
+        $destination->update(['status' => 'voided']);
+        $destination->room->update(['status' => 'available']);
+        $this->actingAs($cashier)->post(route('folios.transfer', $stay), ['target_room_id' => $destination->room_id])->assertSessionHasNoErrors();
+        $this->travel(30)->minutes();
+        $data = array_replace($this->correction($stay->fresh()), ['actual_checked_in_at' => '2026-10-17T16:20']);
+        $this->post(route('checkout.check-in-time', $stay), $data)->assertSessionHasErrors('checked_in_at');
+        $this->assertSame('2026-10-17 13:00:00', $stay->fresh()->checked_in_at->toDateTimeString());
+    }
+
     private function actor(string $role): User
     {
         $actor = User::factory()->create()->assignRole(Role::findOrCreate($role, 'web'));
