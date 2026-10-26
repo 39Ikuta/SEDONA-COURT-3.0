@@ -45,7 +45,7 @@ class FinanceWorkspaceTest extends TestCase
             ->assertOk()->assertDontSee('ANOTHER-DAY')
             ->assertViewHas('paymentCandidates', fn ($choices): bool => $choices->get('MATCH-CHOICES')->modelKeys() === [$eligible->id])
             ->assertSee('name="entries[]"', false)->assertSee('Net GCash collected')
-            ->assertSee('6:00 AM cutoff')->assertSee('6:30 AM / PM')
+            ->assertSee('6:30 AM cutoff')->assertSee('6:30 AM / PM')
             ->assertViewHas('cutoffPassed', false);
     }
 

@@ -1,6 +1,9 @@
 @extends('layouts.app')
 @section('title', 'Daily Finance & Reconciliation')
 @section('subtitle', 'Review collections, match GCash / bank records, then close the business day')
+@section('top_action')
+    <a href="{{ route('admin.accounting.reports', ['report' => 'financial_audit', 'range' => 'today', 'report_date' => $date, 'finance_day' => 1]) }}" class="inline-flex items-center justify-center rounded bg-brand px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">Daily Excel reports</a>
+@endsection
 @section('content')
 @php
     $closed = $day?->status === 'closed';
@@ -20,7 +23,7 @@
             <span class="rounded-full px-3 py-1 text-xs font-bold {{ $closed ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-800' }}">{{ $closed ? 'Closed · saved totals' : 'Open · live totals' }} · Version {{ $day?->version ?? 0 }}</span>
         </div>
         <p class="text-sm font-semibold text-slate-700">{{ $periodStart->format('M d, Y h:i A') }} → {{ $periodEnd->format('M d, Y h:i A') }} (hotel time)</p>
-        <p class="text-xs text-slate-500">This accounting day uses a 6:00 AM cutoff. P&L shift reports use 6:30 AM / PM. Transactions at the ending time belong to the next business day.</p>
+        <p class="text-xs text-slate-500">This accounting day uses a 6:30 AM cutoff. P&L shift reports use 6:30 AM / PM. Transactions at the ending time belong to the next business day.</p>
         <nav aria-label="Finance sections" class="flex flex-wrap gap-2 text-xs font-semibold">
             <a href="#collections" class="rounded border border-slate-200 bg-slate-50 px-3 py-2">1. Review money</a>
             <a href="#matching" class="rounded border border-slate-200 bg-slate-50 px-3 py-2">2. Match GCash / bank</a>
