@@ -439,7 +439,7 @@ class CheckInController extends Controller
             $snapshot = null;
             if ($document === 'billing') {
                 abort_if($locked->status === 'voided', 409, 'Cancelled stays cannot issue billing statements.');
-                $snapshot = $this->billingSnapshot($this->viewData($locked, $request, useCurrentTime: true));
+                $snapshot = $this->billingSnapshot($this->viewData($locked, $request, useCurrentTime: true) + ['extensionCorrected' => $this->hasExtensionCorrection($locked)]);
                 if ($locked->billing_printed_at === null) {
                     $locked->billing_printed_at = now();
                     $locked->save();
@@ -457,7 +457,13 @@ class CheckInController extends Controller
 
     public function showBillingStatement(Request $request, Folio $folio): View
     {
-        return view('checkout.billing', $this->viewData($folio, $request));
+        return view('checkout.billing', $this->viewData($folio, $request) + ['extensionCorrected' => $this->hasExtensionCorrection($folio)]);
+    }
+
+    private function hasExtensionCorrection(Folio $folio): bool
+    {
+        return DB::table('audit_logs')->where('auditable_type', Folio::class)->where('auditable_id', $folio->id)
+            ->where('event', 'folio.extension_corrected')->exists();
     }
 
     public function requestBillingPrint(Request $request, Folio $folio): View|RedirectResponse

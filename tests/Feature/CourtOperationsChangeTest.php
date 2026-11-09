@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Folio;
 use App\Models\Guest;
+use App\Models\PaymentEntry;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\BusinessDayService;
@@ -11,6 +12,7 @@ use App\Services\ShiftCalendar;
 use App\Services\ShiftReportService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\TestWith;
 use Spatie\Permission\Models\Permission;
@@ -25,6 +27,8 @@ class CourtOperationsChangeTest extends TestCase
     {
         $folio = $this->room7();
         $this->actingAs($this->operator('owner'));
+        $originalPrint = ['operation_key' => (string) Str::uuid()];
+        $this->post(route('folios.billing.print', $folio), $originalPrint)->assertOk()->assertDontSee('EXTENSION CORRECTED');
         $preview = $this->get(route('folios.extension.preview', [$folio, 'hours' => 3]))
             ->assertSee('1,265.00')->assertSee('875.00')->viewData('preview');
         $payload = ['hours' => 3, 'reason' => 'Guest requested three hours', 'preview_key' => $preview['key'], 'operation_key' => (string) Str::uuid()];
@@ -35,7 +39,12 @@ class CourtOperationsChangeTest extends TestCase
         $this->assertDatabaseHas('folios', ['id' => $folio->id, 'extra_hours' => 3, 'net_total' => 875, 'pos_total' => 90, 'room_charge' => 395,
             'expected_checkout_at' => '2026-11-09 14:00:00', 'user_id' => $folio->user_id]);
         $this->assertDatabaseHas('audit_logs', ['event' => 'folio.extension_corrected', 'user_id' => auth()->id(), 'auditable_id' => $folio->id]);
-        $this->assertDatabaseCount('audit_logs', 1);
+        $this->assertSame(1, DB::table('audit_logs')->where('event', 'folio.extension_corrected')->count());
+        $this->get(route('folios.billing', $folio))->assertOk()->assertSee('EXTENSION CORRECTED');
+        $this->post(route('folios.billing.print', $folio), ['operation_key' => (string) Str::uuid()])
+            ->assertOk()->assertViewHas('receiptCopy', 2)->assertSee('EXTENSION CORRECTED');
+        $this->post(route('folios.billing.print', $folio), $originalPrint)
+            ->assertOk()->assertViewHas('receiptCopy', 1)->assertDontSee('EXTENSION CORRECTED');
         $this->assertDatabaseCount('payment_entries', 0);
     }
 
@@ -79,7 +88,8 @@ class CourtOperationsChangeTest extends TestCase
     #[TestWith(['2026-11-10 17:00:00', '2026-11-10', 'night'])]
     public function test_new_shift_and_finance_date_share_the_manila_boundaries(string $time, string $date, string $shift): void
     {
-        config(['sedona.shift_cutover_date' => '2026-11-10']);
+        $this->travelTo(CarbonImmutable::parse('2026-11-09 12:00', 'Asia/Manila'));
+        ShiftCalendar::scheduleCutover('2026-11-10');
         $at = CarbonImmutable::parse($time, 'Asia/Manila');
 
         $this->assertSame($date, app(BusinessDayService::class)->date($at));
@@ -88,7 +98,8 @@ class CourtOperationsChangeTest extends TestCase
 
     public function test_cutover_shortens_only_the_last_old_night_and_preserves_earlier_periods(): void
     {
-        config(['sedona.shift_cutover_date' => '2026-11-10']);
+        $this->travelTo(CarbonImmutable::parse('2026-11-09 12:00', 'Asia/Manila'));
+        ShiftCalendar::scheduleCutover('2026-11-10');
         $shifts = app(ShiftReportService::class);
         [$start, $end] = app(BusinessDayService::class)->bounds('2026-11-09');
 
@@ -102,10 +113,53 @@ class CourtOperationsChangeTest extends TestCase
 
     public function test_blank_cutover_keeps_legacy_dates(): void
     {
-        config(['sedona.shift_cutover_date' => '']);
 
         $this->assertSame('6:30 AM–next 6:30 AM', ShiftCalendar::label('2026-11-10'));
         $this->assertSame('2026-11-09', ShiftCalendar::date(CarbonImmutable::parse('2026-11-10 05:00:00', 'Asia/Manila')));
+    }
+
+    public function test_backdated_cutover_preserves_the_business_date_of_a_posted_payment(): void
+    {
+        $postedAt = CarbonImmutable::parse('2026-11-10 05:30', 'Asia/Manila');
+        $this->travelTo($postedAt);
+        $actor = User::factory()->create();
+        $finance = app(BusinessDayService::class);
+        $payment = PaymentEntry::create([
+            'user_id' => $actor->id, 'kind' => 'pos_sale', 'cash_amount' => 130,
+            'gcash_amount' => 0, 'posted_at' => $postedAt->setTimezone(config('app.timezone')),
+        ]);
+
+        $this->artisan('pms:schedule-shift-cutover', ['date' => '2026-11-10'])->assertFailed();
+
+        $this->assertSame('2026-11-09', $finance->date($postedAt));
+        $this->assertSame([$payment->id], array_column($finance->snapshot('2026-11-09')['payments'], 'id'));
+        $this->assertSame([], $finance->snapshot('2026-11-10')['payments']);
+    }
+
+    public function test_future_cutover_rejects_a_posting_already_in_the_affected_window(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-09 12:00', 'Asia/Manila'));
+        $postedAt = CarbonImmutable::parse('2026-11-10 05:30', 'Asia/Manila');
+        PaymentEntry::create([
+            'user_id' => User::factory()->create()->id, 'kind' => 'pos_sale', 'cash_amount' => 130,
+            'gcash_amount' => 0, 'posted_at' => $postedAt->setTimezone(config('app.timezone')),
+        ]);
+
+        $this->artisan('pms:schedule-shift-cutover', ['date' => '2026-11-10'])
+            ->expectsOutput('Existing postings or a day-close snapshot overlap the proposed cutover.')
+            ->assertFailed();
+
+        $this->assertSame('2026-11-09', ShiftCalendar::date($postedAt));
+    }
+
+    public function test_future_schedule_is_idempotent_and_cannot_be_moved(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-09 12:00', 'Asia/Manila'));
+        $this->artisan('pms:schedule-shift-cutover', ['date' => '2026-11-10'])->assertSuccessful();
+        $this->artisan('pms:schedule-shift-cutover', ['date' => '2026-11-10'])->assertSuccessful();
+        $this->artisan('pms:schedule-shift-cutover', ['date' => '2026-11-11'])->assertFailed();
+
+        $this->assertSame('5:00 AM–5:00 PM', ShiftCalendar::label('2026-11-10', 'day'));
     }
 
     private function operator(string $role): User

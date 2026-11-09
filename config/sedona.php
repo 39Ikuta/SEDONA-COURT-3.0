@@ -3,7 +3,6 @@
 $continuousShiftEnabled = env('SEDONA_CONTINUOUS_SHIFT_ENABLED', true);
 
 return [
-    'shift_cutover_date' => env('SEDONA_SHIFT_CUTOVER_DATE'),
     'hotel_name' => 'SEDONA COURT TRAVELLERS INN',
     'midnight_promo_enabled' => env('SEDONA_MIDNIGHT_PROMO_ENABLED', true),
     'seed_password' => env('SEDONA_SEED_PASSWORD'),
