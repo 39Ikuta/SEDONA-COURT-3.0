@@ -172,6 +172,7 @@ class DashboardController extends Controller
         // Admins keep full BI in Reports; cashiers must never see global sales.
         $myShiftRevenue = 0.0;
         $myShiftCashCollections = 0.0;
+        $myShiftMoney = null;
         $myCheckIns = 0;
         $myOrdersCount = 0;
         $myShiftLabel = 'No open shift';
@@ -185,12 +186,13 @@ class DashboardController extends Controller
             $reportShift = ShiftCalendar::shift($hotelTime);
             $myPeriod = app(ShiftReportService::class)->period(ShiftCalendar::date($hotelTime), $reportShift);
             if ($activeShift && $request->user()->can('operate-shift', $activeShift)) {
-                $myShiftCashCollections = app(FinancialSummaryService::class)->operatorShift(
+                $myShiftMoney = app(FinancialSummaryService::class)->operatorShift(
                     $activeShift,
                     $request->user(),
                     $myPeriod['start']->setTimezone(config('app.timezone')),
                     $myPeriod['end']->setTimezone(config('app.timezone')),
-                )['cashSales'];
+                );
+                $myShiftCashCollections = $myShiftMoney['cashSales'];
             }
             $myShiftStart = $myPeriod['start']->setTimezone(config('app.timezone'));
             if ($usesDrawer && $activeShift->opened_at->greaterThan($myShiftStart)) {
@@ -265,6 +267,7 @@ class DashboardController extends Controller
             'selectedStatus',
             'myShiftRevenue',
             'myShiftCashCollections',
+            'myShiftMoney',
             'myCheckIns',
             'myOrdersCount',
             'myShiftLabel',

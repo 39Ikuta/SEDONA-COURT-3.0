@@ -45,6 +45,19 @@
                 <span class="shift-summary-amount"><small>My Net Cash Collections</small> ₱{{ number_format($myShiftCashCollections, 2) }}</span>
             </div>
         </div>
+        @if($myShiftMoney !== null)
+            <section class="rounded-xl border border-slate-200 bg-white p-4" aria-label="My shift cash breakdown">
+                <dl class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                    <div><dt class="text-slate-600">My Net GCash Collections</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftMoney['gcashSales'], 2) }}</dd></div>
+                    <div><dt class="text-slate-600">My Cash Expenses</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftMoney['drawerExpenses'], 2) }}</dd></div>
+                    <div><dt class="text-slate-600">My Cash Added / Removed</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftMoney['cashMovements']->sum('amount'), 2) }}</dd></div>
+                    <div><dt class="text-slate-600">My Cash After Expenses &amp; Transfers</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftMoney['netCash'], 2) }}</dd></div>
+                </dl>
+                <p class="mt-3 text-xs text-slate-600">My cash collections − my cash expenses + my cash added / removed = my cash after expenses &amp; transfers. Opening float and other cashiers' money are excluded.</p>
+                <p class="mt-2 text-xs text-slate-600">Collections follow the payment time within the shift shown above. Net sales follow checkout time and include deposits applied to those bills, including deposits received in earlier shifts.</p>
+                <a class="mt-2 inline-block text-xs font-semibold underline" href="{{ route('shifts.index') }}">Review my shift payments and turnover slip</a>
+            </section>
+        @endif
     @endif
 
     <!-- Admin / Owner Pending Force Checkout Loss Resolution Banner -->
