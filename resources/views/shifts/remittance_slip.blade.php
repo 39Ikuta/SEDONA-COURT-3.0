@@ -158,6 +158,7 @@
         <div>
             <div class="section-header">I. RECONCILIATION SUMMARY</div>
             @if($propertyAccess)
+            <div class="row font-bold"><span>CASH FOR MONEY-COUNT FORM:</span><span>₱{{ number_format($moneyCountCash, 2) }}</span></div>
             <div class="row">
                 <span>STARTING CASH FLOAT:</span>
                 <span>₱{{ number_format($openingFloat, 2) }}</span>
@@ -206,6 +207,8 @@
                 </span>
             </div>
             @else
+                <div class="row font-bold" style="font-size:12px"><span>CASH FOR MY MONEY-COUNT FORM:</span><span>₱{{ number_format($moneyCountCash, 2) }}</span></div>
+                <div style="font-size:9px;margin-bottom:5px;">Pending guest deposits are separate. Includes cash deposits applied to bills I settled.</div>
                 <div class="row"><span>MY NET CASH COLLECTIONS:</span><strong>₱{{ number_format($cashSales, 2) }}</strong></div>
                 <div class="row"><span>MY NET GCASH COLLECTIONS:</span><strong>₱{{ number_format($gcashSales, 2) }}</strong></div>
                 <div class="row font-bold"><span>MY TOTAL NET COLLECTIONS:</span><span>₱{{ number_format($totalRevenue, 2) }}</span></div>
@@ -213,6 +216,29 @@
                 <div class="row"><span>MY NET CASH TRANSFERS:</span><span>₱{{ number_format($cashMovementTotal, 2) }}</span></div>
                 <div class="row font-bold"><span>MY NET CASH AFTER CASH OUTS:</span><span>₱{{ number_format($expectedCash, 2) }}</span></div>
                 <div style="font-size:9px;margin-top:4px;">Includes deposits and refunds. This is not the physical shared drawer balance.</div>
+            @endif
+        </div>
+
+        <div class="divider"></div>
+        <div>
+            <div class="section-header">GUEST DEPOSIT HANDOVER</div>
+            <div class="row"><span>CASH DEPOSITS RECEIVED {{ $propertyAccess ? '' : 'BY ME' }}:</span><span>₱{{ number_format($depositReconciliation['cashReceived'], 2) }}</span></div>
+            <div class="row"><span>CASH DEPOSITS APPLIED TO BILLS:</span><span>₱{{ number_format($depositReconciliation['cashApplied'], 2) }}</span></div>
+            <div class="row"><span>DEPOSIT REFUNDS PAID IN CASH:</span><span>₱{{ number_format($depositReconciliation['cashRefunded'], 2) }}</span></div>
+            <div class="row"><span>SHARED CASH HELD AT START:</span><span>₱{{ number_format($depositReconciliation['openingCashHeld'], 2) }}</span></div>
+            <div class="row font-bold"><span>SHARED CASH STILL HELD:</span><span>₱{{ number_format($depositReconciliation['closingCashHeld'], 2) }}</span></div>
+            <div style="font-size:9px">Guest deposits held across cashiers; carry separately with the room handover.</div>
+            @foreach($depositReconciliation['rooms'] as $depositRoom)
+                <div style="font-size:9px;margin-top:4px;">CURRENT ROOM {{ $depositRoom['room'] }} · {{ $depositRoom['folio'] }}</div>
+                <div class="row"><span>Cash held:</span><span>₱{{ number_format($depositRoom['cash'], 2) }}</span></div>
+                @if($depositRoom['gcash'] > 0)<div class="row"><span>GCash held:</span><span>₱{{ number_format($depositRoom['gcash'], 2) }}</span></div>@endif
+                @if($depositRoom['unverified'] > 0)<div class="row"><span>Unverified:</span><span>₱{{ number_format($depositRoom['unverified'], 2) }}</span></div>@endif
+            @endforeach
+            @if($depositReconciliation['cashReleasedByRefund'] !== $depositReconciliation['cashRefunded'])
+                <div class="row"><span>CASH/GCASH REFUND ADJUSTMENT:</span><span>₱{{ number_format($depositReconciliation['cashReleasedByRefund'] - $depositReconciliation['cashRefunded'], 2) }}</span></div>
+            @endif
+            @if($depositReconciliation['unverifiedHeld'] > 0 || $depositReconciliation['unverifiedApplied'] > 0 || $depositReconciliation['unverifiedRefunds'] > 0)
+                <div style="font-size:9px">ADMIN/OWNER VERIFICATION: Older deposits — held ₱{{ number_format($depositReconciliation['unverifiedHeld'], 2) }}, applied ₱{{ number_format($depositReconciliation['unverifiedApplied'], 2) }}, refunded ₱{{ number_format($depositReconciliation['unverifiedRefunds'], 2) }}. Unverified deposits are not added to settled cash. Refund payouts remain recorded.</div>
             @endif
         </div>
 

@@ -42,12 +42,15 @@
                 <span><b>{{ $myCheckIns ?? 0 }}</b> check-ins</span>
                 <span><b>{{ $myOrdersCount ?? 0 }}</b> orders</span>
                 <span><small>Net sales</small> ₱{{ number_format($myShiftRevenue ?? 0, 2) }}</span>
-                <span class="shift-summary-amount"><small>My Net Cash Collections</small> ₱{{ number_format($myShiftCashCollections, 2) }}</span>
+                @if($myShiftMoney !== null)
+                    <span class="shift-summary-amount"><small>Cash for my money-count form</small> ₱{{ number_format($myShiftMoney['moneyCountCash'], 2) }}</span>
+                @endif
             </div>
         </div>
         @if($myShiftMoney !== null)
             <section class="rounded-xl border border-slate-200 bg-white p-4" aria-label="My shift cash breakdown">
-                <dl class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                <dl class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 xl:grid-cols-5">
+                    <div><dt class="text-slate-600">My Net Cash Collections</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftCashCollections, 2) }}</dd></div>
                     <div><dt class="text-slate-600">My Net GCash Collections</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftMoney['gcashSales'], 2) }}</dd></div>
                     <div><dt class="text-slate-600">My Cash Expenses</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftMoney['drawerExpenses'], 2) }}</dd></div>
                     <div><dt class="text-slate-600">My Cash Added / Removed</dt><dd class="font-mono font-bold">₱{{ number_format($myShiftMoney['cashMovements']->sum('amount'), 2) }}</dd></div>
@@ -57,6 +60,7 @@
                 <p class="mt-2 text-xs text-slate-600">Collections follow the payment time within the shift shown above. Net sales follow checkout time and include deposits applied to those bills, including deposits received in earlier shifts.</p>
                 <a class="mt-2 inline-block text-xs font-semibold underline" href="{{ route('shifts.index') }}">Review my shift payments and turnover slip</a>
             </section>
+            @include('shifts.partials.deposit-reconciliation', ['depositReconciliation' => $myShiftMoney['depositReconciliation']])
         @endif
     @endif
 

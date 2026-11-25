@@ -39,6 +39,8 @@ class ShiftController extends Controller
         $gcashCollections = 0.0;
         $totalExpenses = 0.0;
         $expectedCash = 5000.0;
+        $moneyCountCash = null;
+        $depositReconciliation = null;
         $canOperateActiveShift = $activeShift && $request->user()->can('operate-shift', $activeShift);
         if ($canOperateActiveShift) {
             $summary = $propertyAccess ? $this->financials->shift($activeShift)
@@ -49,6 +51,8 @@ class ShiftController extends Controller
             $gcashCollections = $summary['gcashSales'];
             $totalExpenses = $summary['drawerExpenses'];
             $expectedCash = $summary['expectedCash'] ?? $summary['netCash'];
+            $moneyCountCash = $summary['moneyCountCash'];
+            $depositReconciliation = $summary['depositReconciliation'];
         }
         $pastShifts = $this->shiftAccess->visibleShifts($request->user())->with(['openedBy', 'closedBy'])
             ->when(! $propertyAccess, fn ($query) => $query->select(['id', 'shift_date', 'shift_type', 'opened_by', 'closed_by', 'opened_at', 'closed_at', 'handoff_notes']))
@@ -63,7 +67,7 @@ class ShiftController extends Controller
         $pendingHandovers = config('sedona.shift_handover_enabled') ? $pendingHandovers->orderBy('id')->get() : collect();
         $drawerStatus = $this->shiftAccess->paymentStatus($request->user());
 
-        return view('shifts.index', compact('activeShift', 'pastShifts', 'shiftExpenses', 'openingFloat', 'cashRevenue', 'gcashCollections', 'totalExpenses', 'expectedCash', 'canOperateActiveShift', 'pendingHandovers', 'drawerStatus', 'propertyAccess', 'reportPeriod'));
+        return view('shifts.index', compact('activeShift', 'pastShifts', 'shiftExpenses', 'openingFloat', 'cashRevenue', 'gcashCollections', 'totalExpenses', 'expectedCash', 'canOperateActiveShift', 'pendingHandovers', 'drawerStatus', 'propertyAccess', 'reportPeriod', 'moneyCountCash', 'depositReconciliation'));
     }
 
     public function openShift(Request $request, AuditService $audit): RedirectResponse
@@ -213,6 +217,8 @@ class ShiftController extends Controller
         $cashMovementTotal = (float) $cashMovements->sum('amount');
         $openingFloat = $summary['openingFloat'] ?? 0;
         $expectedCash = $propertyAccess ? ($shift->closed_at ? (float) $shift->expected_cash : $summary['expectedCash']) : $summary['netCash'];
+        $moneyCountCash = $summary['moneyCountCash'];
+        $depositReconciliation = $summary['depositReconciliation'];
         $actualCash = $propertyAccess && $shift->closed_at ? (float) $shift->cash_total : null;
         $variance = $propertyAccess && $shift->closed_at ? (float) $shift->cash_variance : null;
         $rooms = $handover['rooms'];
@@ -224,7 +230,7 @@ class ShiftController extends Controller
 
         return view('shifts.remittance_slip', compact('shift', 'cashSales', 'gcashSales', 'totalRevenue',
             'shiftExpenses', 'totalExpenses', 'cashMovements', 'cashMovementTotal', 'openingFloat', 'expectedCash', 'actualCash', 'variance',
-            'occupiedCount', 'availableCount', 'maintenanceCount', 'incomingCashier', 'propertyAccess', 'reportPeriod', 'handover'));
+            'occupiedCount', 'availableCount', 'maintenanceCount', 'incomingCashier', 'propertyAccess', 'reportPeriod', 'handover', 'moneyCountCash', 'depositReconciliation'));
     }
 
     /** @return array<string, mixed> */

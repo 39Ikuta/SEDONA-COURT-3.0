@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
 
 class FinancialSummaryService
 {
+    public function __construct(private DepositReconciliationService $deposits) {}
+
     /** @return array<string, mixed> */
     public function period(CarbonInterface $start, CarbonInterface $end, bool $shiftBased = false): array
     {
@@ -87,8 +89,11 @@ class FinancialSummaryService
         $openingFloat = (float) $shift->opening_float;
         $cashMovements = (float) CashMovement::where('shift_id', $shift->id)->sum('amount');
         $expectedCash = round($openingFloat + $cashSales - $drawerExpenses + $cashMovements, 2);
+        $depositReconciliation = $this->deposits->summarize($entries, $folios, $shift->opened_at, $shift->closed_at ?? now()->toImmutable()->addMicrosecond());
+        $settledCashCollections = round($cashSales - $depositReconciliation['cashReceived'] + $depositReconciliation['cashApplied'] + $depositReconciliation['cashReleasedByRefund'], 2);
+        $moneyCountCash = round($settledCashCollections - $drawerExpenses + $cashMovements, 2);
 
-        return $this->revenue($folios, $orders) + compact('shiftExpenses', 'openingFloat', 'cashSales', 'gcashSales', 'expectedCash', 'drawerExpenses');
+        return $this->revenue($folios, $orders) + compact('shiftExpenses', 'openingFloat', 'cashSales', 'gcashSales', 'expectedCash', 'drawerExpenses', 'depositReconciliation', 'settledCashCollections', 'moneyCountCash');
     }
 
     /** @return array<string, mixed> */
@@ -116,8 +121,11 @@ class FinancialSummaryService
             ->where('payment_source', 'cash_drawer')), 'created_at')->latest()->get();
         $drawerExpenses = (float) $shiftExpenses->sum('amount');
         $cashMovements = $withinPeriod(CashMovement::where('user_id', $operator->id)->where('shift_id', $shift->id), 'posted_at')->orderBy('posted_at')->get();
+        $depositReconciliation = $this->deposits->summarize($entries, $legacyFolios, $start->max($shift->opened_at), $shift->closed_at ? $end->min($shift->closed_at) : $end);
+        $settledCashCollections = round($cashSales - $depositReconciliation['cashReceived'] + $depositReconciliation['cashApplied'] + $depositReconciliation['cashReleasedByRefund'], 2);
+        $moneyCountCash = round($settledCashCollections - $drawerExpenses + (float) $cashMovements->sum('amount'), 2);
 
-        return compact('cashSales', 'gcashSales', 'shiftExpenses', 'drawerExpenses', 'cashMovements')
+        return compact('cashSales', 'gcashSales', 'shiftExpenses', 'drawerExpenses', 'cashMovements', 'depositReconciliation', 'settledCashCollections', 'moneyCountCash')
             + ['netCash' => round($cashSales - $drawerExpenses + (float) $cashMovements->sum('amount'), 2)];
     }
 

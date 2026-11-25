@@ -103,7 +103,7 @@
             <div class="flex items-center justify-between border-b pb-2 mb-3">
                 <div class="flex items-center space-x-2">
                     <span class="font-bold text-[#421A2B] text-sm uppercase tracking-wide">
-                        ACTIVE {{ strtoupper($activeShift->shift_type) }} SHIFT IN PROGRESS
+                        {{ config('sedona.continuous_shift_enabled') ? 'SHARED DRAWER IN PROGRESS' : 'ACTIVE '.strtoupper($activeShift->shift_type).' SHIFT IN PROGRESS' }}
                     </span>
                     <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded uppercase">
                         {{ $activeShift->is_frozen ? 'Frozen — posting blocked' : 'Drawer open' }}
@@ -144,6 +144,14 @@
                 </div>
             </div>
             @else
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 mb-4">
+                    <p class="font-semibold text-emerald-900">Cash for my money-count form</p>
+                    <strong class="font-mono text-2xl text-emerald-950">₱{{ number_format($moneyCountCash, 2) }}</strong>
+                    <p class="mt-1 text-xs text-slate-600">My settled cash, less my expenses, plus my cash transfers. Pending guest deposits are kept separate below.</p>
+                    <p class="mt-2 text-xs text-slate-600">My Net GCash Collections: <span class="font-mono">₱{{ number_format($gcashCollections, 2) }}</span> · GCash is separate from the cash form.</p>
+                </div>
+                <details class="mb-4">
+                <summary class="cursor-pointer text-xs font-semibold text-slate-600">Payment movements, including guest deposits</summary>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-xs">
                     <div class="rounded border border-emerald-200 bg-emerald-50 p-3"><p>My Net Cash Collections</p><strong class="font-mono text-lg">₱{{ number_format($cashRevenue, 2) }}</strong></div>
                     <div class="rounded border border-blue-200 bg-blue-50 p-3"><p>My Net GCash Collections</p><strong class="font-mono text-lg">₱{{ number_format($gcashCollections, 2) }}</strong></div>
@@ -151,9 +159,14 @@
                     <div class="rounded border border-slate-200 bg-slate-50 p-3"><p>My Net Cash After Cash Outs</p><strong class="font-mono text-lg">₱{{ number_format($expectedCash, 2) }}</strong></div>
                 </div>
                 <p class="text-xs text-slate-600 mb-3">{{ $reportPeriod['start']->format('m/d/Y h:i A') }}–{{ $reportPeriod['end']->format('m/d/Y h:i A') }} · Your collections and cash outs only. This is not the physical shared drawer balance.</p>
+                </details>
             @endif
 
+            @if($propertyAccess)
+                <p class="mb-3 text-sm font-semibold">Cash for money-count form: <span class="font-mono">₱{{ number_format($moneyCountCash, 2) }}</span> <span class="text-xs font-normal text-slate-600">Opening float and pending guest deposits are separate.</span></p>
+            @endif
             <p class="text-xs text-slate-500 mb-3">Collections include deposit receipts and refunds. Earned revenue is reported separately.</p>
+            @include('shifts.partials.deposit-reconciliation')
 
             <!-- Shift Operational Disbursements Journal -->
             <div class="border border-slate-200 rounded p-3 bg-slate-50/50 mb-4">
